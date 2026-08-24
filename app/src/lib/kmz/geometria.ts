@@ -88,17 +88,14 @@ function anguloBordeMasLargo(poly: XY[]): number {
   return mejorAngulo;
 }
 
-/** Reparte puntos en el segmento [desde, hasta] con el espaciado más
- * cercano al pedido que entre un número entero de veces — así el primer y
- * el último punto quedan siempre a la misma distancia de cada extremo
- * (espaciado/2), en vez de que sobre un resto pegado a un solo lado. */
-function espaciarSimetrico(desde: number, hasta: number, espaciadoObjetivo: number): number[] {
-  const span = hasta - desde;
-  if (span <= 0) return [];
-  const n = Math.max(1, Math.round(span / espaciadoObjetivo));
-  const espaciado = span / n;
+/** Reparte puntos en el segmento [desde, hasta] con el espaciado real
+ * pedido (sin estirarlo ni comprimirlo) — el primer punto queda exacto a
+ * espaciado/2 del borde de entrada; el último cae donde caiga, más cerca o
+ * más lejos del otro borde según cuánto sobre. Se prioriza mantener la
+ * densidad de puntos/hectárea real por sobre que la fila cierre pareja. */
+function espaciarDesdeInicio(desde: number, hasta: number, espaciado: number): number[] {
   const resultado: number[] = [];
-  for (let i = 0; i < n; i++) resultado.push(desde + espaciado / 2 + i * espaciado);
+  for (let v = desde + espaciado / 2; v <= hasta; v += espaciado) resultado.push(v);
   return resultado;
 }
 
@@ -141,10 +138,13 @@ export interface GrillaGenerada {
 /** Genera la grilla de muestreo real a partir del perímetro del KMZ:
  * 1. Centro = promedio de los vértices, se usa como origen local (no hace
  *    falta guardarlo: cada punto ya sale con su lat/lon real).
- * 2. Rota el polígono para alinear su borde más largo con el eje horizontal.
- * 3. Recorre esa grilla rotada espaciada `sqrt(haPorPunto * 10000)` metros
- *    (misma fórmula que `generarGrillaSintetica` del prototipo) y descarta
- *    los puntos que caen afuera del polígono real.
+ * 2. Rota el polígono para alinear su borde más largo con el eje horizontal
+ *    — cada "línea" de puntos queda paralela a ese lado.
+ * 3. Por cada línea calcula dónde entra y sale el perímetro real (no la
+ *    caja que lo envuelve) y reparte los puntos espaciados
+ *    `sqrt(haPorPunto * 10000)` metros (misma fórmula que
+ *    `generarGrillaSintetica` del prototipo), arrancando cada línea y cada
+ *    tramo exacto a espaciado/2 del borde de entrada.
  * 4. Numera "línea.punto" por fila, en el orden en que se generaron. */
 export function generarGrillaDesdePerimetro(perimetroEntrada: LatLon[], haPorPunto: number): GrillaGenerada {
   const perimetro = [...perimetroEntrada];
@@ -170,14 +170,15 @@ export function generarGrillaDesdePerimetro(perimetroEntrada: LatLon[], haPorPun
   const minV = Math.min(...vs);
   const maxV = Math.max(...vs);
 
-  const espaciadoObjetivo = Math.sqrt(haPorPunto * 10000);
+  const espaciado = Math.sqrt(haPorPunto * 10000);
   const puntos: PuntoGrillaGenerado[] = [];
   let linea = 0;
-  // Filas repartidas simétricamente en el ancho real del lote — así la
-  // primera y la última quedan a la misma distancia del borde, en vez de
-  // que la última quede "pegada" solo porque el ancho no es múltiplo exacto
-  // del espaciado pedido.
-  for (const v of espaciarSimetrico(minV, maxV, espaciadoObjetivo)) {
+  // La primera línea (paralela al lado más largo del lote) queda exacta a
+  // espaciado/2 del borde real de entrada. Las siguientes van sumando el
+  // espaciado pedido tal cual, sin ajustarlo — así la cantidad de puntos
+  // sigue de cerca a hectareas/haPorPunto (la última línea puede quedar
+  // más cerca o más lejos del borde opuesto, la forma del lote manda).
+  for (const v of espaciarDesdeInicio(minV, maxV, espaciado)) {
     // Dónde entra y sale el perímetro real en esta fila (puede haber más de
     // un tramo si el lote tiene una forma cóncava, tipo "L" o con una
     // entrada) — reparte los puntos dentro de cada tramo, no de la caja
@@ -185,7 +186,7 @@ export function generarGrillaDesdePerimetro(perimetroEntrada: LatLon[], haPorPun
     const tramos = tramosDeFila(v, rotado);
     const filaXY: XY[] = [];
     for (const [inicio, fin] of tramos) {
-      for (const u of espaciarSimetrico(inicio, fin, espaciadoObjetivo)) {
+      for (const u of espaciarDesdeInicio(inicio, fin, espaciado)) {
         filaXY.push(rotar({ x: u, y: v }, angulo)); // vuelve al plano x,y original (sin rotar)
       }
     }
