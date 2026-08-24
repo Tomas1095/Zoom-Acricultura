@@ -40,7 +40,11 @@ export async function elegirArchivoKmz(): Promise<File | null> {
     // El tipo declarado de pickFileAsync en esta versión de expo-file-system
     // confunde su propia clase File con el File global del navegador —
     // el cast de acá esquiva ese bug de tipado, no cambia el comportamiento.
-    const resultado = (await File.pickFileAsync(undefined, "*/*")) as unknown as File | File[] | null;
+    // Ojo: NO pasar un mimeType tipo "*/*" acá — en iOS eso puede hacer que
+    // justo los tipos "raros" como .kmz (sin UTI muy estándar) queden
+    // bloqueados en el selector en vez de mostrarse. Sin filtro (undefined)
+    // el picker nativo permite cualquier archivo.
+    const resultado = (await File.pickFileAsync()) as unknown as File | File[] | null;
     if (!resultado) return null;
     return Array.isArray(resultado) ? (resultado[0] ?? null) : resultado;
   } catch {
