@@ -1,0 +1,90 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+
+import { supabase } from "./supabase";
+import type { Usuario } from "@/types/domain";
+
+interface AuthState {
+  /** null mientras se resuelve la sesión guardada en el dispositivo. */
+  loading: boolean;
+  session: Session | null;
+  /** Fila de `usuarios` correspondiente a la sesión — null si hay sesión de
+   * auth pero todavía no hay perfil (recién canjeó invitación, por ejemplo). */
+  usuario: Usuario | null;
+  refrescarUsuario: () => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthState | null>(null);
+
+function filaAUsuario(fila: any): Usuario {
+  return {
+    id: fila.id,
+    authUserId: fila.auth_user_id,
+    nombre: fila.nombre,
+    mail: fila.mail,
+    color: fila.color,
+    rol: fila.rol,
+    activo: fila.activo,
+    createdAt: fila.created_at,
+  };
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+
+  async function cargarUsuario(authUserId: string) {
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select("*")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+    if (error) {
+      console.warn("No se pudo cargar el perfil de usuario:", error.message);
+      setUsuario(null);
+      return;
+    }
+    setUsuario(data ? filaAUsuario(data) : null);
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      if (data.session) cargarUsuario(data.session.user.id).finally(() => setLoading(false));
+      else setLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nuevaSession) => {
+      setSession(nuevaSession);
+      if (nuevaSession) cargarUsuario(nuevaSession.user.id);
+      else setUsuario(null);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const value = useMemo<AuthState>(
+    () => ({
+      loading,
+      session,
+      usuario,
+      refrescarUsuario: async () => {
+        if (session) await cargarUsuario(session.user.id);
+      },
+      signOut: async () => {
+        await supabase.auth.signOut();
+      },
+    }),
+    [loading, session, usuario]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth debe usarse dentro de <AuthProvider>");
+  return ctx;
+}
