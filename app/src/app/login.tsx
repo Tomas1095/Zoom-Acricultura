@@ -1,17 +1,34 @@
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Target } from "lucide-react-native";
 import { Redirect } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
+import { ZoomLogo } from "@/components/zoom-logo";
 import { colors } from "@/theme/colors";
 
 type Modo = "ingresar" | "unirse";
 
 /** Login real (email + contraseña vía Supabase Auth) y alta con código de
- * invitación — reemplaza el selector de usuarios de prueba del prototipo. */
+ * invitación — reemplaza el selector de usuarios de prueba del prototipo.
+ * El header (logo, "MONITOREO DE PLAGAS", título) sí está calcado del
+ * prototipo (mismos colores, mismo ícono de fondo tenue). */
 export default function LoginScreen() {
   const { session, usuario, refrescarUsuario } = useAuth();
+  const insets = useSafeAreaInsets();
   const [modo, setModo] = useState<Modo>("ingresar");
   const [mail, setMail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,96 +77,143 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <Text style={styles.titulo}>Zoom Agricultura</Text>
-      <Text style={styles.subtitulo}>Monitoreo de plagas de suelo</Text>
+    <View style={styles.pantalla}>
+      <StatusBar style="light" />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={[styles.hero, { paddingTop: insets.top + 40 }]}>
+            <Target size={190} color="#FFFFFF" strokeWidth={1} style={styles.heroMarcaDeAgua} />
+            <View style={styles.heroLogoFila}>
+              <ZoomLogo variant="light" iconSize={44} wordSize={32} />
+            </View>
+            <Text style={styles.eyebrow}>MONITOREO DE PLAGAS</Text>
+            <Text style={styles.titulo}>{modo === "ingresar" ? "Iniciar sesión" : "Unirme al equipo"}</Text>
+          </View>
 
-      <View style={styles.tabs}>
-        <Pressable style={[styles.tab, modo === "ingresar" && styles.tabActivo]} onPress={() => setModo("ingresar")}>
-          <Text style={[styles.tabTexto, modo === "ingresar" && styles.tabTextoActivo]}>Ingresar</Text>
-        </Pressable>
-        <Pressable style={[styles.tab, modo === "unirse" && styles.tabActivo]} onPress={() => setModo("unirse")}>
-          <Text style={[styles.tabTexto, modo === "unirse" && styles.tabTextoActivo]}>Unirme con código</Text>
-        </Pressable>
-      </View>
+          <View style={styles.body}>
+            <View style={styles.form}>
+              {modo === "unirse" && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Tu nombre"
+                  placeholderTextColor={colors.textMuted}
+                  value={nombre}
+                  onChangeText={setNombre}
+                />
+              )}
+              <TextInput
+                style={styles.input}
+                placeholder="Mail"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={mail}
+                onChangeText={setMail}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Contraseña"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+              {modo === "unirse" && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Código de invitación (EQUIPO-XXXXXX)"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  value={codigo}
+                  onChangeText={setCodigo}
+                />
+              )}
 
-      {modo === "unirse" && (
-        <TextInput
-          style={styles.input}
-          placeholder="Tu nombre"
-          placeholderTextColor={colors.textMuted}
-          value={nombre}
-          onChangeText={setNombre}
-        />
-      )}
-      <TextInput
-        style={styles.input}
-        placeholder="Mail"
-        placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={mail}
-        onChangeText={setMail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Contraseña"
-        placeholderTextColor={colors.textMuted}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-      {modo === "unirse" && (
-        <TextInput
-          style={styles.input}
-          placeholder="Código de invitación (EQUIPO-XXXXXX)"
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="characters"
-          value={codigo}
-          onChangeText={setCodigo}
-        />
-      )}
+              <Pressable
+                style={[styles.botonConfirmar, cargando && styles.deshabilitado]}
+                disabled={cargando}
+                onPress={modo === "ingresar" ? ingresar : unirseConCodigo}
+              >
+                <Text style={styles.botonConfirmarTexto}>
+                  {cargando ? "Un momento…" : modo === "ingresar" ? "Ingresar" : "Unirme"}
+                </Text>
+              </Pressable>
+            </View>
 
-      <Pressable
-        style={[styles.boton, cargando && styles.botonDeshabilitado]}
-        disabled={cargando}
-        onPress={modo === "ingresar" ? ingresar : unirseConCodigo}
-      >
-        <Text style={styles.botonTexto}>{cargando ? "Un momento…" : modo === "ingresar" ? "Ingresar" : "Unirme"}</Text>
-      </Pressable>
-    </KeyboardAvoidingView>
+            {modo === "ingresar" ? (
+              <Pressable style={styles.botonUnirse} onPress={() => setModo("unirse")}>
+                <Text style={styles.botonUnirseTexto}>¿Sos nuevo? Unirte con un código de invitación</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.volverLink} onPress={() => setModo("ingresar")}>
+                <Text style={styles.volverLinkTexto}>← Volver</Text>
+              </Pressable>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, justifyContent: "center", padding: 24, gap: 12 },
-  titulo: { fontSize: 26, fontWeight: "800", color: colors.primaryDark, textAlign: "center" },
-  subtitulo: { fontSize: 14, color: colors.textMuted, textAlign: "center", marginBottom: 24 },
-  tabs: { flexDirection: "row", backgroundColor: colors.surface, borderRadius: 10, padding: 4, marginBottom: 8 },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center" },
-  tabActivo: { backgroundColor: colors.primary },
-  tabTexto: { color: colors.textMuted, fontWeight: "600", fontSize: 13 },
-  tabTextoActivo: { color: colors.surface },
+  pantalla: { flex: 1, backgroundColor: colors.surface },
+  scroll: { flexGrow: 1 },
+  hero: {
+    backgroundColor: "#14231A",
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingBottom: 34,
+    paddingHorizontal: 24,
+    overflow: "hidden",
+  },
+  heroMarcaDeAgua: { position: "absolute", top: -40, right: -50, opacity: 0.08 },
+  heroLogoFila: { alignItems: "center", marginBottom: 10 },
+  eyebrow: {
+    fontSize: 13.5,
+    letterSpacing: 2,
+    color: "#F2A93B",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  titulo: {
+    fontSize: 26,
+    fontWeight: "900",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginTop: 8,
+    color: "#FFFFFF",
+  },
+  body: { padding: 24, paddingTop: 28, gap: 14 },
+  form: { gap: 10 },
   input: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     color: colors.text,
   },
-  boton: {
-    backgroundColor: colors.primaryConfirm,
-    borderRadius: 10,
-    paddingVertical: 14,
+  botonConfirmar: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 13,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 4,
   },
-  botonDeshabilitado: { opacity: 0.6 },
-  botonTexto: { color: colors.surface, fontWeight: "700", fontSize: 15 },
+  deshabilitado: { opacity: 0.6 },
+  botonConfirmarTexto: { color: colors.background, fontWeight: "700", fontSize: 14 },
+  botonUnirse: {
+    borderWidth: 1.5,
+    borderColor: colors.warning,
+    borderStyle: "dashed",
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  botonUnirseTexto: { color: colors.warning, fontWeight: "700", fontSize: 13 },
+  volverLink: { alignItems: "center", paddingVertical: 6 },
+  volverLinkTexto: { color: colors.accentGoldMuted, fontWeight: "600", fontSize: 13 },
 });
