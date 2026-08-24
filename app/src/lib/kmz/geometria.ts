@@ -88,6 +88,41 @@ function anguloBordeMasLargo(poly: XY[]): number {
   return mejorAngulo;
 }
 
+/** Reparte puntos en el segmento [desde, hasta] con el espaciado más
+ * cercano al pedido que entre un número entero de veces — así el primer y
+ * el último punto quedan siempre a la misma distancia de cada extremo
+ * (espaciado/2), en vez de que sobre un resto pegado a un solo lado. */
+function espaciarSimetrico(desde: number, hasta: number, espaciadoObjetivo: number): number[] {
+  const span = hasta - desde;
+  if (span <= 0) return [];
+  const n = Math.max(1, Math.round(span / espaciadoObjetivo));
+  const espaciado = span / n;
+  const resultado: number[] = [];
+  for (let i = 0; i < n; i++) resultado.push(desde + espaciado / 2 + i * espaciado);
+  return resultado;
+}
+
+/** Dónde entra y sale el perímetro (ya rotado) de la horizontal y=v — un
+ * escaneo tipo scanline: cada par de cruces consecutivos es un tramo
+ * "adentro" del lote. Para un lote convexo da un solo tramo; para uno
+ * cóncavo (forma de L, con una entrada, etc.) puede dar varios. */
+function tramosDeFila(v: number, poly: XY[]): Array<[number, number]> {
+  const cruces: number[] = [];
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const yi = poly[i].y;
+    const yj = poly[j].y;
+    if (yi > v !== yj > v) {
+      const xi = poly[i].x;
+      const xj = poly[j].x;
+      cruces.push(xi + ((v - yi) / (yj - yi)) * (xj - xi));
+    }
+  }
+  cruces.sort((a, b) => a - b);
+  const tramos: Array<[number, number]> = [];
+  for (let i = 0; i + 1 < cruces.length; i += 2) tramos.push([cruces[i], cruces[i + 1]]);
+  return tramos;
+}
+
 export interface PuntoGrillaGenerado {
   linea: number;
   puntoNum: number;
@@ -131,21 +166,28 @@ export function generarGrillaDesdePerimetro(perimetroEntrada: LatLon[], haPorPun
 
   const angulo = anguloBordeMasLargo(perimetroXY);
   const rotado = perimetroXY.map((p) => rotar(p, -angulo));
-  const us = rotado.map((p) => p.x);
   const vs = rotado.map((p) => p.y);
-  const minU = Math.min(...us);
-  const maxU = Math.max(...us);
   const minV = Math.min(...vs);
   const maxV = Math.max(...vs);
 
-  const espaciado = Math.sqrt(haPorPunto * 10000);
+  const espaciadoObjetivo = Math.sqrt(haPorPunto * 10000);
   const puntos: PuntoGrillaGenerado[] = [];
   let linea = 0;
-  for (let v = minV + espaciado / 2; v <= maxV; v += espaciado) {
+  // Filas repartidas simétricamente en el ancho real del lote — así la
+  // primera y la última quedan a la misma distancia del borde, en vez de
+  // que la última quede "pegada" solo porque el ancho no es múltiplo exacto
+  // del espaciado pedido.
+  for (const v of espaciarSimetrico(minV, maxV, espaciadoObjetivo)) {
+    // Dónde entra y sale el perímetro real en esta fila (puede haber más de
+    // un tramo si el lote tiene una forma cóncava, tipo "L" o con una
+    // entrada) — reparte los puntos dentro de cada tramo, no de la caja
+    // que envuelve a todo el lote.
+    const tramos = tramosDeFila(v, rotado);
     const filaXY: XY[] = [];
-    for (let u = minU + espaciado / 2; u <= maxU; u += espaciado) {
-      const real = rotar({ x: u, y: v }, angulo); // vuelve al plano x,y original (sin rotar)
-      if (puntoEnPoligono(real.x, real.y, perimetroXY)) filaXY.push(real);
+    for (const [inicio, fin] of tramos) {
+      for (const u of espaciarSimetrico(inicio, fin, espaciadoObjetivo)) {
+        filaXY.push(rotar({ x: u, y: v }, angulo)); // vuelve al plano x,y original (sin rotar)
+      }
     }
     if (filaXY.length === 0) continue;
     linea += 1;
