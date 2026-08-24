@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useFocusEffect } from "expo-router";
 
 import { fetchLote } from "@/lib/db/lotes";
 import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
@@ -35,9 +36,14 @@ export function useDatosCampo(loteId: string) {
     }
   }, [loteId]);
 
-  useEffect(() => {
-    refrescar();
-  }, [refrescar]);
+  // useFocusEffect (no useEffect a secas) para que, al volver de cargar un
+  // punto, el mapa se refresque solo con el color nuevo — sin esto quedaba
+  // con el estado viejo hasta salir del lote y volver a entrar.
+  useFocusEffect(
+    useCallback(() => {
+      refrescar();
+    }, [refrescar])
+  );
 
   const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
   const gps = useGps(origen);
