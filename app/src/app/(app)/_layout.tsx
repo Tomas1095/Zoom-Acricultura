@@ -25,6 +25,8 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: "Mis lotes" }} />
+      <Stack.Screen name="equipo" options={{ title: "Mi equipo" }} />
+      <Stack.Screen name="lote/[id]" options={{ title: "" }} />
     </Stack>
   );
 }

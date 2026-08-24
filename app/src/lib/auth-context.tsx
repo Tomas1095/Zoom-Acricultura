@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase";
+import { filaAUsuario } from "./db/mappers";
 import type { Usuario } from "@/types/domain";
 
 interface AuthState {
@@ -16,19 +17,6 @@ interface AuthState {
 }
 
 const AuthContext = createContext<AuthState | null>(null);
-
-function filaAUsuario(fila: any): Usuario {
-  return {
-    id: fila.id,
-    authUserId: fila.auth_user_id,
-    nombre: fila.nombre,
-    mail: fila.mail,
-    color: fila.color,
-    rol: fila.rol,
-    activo: fila.activo,
-    createdAt: fila.created_at,
-  };
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);

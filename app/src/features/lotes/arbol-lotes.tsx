@@ -1,0 +1,363 @@
+import { useCallback, useEffect, useState } from "react";
+import { router } from "expo-router";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, Users } from "lucide-react-native";
+
+import { PromptModal } from "@/components/prompt-modal";
+import { useAuth } from "@/lib/auth-context";
+import * as db from "@/lib/db/lotes";
+import type { Cliente, Establecimiento, Lote } from "@/types/domain";
+import { colors } from "@/theme/colors";
+import { AccesoModal } from "./acceso-modal";
+
+type ModalState =
+  | { tipo: "nuevoCliente" }
+  | { tipo: "editarCliente"; cliente: Cliente }
+  | { tipo: "nuevoEstablecimiento"; clienteId: string }
+  | { tipo: "nuevoLote"; establecimientoId: string }
+  | { tipo: "editarLote"; lote: Lote }
+  | { tipo: "acceso"; lote: Lote }
+  | null;
+
+/** Árbol Cliente → Establecimiento → Lote, con CRUD para administradores.
+ * Portado de ArbolLotesView del prototipo — acá cada acción pega contra
+ * Supabase en vez de mutar estado en memoria. */
+export function ArbolLotes() {
+  const { usuario } = useAuth();
+  const puedeEliminar = usuario?.rol === "socio_fundador" || usuario?.rol === "socio_gerente";
+
+  const [cargando, setCargando] = useState(true);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
+  const [lotes, setLotes] = useState<Lote[]>([]);
+  const [expClientes, setExpClientes] = useState<Set<string>>(new Set());
+  const [expEstablecimientos, setExpEstablecimientos] = useState<Set<string>>(new Set());
+  const [modal, setModal] = useState<ModalState>(null);
+
+  const refrescar = useCallback(async () => {
+    try {
+      const arbol = await db.fetchArbol();
+      setClientes(arbol.clientes);
+      setEstablecimientos(arbol.establecimientos);
+      setLotes(arbol.lotes);
+    } catch (e: any) {
+      Alert.alert("No se pudo cargar", e.message ?? String(e));
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refrescar();
+  }, [refrescar]);
+
+  function toggle(set: Set<string>, id: string, setter: (s: Set<string>) => void) {
+    const next = new Set(set);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setter(next);
+  }
+
+  async function conManejoDeError(accion: () => Promise<void>) {
+    try {
+      await accion();
+      await refrescar();
+    } catch (e: any) {
+      Alert.alert("Ocurrió un error", e.message ?? String(e));
+    }
+  }
+
+  function confirmarBorrado(titulo: string, mensaje: string, onConfirmar: () => Promise<void>) {
+    Alert.alert(titulo, mensaje, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Eliminar", style: "destructive", onPress: () => conManejoDeError(onConfirmar) },
+    ]);
+  }
+
+  if (cargando) {
+    return (
+      <View style={styles.centrado}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Pressable style={styles.agregarClienteBtn} onPress={() => setModal({ tipo: "nuevoCliente" })}>
+          <Plus size={15} color={colors.surface} />
+          <Text style={styles.agregarClienteTexto}>Nuevo cliente</Text>
+        </Pressable>
+
+        {clientes.length === 0 && (
+          <Text style={styles.vacio}>Todavía no hay clientes cargados. Empezá agregando uno.</Text>
+        )}
+
+        {clientes.map((c) => {
+          const estsDelCliente = establecimientos.filter((e) => e.clienteId === c.id);
+          const abierto = expClientes.has(c.id);
+          return (
+            <View key={c.id} style={styles.clienteCard}>
+              <View style={styles.filaHeader}>
+                <Pressable
+                  style={styles.filaHeaderBtn}
+                  onPress={() => toggle(expClientes, c.id, setExpClientes)}
+                >
+                  {abierto ? (
+                    <ChevronDown size={16} color={colors.text} />
+                  ) : (
+                    <ChevronRight size={16} color={colors.text} />
+                  )}
+                  <Text style={styles.clienteNombre}>{c.nombre}</Text>
+                </Pressable>
+                <View style={styles.accionesFila}>
+                  <Pressable
+                    style={styles.iconBtn}
+                    onPress={() => setModal({ tipo: "nuevoEstablecimiento", clienteId: c.id })}
+                  >
+                    <Plus size={14} color={colors.primaryDark} />
+                  </Pressable>
+                  <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "editarCliente", cliente: c })}>
+                    <Pencil size={13} color={colors.accentGold} />
+                  </Pressable>
+                  {puedeEliminar && (
+                    <Pressable
+                      style={styles.iconBtn}
+                      onPress={() =>
+                        confirmarBorrado(
+                          "Eliminar cliente",
+                          `Se va a eliminar "${c.nombre}" y todos sus establecimientos y lotes. Esta acción no se puede deshacer.`,
+                          () => db.eliminarCliente(c.id)
+                        )
+                      }
+                    >
+                      <Trash2 size={13} color={colors.danger} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              {abierto && (
+                <View style={styles.hijos}>
+                  {estsDelCliente.length === 0 && <Text style={styles.vacioChico}>Sin establecimientos todavía.</Text>}
+                  {estsDelCliente.map((e) => {
+                    const lotesDelEst = lotes.filter((l) => l.establecimientoId === e.id);
+                    const estAbierto = expEstablecimientos.has(e.id);
+                    return (
+                      <View key={e.id} style={styles.establecimientoCard}>
+                        <View style={styles.filaHeader}>
+                          <Pressable
+                            style={styles.filaHeaderBtn}
+                            onPress={() => toggle(expEstablecimientos, e.id, setExpEstablecimientos)}
+                          >
+                            {estAbierto ? (
+                              <ChevronDown size={14} color={colors.text} />
+                            ) : (
+                              <ChevronRight size={14} color={colors.text} />
+                            )}
+                            <Text style={styles.establecimientoNombre}>{e.nombre}</Text>
+                          </Pressable>
+                          <View style={styles.accionesFila}>
+                            <Pressable
+                              style={styles.iconBtn}
+                              onPress={() => setModal({ tipo: "nuevoLote", establecimientoId: e.id })}
+                            >
+                              <Plus size={13} color={colors.primaryDark} />
+                            </Pressable>
+                            {puedeEliminar && (
+                              <Pressable
+                                style={styles.iconBtn}
+                                onPress={() =>
+                                  confirmarBorrado(
+                                    "Eliminar establecimiento",
+                                    `Se va a eliminar "${e.nombre}" y todos sus lotes.`,
+                                    () => db.eliminarEstablecimiento(e.id)
+                                  )
+                                }
+                              >
+                                <Trash2 size={12} color={colors.danger} />
+                              </Pressable>
+                            )}
+                          </View>
+                        </View>
+
+                        {estAbierto && (
+                          <View style={styles.hijos}>
+                            {lotesDelEst.length === 0 && (
+                              <Text style={styles.vacioChico}>Sin lotes todavía.</Text>
+                            )}
+                            {lotesDelEst.map((l) => (
+                              <View key={l.id} style={styles.loteRow}>
+                                <Pressable style={styles.loteInfo} onPress={() => router.push(`/(app)/lote/${l.id}`)}>
+                                  <Text style={styles.loteNombre}>{l.nombre}</Text>
+                                  <Text style={styles.loteDetalle}>
+                                    {l.cultivo}
+                                    {l.tieneGrilla ? ` · ${l.hectareas} ha` : " · sin grilla (falta subir el KMZ)"}
+                                  </Text>
+                                </Pressable>
+                                <View style={styles.accionesFila}>
+                                  <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "acceso", lote: l })}>
+                                    <Users size={13} color={colors.info} />
+                                  </Pressable>
+                                  <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "editarLote", lote: l })}>
+                                    <Pencil size={13} color={colors.accentGold} />
+                                  </Pressable>
+                                  {puedeEliminar && (
+                                    <Pressable
+                                      style={styles.iconBtn}
+                                      onPress={() =>
+                                        confirmarBorrado(
+                                          "Eliminar lote",
+                                          `Se va a eliminar "${l.nombre}" y todos sus datos de monitoreo.`,
+                                          () => db.eliminarLote(l.id)
+                                        )
+                                      }
+                                    >
+                                      <Trash2 size={13} color={colors.danger} />
+                                    </Pressable>
+                                  )}
+                                </View>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      <PromptModal
+        visible={modal?.tipo === "nuevoCliente"}
+        titulo="Nuevo cliente"
+        fields={[{ key: "nombre", label: "Nombre", placeholder: "Ej: Baltan Agropecuaria" }]}
+        onCancelar={() => setModal(null)}
+        onConfirmar={(v) => {
+          setModal(null);
+          conManejoDeError(() => db.crearCliente(v.nombre.trim()).then(() => {}));
+        }}
+      />
+
+      <PromptModal
+        visible={modal?.tipo === "editarCliente"}
+        titulo="Editar cliente"
+        fields={[{ key: "nombre", label: "Nombre", valorInicial: modal?.tipo === "editarCliente" ? modal.cliente.nombre : "" }]}
+        onCancelar={() => setModal(null)}
+        onConfirmar={(v) => {
+          if (modal?.tipo !== "editarCliente") return;
+          const id = modal.cliente.id;
+          setModal(null);
+          conManejoDeError(() => db.editarCliente(id, v.nombre.trim()));
+        }}
+      />
+
+      <PromptModal
+        visible={modal?.tipo === "nuevoEstablecimiento"}
+        titulo="Nuevo establecimiento"
+        fields={[{ key: "nombre", label: "Nombre", placeholder: "Ej: Tres Esquinas" }]}
+        onCancelar={() => setModal(null)}
+        onConfirmar={(v) => {
+          if (modal?.tipo !== "nuevoEstablecimiento") return;
+          const clienteId = modal.clienteId;
+          setModal(null);
+          conManejoDeError(async () => {
+            await db.crearEstablecimiento(clienteId, v.nombre.trim());
+            setExpClientes((prev) => new Set(prev).add(clienteId));
+          });
+        }}
+      />
+
+      <PromptModal
+        visible={modal?.tipo === "nuevoLote"}
+        titulo="Nuevo lote"
+        fields={[
+          { key: "nombre", label: "Nombre", placeholder: "Ej: 39 has" },
+          { key: "cultivo", label: "Cultivo (opcional)", placeholder: "Ej: Soja" },
+        ]}
+        onCancelar={() => setModal(null)}
+        onConfirmar={(v) => {
+          if (modal?.tipo !== "nuevoLote") return;
+          const establecimientoId = modal.establecimientoId;
+          setModal(null);
+          conManejoDeError(async () => {
+            await db.crearLote(establecimientoId, v.nombre.trim(), v.cultivo?.trim() ?? "");
+            setExpEstablecimientos((prev) => new Set(prev).add(establecimientoId));
+          });
+        }}
+      />
+
+      <PromptModal
+        visible={modal?.tipo === "editarLote"}
+        titulo="Editar lote"
+        fields={[{ key: "nombre", label: "Nombre", valorInicial: modal?.tipo === "editarLote" ? modal.lote.nombre : "" }]}
+        onCancelar={() => setModal(null)}
+        onConfirmar={(v) => {
+          if (modal?.tipo !== "editarLote") return;
+          const id = modal.lote.id;
+          setModal(null);
+          conManejoDeError(() => db.editarLote(id, v.nombre.trim()));
+        }}
+      />
+
+      {modal?.tipo === "acceso" && (
+        <AccesoModal lote={modal.lote} onCerrar={() => setModal(null)} />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
+  container: { padding: 16, gap: 12 },
+  vacio: { color: colors.textMuted, textAlign: "center", marginTop: 24 },
+  vacioChico: { color: colors.textMuted, fontSize: 12, paddingVertical: 6 },
+  agregarClienteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.primaryConfirm,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  agregarClienteTexto: { color: colors.surface, fontWeight: "700", fontSize: 14 },
+  clienteCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+  },
+  filaHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  filaHeaderBtn: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  clienteNombre: { fontSize: 15, fontWeight: "700", color: colors.text },
+  establecimientoNombre: { fontSize: 14, fontWeight: "600", color: colors.text },
+  accionesFila: { flexDirection: "row", gap: 4 },
+  iconBtn: { padding: 8 },
+  hijos: { marginTop: 8, marginLeft: 10, gap: 8 },
+  establecimientoCard: {
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 10,
+  },
+  loteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  loteInfo: { flex: 1 },
+  loteNombre: { fontSize: 13, fontWeight: "700", color: colors.text },
+  loteDetalle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+});

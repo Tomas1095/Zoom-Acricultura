@@ -1,46 +1,55 @@
+import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { LogOut, Users } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
-import { etiquetaRol } from "@/lib/roles";
+import { etiquetaRol, puedeGestionarEquipo } from "@/lib/roles";
+import { ArbolLotes } from "@/features/lotes/arbol-lotes";
+import { MisLotes } from "@/features/lotes/mis-lotes";
 import { colors } from "@/theme/colors";
 
-/** Placeholder de "Mis lotes" — acá va el árbol Cliente → Establecimiento →
- * Lote (administradores) o la lista de lotes con acceso (Monitoreador),
- * portado de MisLotesView/ArbolLotesView del prototipo. */
 export default function MisLotesScreen() {
   const { usuario, signOut } = useAuth();
+  if (!usuario) return null;
+
+  const esAdministrador = usuario.rol !== "monitoreador";
 
   return (
     <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.saludo}>Hola, {usuario?.nombre}</Text>
-        <Text style={styles.rol}>{usuario ? etiquetaRol(usuario.rol) : ""}</Text>
+      <View style={styles.cabecera}>
+        <View>
+          <Text style={styles.saludo}>Hola, {usuario.nombre}</Text>
+          <Text style={styles.rol}>{etiquetaRol(usuario.rol)}</Text>
+        </View>
+        <View style={styles.accionesCabecera}>
+          {puedeGestionarEquipo(usuario.rol) && (
+            <Pressable style={styles.iconBtn} onPress={() => router.push("/(app)/equipo")}>
+              <Users size={20} color={colors.primaryDark} />
+            </Pressable>
+          )}
+          <Pressable style={styles.iconBtn} onPress={signOut}>
+            <LogOut size={19} color={colors.danger} />
+          </Pressable>
+        </View>
       </View>
 
-      <Text style={styles.placeholder}>
-        Acá va el árbol de Clientes → Establecimientos → Lotes (o la lista de lotes asignados, si sos
-        Monitoreador) — próximo paso de la migración.
-      </Text>
-
-      <Pressable style={styles.salir} onPress={signOut}>
-        <Text style={styles.salirTexto}>Cerrar sesión</Text>
-      </Pressable>
+      {esAdministrador ? <ArbolLotes /> : <MisLotes />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: 20, gap: 16 },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+  container: { flex: 1, backgroundColor: colors.background },
+  cabecera: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
-  saludo: { fontSize: 18, fontWeight: "700", color: colors.text },
-  rol: { fontSize: 13, color: colors.accentGold, fontWeight: "600", marginTop: 2 },
-  placeholder: { color: colors.textMuted, fontSize: 14, lineHeight: 20 },
-  salir: { marginTop: "auto", alignSelf: "center", padding: 12 },
-  salirTexto: { color: colors.danger, fontWeight: "600" },
+  saludo: { fontSize: 17, fontWeight: "700", color: colors.text },
+  rol: { fontSize: 12, color: colors.accentGold, fontWeight: "600" },
+  accionesCabecera: { flexDirection: "row", gap: 4 },
+  iconBtn: { padding: 8 },
 });
