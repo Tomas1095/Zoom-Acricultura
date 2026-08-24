@@ -55,9 +55,11 @@ create table lotes (
   establecimiento_id uuid not null references establecimientos (id) on delete cascade,
   nombre text not null,
   cultivo text not null default 'Sin especificar',
-  hectareas numeric not null,
+  -- null hasta que se procesa el KMZ y se genera la grilla real (ver
+  -- generarGrillaDesdeKmz en el prototipo: el lote existe antes de eso).
+  hectareas numeric,
   ha_por_punto numeric not null default 1.5,
-  campana_actual text not null,
+  campana_actual text not null default '25/26',
   perimetro jsonb not null default '[]'::jsonb, -- [{x,y}, ...] metros relativos al centro
   tiene_grilla boolean not null default false,
   created_at timestamptz not null default now()
@@ -179,8 +181,16 @@ create policy "usuarios: socio_fundador asciende/degrada y admins gestionan baja
 
 -- clientes / establecimientos / lotes: administradores gestionan el árbol
 -- completo; monitoreador solo ve lo que tiene en `accesos`.
-create policy "clientes: lectura para administradores"
-  on clientes for select using (es_administrador());
+create policy "clientes: lectura para administradores o con acceso a algún lote propio"
+  on clientes for select
+  using (
+    es_administrador()
+    or exists (
+      select 1 from establecimientos e
+      join lotes l on l.establecimiento_id = e.id
+      where e.cliente_id = clientes.id and tiene_acceso_a_lote(l.id)
+    )
+  );
 create policy "clientes: escritura para administradores"
   on clientes for insert with check (es_administrador());
 create policy "clientes: actualización para administradores"
@@ -189,8 +199,12 @@ create policy "clientes: actualización para administradores"
 create policy "clientes: borrado solo socio_fundador/socio_gerente"
   on clientes for delete using (current_rol() in ('socio_fundador', 'socio_gerente'));
 
-create policy "establecimientos: lectura para administradores"
-  on establecimientos for select using (es_administrador());
+create policy "establecimientos: lectura para administradores o con acceso a algún lote propio"
+  on establecimientos for select
+  using (
+    es_administrador()
+    or exists (select 1 from lotes l where l.establecimiento_id = establecimientos.id and tiene_acceso_a_lote(l.id))
+  );
 create policy "establecimientos: escritura para administradores"
   on establecimientos for insert with check (es_administrador());
 create policy "establecimientos: actualización para administradores"
