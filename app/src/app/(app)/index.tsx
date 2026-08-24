@@ -1,11 +1,13 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { LogOut, Users } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { etiquetaRol, puedeGestionarEquipo } from "@/lib/roles";
 import { ArbolLotes } from "@/features/lotes/arbol-lotes";
 import { MisLotes } from "@/features/lotes/mis-lotes";
+import { AppHeader } from "@/components/app-header";
 import { colors } from "@/theme/colors";
 
 export default function MisLotesScreen() {
@@ -16,6 +18,8 @@ export default function MisLotesScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" />
+      <AppHeader />
       <View style={styles.cabecera}>
         <View>
           <Text style={styles.saludo}>Hola, {usuario.nombre}</Text>

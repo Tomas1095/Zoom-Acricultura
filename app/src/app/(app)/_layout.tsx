@@ -24,7 +24,7 @@ export default function AppLayout() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Mis lotes" }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="equipo" options={{ title: "Mi equipo" }} />
       <Stack.Screen name="lote/[id]/index" options={{ title: "" }} />
       <Stack.Screen name="lote/[id]/modo-trabajo" options={{ headerShown: false, animation: "fade" }} />

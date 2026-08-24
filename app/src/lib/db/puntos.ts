@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { inferirOrigenDesdePuntos, type LatLon } from "@/lib/geo/geometria";
 import type { Carga, Punto } from "@/types/domain";
 
 function filaAPunto(f: any): Punto {
@@ -32,6 +33,14 @@ export async function fetchPuntosDeLote(loteId: string): Promise<Punto[]> {
   const { data, error } = await supabase.from("puntos").select("*").eq("lote_id", loteId).order("linea").order("punto_num");
   if (error) throw error;
   return (data ?? []).map(filaAPunto);
+}
+
+/** Centro real del lote, para "Cómo llegar" desde la lista principal —
+ * mismo cálculo que usa la vista de campo (ver inferirOrigenDesdePuntos). */
+export async function fetchCentroDeLote(loteId: string): Promise<LatLon | null> {
+  const puntos = await fetchPuntosDeLote(loteId);
+  if (puntos.length === 0) return null;
+  return inferirOrigenDesdePuntos(puntos);
 }
 
 /** Trae las cargas de la campaña vigente del lote, como mapa punto_id ->

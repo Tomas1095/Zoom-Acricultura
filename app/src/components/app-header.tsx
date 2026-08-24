@@ -1,0 +1,59 @@
+import { StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { ZoomLogo } from "./zoom-logo";
+
+/** Header de la app — portado de `styles.header` del prototipo (fondo
+ * verde oscuro, "MONITOREO DE PLAGAS" arriba, nombre de la comunidad, y el
+ * logo a la derecha). Debajo de esto sigue el mismo layout que ya
+ * teníamos (nombre del usuario, rol, accesos rápidos).
+ *
+ * La pantalla que use esto tiene que llevar `headerShown: false` en el
+ * Stack — este componente reemplaza al header nativo, y por eso maneja el
+ * margen del notch/status bar él mismo (con `useSafeAreaInsets`, no un
+ * número fijo que se rompería en otro celular). */
+export function AppHeader() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
+      <View>
+        <Text style={styles.eyebrow}>MONITOREO DE PLAGAS</Text>
+        <Text style={styles.titulo}>Zoom Agricultura</Text>
+        <View style={styles.rule} />
+      </View>
+      <ZoomLogo variant="light" iconSize={32} wordSize={21} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: {
+    backgroundColor: "#14231A",
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  eyebrow: {
+    fontSize: 11,
+    letterSpacing: 0.6,
+    color: "#F2A93B",
+    fontWeight: "700",
+  },
+  titulo: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginTop: 6,
+  },
+  rule: {
+    width: 32,
+    height: 3,
+    backgroundColor: "#DB945D",
+    borderRadius: 2,
+    marginTop: 8,
+  },
+});

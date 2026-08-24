@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, Users } from "lucide-react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ChevronDown, ChevronRight, Info, Navigation, Pencil, Plus, Trash2, Users } from "lucide-react-native";
 
 import { PromptModal } from "@/components/prompt-modal";
 import { useAuth } from "@/lib/auth-context";
 import * as db from "@/lib/db/lotes";
+import { fetchCentroDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
+import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import type { Cliente, Establecimiento, Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesoModal } from "./acceso-modal";
@@ -33,6 +35,9 @@ export function ArbolLotes() {
   const [expClientes, setExpClientes] = useState<Set<string>>(new Set());
   const [expEstablecimientos, setExpEstablecimientos] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<ModalState>(null);
+  const [infoAbierta, setInfoAbierta] = useState<Set<string>>(new Set());
+  const [infoPorLote, setInfoPorLote] = useState<Record<string, number | "cargando">>({});
+  const [buscandoComoLlegar, setBuscandoComoLlegar] = useState<string | null>(null);
 
   const refrescar = useCallback(async () => {
     try {
@@ -73,6 +78,40 @@ export function ArbolLotes() {
     ]);
   }
 
+  async function toggleInfo(lote: Lote) {
+    const abierta = infoAbierta.has(lote.id);
+    setInfoAbierta((prev) => {
+      const next = new Set(prev);
+      abierta ? next.delete(lote.id) : next.add(lote.id);
+      return next;
+    });
+    if (!abierta && infoPorLote[lote.id] === undefined) {
+      setInfoPorLote((prev) => ({ ...prev, [lote.id]: "cargando" }));
+      try {
+        const puntos = await fetchPuntosDeLote(lote.id);
+        setInfoPorLote((prev) => ({ ...prev, [lote.id]: puntos.length }));
+      } catch (e: any) {
+        Alert.alert("No se pudo cargar la info", e.message ?? String(e));
+      }
+    }
+  }
+
+  async function comoLlegar(lote: Lote) {
+    setBuscandoComoLlegar(lote.id);
+    try {
+      const centro = await fetchCentroDeLote(lote.id);
+      if (!centro) {
+        Alert.alert("Sin ubicación todavía", "Este lote no tiene puntos generados.");
+        return;
+      }
+      Linking.openURL(urlComoLlegar(centro));
+    } catch (e: any) {
+      Alert.alert("No se pudo calcular la ruta", e.message ?? String(e));
+    } finally {
+      setBuscandoComoLlegar(null);
+    }
+  }
+
   if (cargando) {
     return (
       <View style={styles.centrado}>
@@ -84,11 +123,6 @@ export function ArbolLotes() {
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Pressable style={styles.agregarClienteBtn} onPress={() => setModal({ tipo: "nuevoCliente" })}>
-          <Plus size={15} color={colors.surface} />
-          <Text style={styles.agregarClienteTexto}>Nuevo cliente</Text>
-        </Pressable>
-
         {clientes.length === 0 && (
           <Text style={styles.vacio}>Todavía no hay clientes cargados. Empezá agregando uno.</Text>
         )}
@@ -186,39 +220,75 @@ export function ArbolLotes() {
                             {lotesDelEst.length === 0 && (
                               <Text style={styles.vacioChico}>Sin lotes todavía.</Text>
                             )}
-                            {lotesDelEst.map((l) => (
-                              <View key={l.id} style={styles.loteRow}>
-                                <Pressable style={styles.loteInfo} onPress={() => router.push(`/(app)/lote/${l.id}`)}>
-                                  <Text style={styles.loteNombre}>{l.nombre}</Text>
-                                  <Text style={styles.loteDetalle}>
-                                    {l.cultivo}
-                                    {l.tieneGrilla ? ` · ${l.hectareas} ha` : " · sin grilla (falta subir el KMZ)"}
-                                  </Text>
-                                </Pressable>
-                                <View style={styles.accionesFila}>
-                                  <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "acceso", lote: l })}>
-                                    <Users size={13} color={colors.info} />
-                                  </Pressable>
-                                  <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "editarLote", lote: l })}>
-                                    <Pencil size={13} color={colors.accentGold} />
-                                  </Pressable>
-                                  {puedeEliminar && (
-                                    <Pressable
-                                      style={styles.iconBtn}
-                                      onPress={() =>
-                                        confirmarBorrado(
-                                          "Eliminar lote",
-                                          `Se va a eliminar "${l.nombre}" y todos sus datos de monitoreo.`,
-                                          () => db.eliminarLote(l.id)
-                                        )
-                                      }
-                                    >
-                                      <Trash2 size={13} color={colors.danger} />
+                            {lotesDelEst.map((l) => {
+                              const infoEstaAbierta = infoAbierta.has(l.id);
+                              const infoValor = infoPorLote[l.id];
+                              return (
+                                <View key={l.id} style={styles.loteRow}>
+                                  <View style={styles.loteFilaSuperior}>
+                                    <Pressable style={styles.loteInfo} onPress={() => router.push(`/(app)/lote/${l.id}`)}>
+                                      <Text style={styles.loteNombre}>{l.nombre}</Text>
+                                      <Text style={styles.loteDetalle}>
+                                        {l.cultivo}
+                                        {l.tieneGrilla ? ` · ${l.hectareas} ha` : " · sin grilla (falta subir el KMZ)"}
+                                      </Text>
                                     </Pressable>
+                                    <View style={styles.accionesFila}>
+                                      <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "acceso", lote: l })}>
+                                        <Users size={13} color={colors.info} />
+                                      </Pressable>
+                                      <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "editarLote", lote: l })}>
+                                        <Pencil size={13} color={colors.accentGold} />
+                                      </Pressable>
+                                      {puedeEliminar && (
+                                        <Pressable
+                                          style={styles.iconBtn}
+                                          onPress={() =>
+                                            confirmarBorrado(
+                                              "Eliminar lote",
+                                              `Se va a eliminar "${l.nombre}" y todos sus datos de monitoreo.`,
+                                              () => db.eliminarLote(l.id)
+                                            )
+                                          }
+                                        >
+                                          <Trash2 size={13} color={colors.danger} />
+                                        </Pressable>
+                                      )}
+                                    </View>
+                                  </View>
+
+                                  {l.tieneGrilla && (
+                                    <View style={styles.lotePillsFila}>
+                                      <Pressable style={styles.lotePill} onPress={() => toggleInfo(l)}>
+                                        <Info size={11} color={colors.primaryDark} />
+                                        <Text style={styles.lotePillTexto}>Info</Text>
+                                      </Pressable>
+                                      <Pressable
+                                        style={styles.lotePill}
+                                        onPress={() => comoLlegar(l)}
+                                        disabled={buscandoComoLlegar === l.id}
+                                      >
+                                        <Navigation size={11} color={colors.primaryDark} />
+                                        <Text style={styles.lotePillTexto}>
+                                          {buscandoComoLlegar === l.id ? "Buscando…" : "Cómo llegar"}
+                                        </Text>
+                                      </Pressable>
+                                    </View>
+                                  )}
+
+                                  {infoEstaAbierta && (
+                                    <View style={styles.loteInfoPanel}>
+                                      <Text style={styles.loteInfoLinea}>Hectáreas: {l.hectareas}</Text>
+                                      <Text style={styles.loteInfoLinea}>Hectáreas por punto: {l.haPorPunto}</Text>
+                                      <Text style={styles.loteInfoLinea}>
+                                        Puntos de muestreo: {infoValor === "cargando" || infoValor === undefined ? "…" : infoValor}
+                                      </Text>
+                                      <Text style={styles.loteInfoLinea}>Campaña: {l.campanaActual}</Text>
+                                    </View>
                                   )}
                                 </View>
-                              </View>
-                            ))}
+                              );
+                            })}
                           </View>
                         )}
                       </View>
@@ -229,6 +299,11 @@ export function ArbolLotes() {
             </View>
           );
         })}
+
+        <Pressable style={styles.agregarClienteBtn} onPress={() => setModal({ tipo: "nuevoCliente" })}>
+          <Plus size={15} color={colors.surface} />
+          <Text style={styles.agregarClienteTexto}>Nuevo cliente</Text>
+        </Pressable>
       </ScrollView>
 
       <PromptModal
@@ -347,17 +422,35 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   loteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     backgroundColor: colors.surface,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: 8,
   },
+  loteFilaSuperior: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   loteInfo: { flex: 1 },
   loteNombre: { fontSize: 13, fontWeight: "700", color: colors.text },
   loteDetalle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  lotePillsFila: { flexDirection: "row", gap: 8 },
+  lotePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  lotePillTexto: { fontSize: 11, fontWeight: "700", color: colors.primaryDark },
+  loteInfoPanel: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 10,
+    gap: 3,
+  },
+  loteInfoLinea: { fontSize: 12, color: colors.text },
 });

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { router } from "expo-router";
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { Maximize2, Navigation } from "lucide-react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Maximize2 } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import type { Lote } from "@/types/domain";
@@ -9,16 +9,18 @@ import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaCampo, type PuntoMapa } from "./mapa-campo";
 import { GpsEstadoPill } from "./gps-estado-pill";
-import { urlComoLlegar } from "@/lib/geo/como-llegar";
 
 const FIT_ALTO = 460;
 
 /** Vista general del lote — portado de UbicacionView del prototipo en su
  * modo "mapa fijo" (no pantalla completa). El Monitoreador puede ubicarse
- * acá pero solo carga datos desde Modo trabajo (ver CONTEXTO.md). */
+ * acá pero solo carga datos desde Modo trabajo (ver CONTEXTO.md).
+ *
+ * "Info" y "Cómo llegar" quedaron en la lista de "Mis lotes" (un nivel
+ * arriba), no acá adentro — así el lote es solo mapa + acción de trabajar. */
 export function VistaGeneral({ lote }: { lote: Lote }) {
   const { usuario } = useAuth();
-  const { cargando, puntos, cargas, gps, puntoCercano, enRango, origen } = useDatosCampo(lote.id);
+  const { cargando, puntos, cargas, gps, puntoCercano, enRango } = useDatosCampo(lote.id);
   const { width } = useWindowDimensions();
 
   const puntosMapa: PuntoMapa[] = useMemo(
@@ -72,13 +74,6 @@ export function VistaGeneral({ lote }: { lote: Lote }) {
           Esta vista es solo para ubicarte. Para cargar datos, entrá a "Modo trabajo".
         </Text>
       )}
-
-      {origen && (
-        <Pressable style={styles.comoLlegar} onPress={() => Linking.openURL(urlComoLlegar(origen))}>
-          <Navigation size={13} color={colors.primaryDark} />
-          <Text style={styles.comoLlegarTexto}>Cómo llegar</Text>
-        </Pressable>
-      )}
     </ScrollView>
   );
 }
@@ -98,15 +93,4 @@ const styles = StyleSheet.create({
   },
   botonModoTrabajoTexto: { color: colors.surface, fontWeight: "700", fontSize: 12 },
   aviso: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
-  comoLlegar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  comoLlegarTexto: { color: colors.primaryDark, fontWeight: "700", fontSize: 13 },
 });
