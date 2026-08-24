@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import * as db from "@/lib/db/lotes";
 import { fetchCentroDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import { urlComoLlegar } from "@/lib/geo/como-llegar";
+import { formatearHectareas } from "@/lib/format";
 import type { Cliente, Establecimiento, Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesoModal } from "./acceso-modal";
@@ -230,7 +231,9 @@ export function ArbolLotes() {
                                       <Text style={styles.loteNombre}>{l.nombre}</Text>
                                       <Text style={styles.loteDetalle}>
                                         {l.cultivo}
-                                        {l.tieneGrilla ? ` · ${l.hectareas} ha` : " · sin grilla (falta subir el KMZ)"}
+                                        {l.tieneGrilla
+                                          ? ` · ${formatearHectareas(l.hectareas)} ha`
+                                          : " · sin grilla (falta subir el KMZ)"}
                                       </Text>
                                     </Pressable>
                                     <View style={styles.accionesFila}>
@@ -278,7 +281,7 @@ export function ArbolLotes() {
 
                                   {infoEstaAbierta && (
                                     <View style={styles.loteInfoPanel}>
-                                      <Text style={styles.loteInfoLinea}>Hectáreas: {l.hectareas}</Text>
+                                      <Text style={styles.loteInfoLinea}>Hectáreas: {formatearHectareas(l.hectareas)}</Text>
                                       <Text style={styles.loteInfoLinea}>Hectáreas por punto: {l.haPorPunto}</Text>
                                       <Text style={styles.loteInfoLinea}>
                                         Puntos de muestreo: {infoValor === "cargando" || infoValor === undefined ? "…" : infoValor}

@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { CheckCircle2, MapPin } from "lucide-react-native";
 
 import * as db from "@/lib/db/lotes";
+import { formatearHectareas } from "@/lib/format";
 import type { Establecimiento, Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 
@@ -51,7 +52,7 @@ export function MisLotes() {
                 {l.tieneGrilla ? (
                   <>
                     <CheckCircle2 size={12} color={colors.primary} />
-                    <Text style={styles.pillTextoOk}>{l.hectareas} ha</Text>
+                    <Text style={styles.pillTextoOk}>{formatearHectareas(l.hectareas)} ha</Text>
                   </>
                 ) : (
                   <>
