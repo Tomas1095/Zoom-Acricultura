@@ -36,11 +36,18 @@ function parsearTuplasCoordenadas(texto: string): LatLon[] {
 /** Abre el selector de archivos del sistema para elegir un .kmz/.kml. Devuelve
  * null si la persona cancela. */
 export async function elegirArchivoKmz(): Promise<File | null> {
-  const resultado = await File.pickFileAsync({
-    mimeTypes: ["application/vnd.google-earth.kmz", "application/vnd.google-earth.kml+xml", "*/*"],
-  });
-  if (resultado.canceled) return null;
-  return resultado.result;
+  try {
+    // El tipo declarado de pickFileAsync en esta versión de expo-file-system
+    // confunde su propia clase File con el File global del navegador —
+    // el cast de acá esquiva ese bug de tipado, no cambia el comportamiento.
+    const resultado = (await File.pickFileAsync(undefined, "*/*")) as unknown as File | File[] | null;
+    if (!resultado) return null;
+    return Array.isArray(resultado) ? (resultado[0] ?? null) : resultado;
+  } catch {
+    // Al cancelar el selector, algunos dispositivos rechazan la promesa en
+    // vez de devolver null — lo tratamos igual, no es un error real.
+    return null;
+  }
 }
 
 /** Descomprime el KMZ (o lee el KML directo si no viene zipeado) y devuelve
