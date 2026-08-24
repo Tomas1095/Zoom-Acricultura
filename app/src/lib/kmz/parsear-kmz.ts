@@ -2,7 +2,7 @@ import { File } from "expo-file-system";
 import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
 
-import type { LatLon } from "./geometria";
+import type { LatLon } from "@/lib/geo/geometria";
 
 /** Busca recursivamente cualquier nodo `coordinates` dentro del árbol KML ya
  * parseado. No asumimos una estructura fija (Document > Folder > Placemark

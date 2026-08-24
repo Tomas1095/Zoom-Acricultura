@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Upload } from "lucide-react-native";
 
-import { generarGrillaDesdePerimetro } from "@/lib/kmz/geometria";
+import { generarGrillaDesdePerimetro } from "@/lib/geo/geometria";
 import { elegirArchivoKmz, extraerPerimetroDeArchivo } from "@/lib/kmz/parsear-kmz";
 import { guardarGrillaGenerada } from "@/lib/db/kmz";
 import { colors } from "@/theme/colors";

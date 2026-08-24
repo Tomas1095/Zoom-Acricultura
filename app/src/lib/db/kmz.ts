@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { GrillaGenerada } from "@/lib/kmz/geometria";
+import type { GrillaGenerada } from "@/lib/geo/geometria";
 
 /** Guarda la grilla generada desde el KMZ: actualiza el lote (hectáreas,
  * perímetro, tiene_grilla) e inserta todos los puntos de muestreo. */

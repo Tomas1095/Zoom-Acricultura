@@ -29,6 +29,25 @@ export function latLonAXY(origen: LatLon, p: LatLon): XY {
   };
 }
 
+/** Recupera el origen local (centro) que se usó al generar la grilla de un
+ * lote, SIN necesidad de haberlo guardado en ningún lado: cada punto ya
+ * tiene su x,y (relativo a ese origen) y su lat/lon real, así que se puede
+ * despejar `origen` directo de la fórmula de `latLonAXY` — x = (lon-o.lon)*mpg,
+ * y = (o.lat-lat)*mpgLat → o.lat = lat + y/mpgLat, o.lon = lon + x/mpgLon.
+ * Hace falta esto para que la posición del GPS en vivo (que solo trae
+ * lat/lon) caiga en el mismo plano x,y que ya tienen guardados los puntos
+ * y el perímetro del lote. Con un solo punto ya lo recupera exacto; con
+ * varios, promedia el ruido de redondeo. */
+export function inferirOrigenDesdePuntos(puntos: Array<{ lat: number; lon: number; x: number; y: number }>): LatLon {
+  if (puntos.length === 0) throw new Error("No hay puntos para inferir el origen del lote.");
+  const lats = puntos.map((p) => p.lat + p.y / METROS_POR_GRADO_LAT);
+  const latOrigen = lats.reduce((s, v) => s + v, 0) / lats.length;
+  const mpgLonOrigen = metrosPorGradoLon(latOrigen);
+  const lons = puntos.map((p) => p.lon + p.x / mpgLonOrigen);
+  const lonOrigen = lons.reduce((s, v) => s + v, 0) / lons.length;
+  return { lat: latOrigen, lon: lonOrigen };
+}
+
 export function xyALatLon(origen: LatLon, p: XY): LatLon {
   return {
     lat: origen.lat - p.y / METROS_POR_GRADO_LAT,

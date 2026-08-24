@@ -27,6 +27,12 @@ export async function fetchArbol(): Promise<Arbol> {
   };
 }
 
+export async function fetchLote(id: string): Promise<Lote | null> {
+  const { data, error } = await supabase.from("lotes").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? filaALote(data) : null;
+}
+
 export async function crearCliente(nombre: string): Promise<Cliente> {
   const { data, error } = await supabase.from("clientes").insert({ nombre }).select().single();
   if (error) throw error;

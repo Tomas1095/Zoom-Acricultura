@@ -8,10 +8,8 @@ import * as db from "@/lib/db/lotes";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { SubirKmz } from "@/features/lotes/subir-kmz";
+import { VistaGeneral } from "@/features/campo/vista-general";
 
-/** Stub de la pantalla de lote — acá van a ir las pestañas Campo/Densidad
- * (vista general, modo trabajo, mapa de densidad) cuando se porteen. Por
- * ahora resuelve el paso previo a todo eso: generar la grilla real. */
 export default function LoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { usuario } = useAuth();
@@ -44,21 +42,14 @@ export default function LoteScreen() {
     );
   }
 
+  if (lote.tieneGrilla) return <VistaGeneral lote={lote} />;
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.nombre}>{lote.nombre}</Text>
       <Text style={styles.cultivo}>{lote.cultivo}</Text>
 
-      {lote.tieneGrilla ? (
-        <View style={styles.card}>
-          <Text style={styles.dato}>{lote.hectareas} hectáreas</Text>
-          <Text style={styles.datoChico}>{lote.haPorPunto} ha por punto de muestreo</Text>
-          <Text style={styles.aviso}>
-            Acá van a ir la vista de campo (GPS, grilla) y el mapa de densidad — próximos pasos de la
-            migración.
-          </Text>
-        </View>
-      ) : usuario && puedeAdministrarLotes(usuario.rol) ? (
+      {usuario && puedeAdministrarLotes(usuario.rol) ? (
         <SubirKmz loteId={lote.id} onListo={refrescar} />
       ) : (
         <Text style={styles.aviso}>
@@ -75,16 +66,5 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: colors.background, padding: 20, gap: 4 },
   nombre: { fontSize: 22, fontWeight: "800", color: colors.text },
   cultivo: { fontSize: 14, color: colors.textMuted },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    marginTop: 16,
-    gap: 4,
-  },
-  dato: { fontSize: 16, fontWeight: "700", color: colors.primaryDark },
-  datoChico: { fontSize: 12, color: colors.textMuted },
   aviso: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 12 },
 });

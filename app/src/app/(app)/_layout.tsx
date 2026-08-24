@@ -26,7 +26,9 @@ export default function AppLayout() {
     >
       <Stack.Screen name="index" options={{ title: "Mis lotes" }} />
       <Stack.Screen name="equipo" options={{ title: "Mi equipo" }} />
-      <Stack.Screen name="lote/[id]" options={{ title: "" }} />
+      <Stack.Screen name="lote/[id]/index" options={{ title: "" }} />
+      <Stack.Screen name="lote/[id]/modo-trabajo" options={{ headerShown: false, animation: "fade" }} />
+      <Stack.Screen name="lote/[id]/punto/[puntoId]" options={{ title: "Punto", presentation: "modal" }} />
     </Stack>
   );
 }
