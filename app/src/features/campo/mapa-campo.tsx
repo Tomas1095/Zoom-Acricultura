@@ -18,8 +18,18 @@ const ZOOM_MAX = 2.5;
 // botones físicos de zoom, sin pinch). De paso resuelve que pellizcar
 // contaba como "interacción" y disparaba "Volver a mi marcha" sin querer:
 // como ya no hay gesto de pinch en modo trabajo, ese problema desaparece
-// solo. Vista general sigue con pellizcar para zoom, como antes.
-const NIVELES_ZOOM = [ZOOM_MIN, 0.8, 1, 1.3, 1.6, 2, ZOOM_MAX];
+// solo. Vista general sigue con pellizcar para zoom, como antes (ver
+// ZOOM_MIN/ZOOM_MAX, sin relación con esta lista).
+//
+// El piso baja bastante más que ZOOM_MIN (0.6): en modo trabajo la escala
+// base ya arranca bastante más acercada que en vista general (a propósito,
+// para leer los puntos caminando — ver baseScale más abajo), así que en un
+// lote grande (probado con uno real de ~117ha) ni el mínimo de antes
+// alcanzaba para que el límite completo entrara en pantalla — se veía
+// "cortado" no por un error de dibujo sino porque esas esquinas quedaban
+// directamente afuera de la pantalla. Con este piso más bajo, alejando del
+// todo se puede ver el lote completo sea cual sea su tamaño real.
+const NIVELES_ZOOM = [0.15, 0.25, 0.4, 0.6, 0.8, 1, 1.3, 1.6, 2, ZOOM_MAX];
 const NIVEL_ZOOM_INICIAL = NIVELES_ZOOM.indexOf(1);
 
 export interface PuntoMapa {
