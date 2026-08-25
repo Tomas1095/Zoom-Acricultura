@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { Maximize2, RotateCcw } from "lucide-react-native";
+import { BarChart2, Maximize2, RotateCcw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
+import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
@@ -37,6 +38,7 @@ export function VistaGeneral({ lote }: { lote: Lote }) {
   );
 
   const puedeTocarPuntos = usuario?.rol !== "monitoreador";
+  const puedeVerDensidad = !!usuario && puedeAdministrarLotes(usuario.rol);
   const anchoMapa = Math.min(width - 32, 400);
 
   if (cargando) {
@@ -62,6 +64,14 @@ export function VistaGeneral({ lote }: { lote: Lote }) {
             >
               <RotateCcw size={13} color={colors.primaryDark} />
               <Text style={styles.botonRestablecerTexto}>Restablecer</Text>
+            </Pressable>
+          )}
+          {puedeVerDensidad && (
+            <Pressable
+              style={styles.botonDensidad}
+              onPress={() => router.push(`/(app)/lote/${lote.id}/densidad`)}
+            >
+              <BarChart2 size={14} color={colors.primaryDark} />
             </Pressable>
           )}
           <Pressable style={styles.botonModoTrabajo} onPress={() => router.push(`/(app)/lote/${lote.id}/modo-trabajo`)}>
@@ -112,6 +122,15 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   botonRestablecerTexto: { color: colors.primaryDark, fontWeight: "700", fontSize: 11 },
+  botonDensidad: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   botonModoTrabajo: {
     flexDirection: "row",
     alignItems: "center",
