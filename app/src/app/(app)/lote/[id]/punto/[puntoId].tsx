@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
@@ -68,6 +68,21 @@ export default function PuntoScreen() {
   const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const observacionesRef = useRef<TextInput>(null);
+
+  // Al tocar "Observaciones" subimos el scroll a mano en vez de depender
+  // solo del ajuste automático del teclado — así el textarea queda
+  // visible arriba del teclado mientras se escribe, no tapado.
+  function desplazarAObservaciones() {
+    setTimeout(() => {
+      observacionesRef.current?.measureLayout(
+        scrollRef.current?.getInnerViewNode?.(),
+        (_x: number, y: number) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 40), animated: true }),
+        () => {}
+      );
+    }, 100); // le da tiempo a que el teclado empiece a aparecer antes de medir
+  }
 
   const refrescar = useCallback(async () => {
     try {
@@ -315,14 +330,22 @@ export default function PuntoScreen() {
             </Text>
           </Pressable>
           {mostrarObservaciones && (
-            <TextInput
-              style={styles.observaciones}
-              placeholder="Anotá algo puntual sobre este punto…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              value={form.observaciones}
-              onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
-            />
+            <>
+              <TextInput
+                ref={observacionesRef}
+                style={styles.observaciones}
+                placeholder="Anotá algo puntual sobre este punto…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                value={form.observaciones}
+                onFocus={desplazarAObservaciones}
+                onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
+              />
+              <Pressable style={styles.botonVistoObs} onPress={() => observacionesRef.current?.blur()}>
+                <Check size={14} color={colors.surface} />
+                <Text style={styles.botonVistoObsTexto}>Visto</Text>
+              </Pressable>
+            </>
           )}
 
           {carga && carga.fotos.length > 0 && (
@@ -437,6 +460,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlignVertical: "top",
   },
+  botonVistoObs: {
+    flexDirection: "row",
+    alignSelf: "flex-end",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  botonVistoObsTexto: { color: colors.surface, fontWeight: "700", fontSize: 12 },
   fotosFila: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   fotoItem: { width: 64, height: 64 },
   fotoImg: { width: 64, height: 64, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
