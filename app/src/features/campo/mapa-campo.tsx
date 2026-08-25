@@ -196,7 +196,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
   const gestoCompuesto = Gesture.Simultaneous(pinch, pan, rotar);
 
+  // En modo trabajo, escala y rotación tienen que pivotear sobre el ancla
+  // (donde está "Yo", fijo — ver más abajo), no sobre el centro de la vista
+  // (el default). Si no, cualquier rotación de rumbo corría todo el
+  // grupo — lote, puntos y perímetro — lejos de "Yo" en vez de girarlo a
+  // su alrededor, que es exactamente el bug que reportó el usuario ("el
+  // punto azul me queda afuera del mapa"). translate no lo necesita (una
+  // traslación no tiene "pivote"). En vista general se deja el default
+  // (centro), como corresponde a un mapa fijo sin ancla.
   const estiloAnimado = useAnimatedStyle(() => ({
+    transformOrigin: pantallaCompleta ? [anclaX, anclaY, 0] : undefined,
     transform: [
       { translateX: translateX.value },
       { translateY: translateY.value },
