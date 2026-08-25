@@ -196,6 +196,20 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
   const gestoCompuesto = Gesture.Simultaneous(pinch, pan, rotar);
 
+  // Escala y rotación pivotean, por default, sobre el centro geométrico de
+  // la vista a la que se aplican — no hay forma de pedirles otro pivote sin
+  // arriesgarse a APIs nuevas de estilo poco probadas (transformOrigin dio
+  // un crash nativo en una prueba real, ver historial). En vez de eso, en
+  // modo trabajo agrandamos la altura de esta vista para que SU centro
+  // natural caiga justo sobre el ancla (donde está "Yo", fijo — ver más
+  // abajo): como el ancla ya está centrada en X, alcanza con estirar el
+  // alto para 2×anclaY manteniendo el borde de arriba en el mismo lugar
+  // (top:0) — así ningún punto/etiqueta necesita recalcular su posición,
+  // sólo cambia dónde cae el centro de la vista. El sobrante de abajo
+  // queda recortado por el overflow:hidden del contenedor de afuera, igual
+  // que ya se recorta cualquier otro contenido que se sale al girar/hacer
+  // zoom.
+  const altoGrupo = pantallaCompleta ? anclaY * 2 : alto;
   const estiloAnimado = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
@@ -237,7 +251,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
       ]}
     >
       <GestureDetector gesture={gestoCompuesto}>
-        <Animated.View style={[StyleSheet.absoluteFill, estiloAnimado]}>
+        <Animated.View style={[{ position: "absolute", top: 0, left: 0, width: ancho, height: altoGrupo }, estiloAnimado]}>
           <Svg width={ancho} height={alto} style={StyleSheet.absoluteFill}>
             {/* Mismo verde tenue de relleno y borde sólido en los dos modos
                 — en pantalla completa un poco más grueso, nomás, porque
