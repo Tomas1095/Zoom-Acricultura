@@ -71,17 +71,15 @@ export default function PuntoScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const observacionesRef = useRef<TextInput>(null);
 
-  // Al tocar "Observaciones" subimos el scroll a mano en vez de depender
-  // solo del ajuste automático del teclado — así el textarea queda
-  // visible arriba del teclado mientras se escribe, no tapado.
+  // Al tocar "Observaciones" bajamos el scroll del todo en vez de depender
+  // solo del ajuste automático del teclado — con el padding extra de abajo
+  // (ver styles.container) esto alcanza para dejar el textarea visible
+  // arriba del teclado. measureLayout (la forma "prolija" de hacer esto)
+  // tira error con la versión de React Native de este proyecto — ver
+  // https://github.com/facebook/react-native/issues (Fabric cambió cómo
+  // funcionan los refs de host component), así que vamos por lo simple.
   function desplazarAObservaciones() {
-    setTimeout(() => {
-      observacionesRef.current?.measureLayout(
-        scrollRef.current?.getInnerViewNode?.(),
-        (_x: number, y: number) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 40), animated: true }),
-        () => {}
-      );
-    }, 100); // le da tiempo a que el teclado empiece a aparecer antes de medir
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
   }
 
   const refrescar = useCallback(async () => {
@@ -394,7 +392,11 @@ export default function PuntoScreen() {
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
   aviso: { color: colors.textMuted },
-  container: { padding: 20, gap: 4, backgroundColor: colors.background },
+  // paddingBottom extra (no solo el padding parejo de 20) — le da al
+  // ScrollView suficiente "colchón" debajo del botón final para que
+  // scrollToEnd() pueda subir de verdad las observaciones por encima del
+  // teclado en vez de quedarse corto contra el final del contenido.
+  container: { padding: 20, paddingBottom: 260, gap: 4, backgroundColor: colors.background },
   filaTitulo: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
   titulo: { fontSize: 18, fontWeight: "800", color: colors.text },
   tagUsuario: {
