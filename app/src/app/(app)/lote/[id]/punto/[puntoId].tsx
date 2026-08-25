@@ -451,7 +451,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    // paddingBottom más grande que el resto (no un padding parejo) — le da
+    // al ajuste automático del teclado un colchón real debajo del cursor,
+    // que si no quedaba justo tapado por el borde del teclado/la barra
+    // "Listo" cuando escribías la última línea.
+    paddingBottom: 34,
     marginTop: 8,
     minHeight: 70,
     fontSize: 14,
