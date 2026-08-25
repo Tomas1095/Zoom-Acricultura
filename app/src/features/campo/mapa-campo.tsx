@@ -308,12 +308,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               tamaño real, desalineando el perímetro de los puntos (que se
               posicionan aparte, con estilos normales, sin ese reescalado). */}
           <Svg width={ancho} height={altoGrupo} style={{ position: "absolute", top: 0, left: 0 }}>
-            {/* Mismo verde tenue de relleno y borde sólido en los dos modos
-                — en pantalla completa un poco más grueso, nomás, porque
-                se ve a más distancia. */}
+            {/* En pantalla completa el relleno va bastante más marcado que
+                en vista general (8% → 22%) — con puntos más grandes (24px)
+                y trazo sólido, un relleno casi imperceptible dejaba dudar
+                si el límite real llegaba hasta la última fila de puntos o
+                no. Con más contraste no hay ambigüedad: si el relleno no
+                llega hasta un punto, ese punto está realmente afuera del
+                límite cargado (no es un problema de dibujo). */}
             <Polygon
               points={puntosPerimetro.join(" ")}
-              fill="rgba(59,143,92,0.08)"
+              fill={pantallaCompleta ? "rgba(59,143,92,0.22)" : "rgba(59,143,92,0.08)"}
               stroke={colors.primary}
               strokeWidth={pantallaCompleta ? 2.5 : 1.5}
               strokeDasharray={pantallaCompleta ? undefined : "4 3"}
