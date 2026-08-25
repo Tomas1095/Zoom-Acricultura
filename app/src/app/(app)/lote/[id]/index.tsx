@@ -9,6 +9,7 @@ import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { SubirKmz } from "@/features/lotes/subir-kmz";
 import { VistaGeneral } from "@/features/campo/vista-general";
+import { LoteTabs } from "@/features/campo/lote-tabs";
 
 export default function LoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -42,7 +43,13 @@ export default function LoteScreen() {
     );
   }
 
-  if (lote.tieneGrilla) return <VistaGeneral lote={lote} />;
+  if (lote.tieneGrilla) {
+    // El Monitoreador solo ve la grilla (vista general), sin pestañas —
+    // mismo criterio que el prototipo: "Resultados"/"Salidas" no son para
+    // ese rol (ver CONTEXTO.md).
+    const puedeVerPestanas = !!usuario && puedeAdministrarLotes(usuario.rol);
+    return puedeVerPestanas ? <LoteTabs lote={lote} /> : <VistaGeneral lote={lote} />;
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>

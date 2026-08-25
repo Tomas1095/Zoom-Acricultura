@@ -1,26 +1,21 @@
 import { useMemo, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
-import { useAuth } from "@/lib/auth-context";
-import { puedeAdministrarLotes } from "@/lib/roles";
-import { colors } from "@/theme/colors";
-import { useDatosCampo } from "@/features/campo/usar-datos-campo";
-import { MapaDensidad, type PuntoDensidad } from "@/features/campo/mapa-densidad";
 import { NIVEL_COLORES, rangosDe, type Plaga } from "@/lib/geo/densidad";
+import type { Lote } from "@/types/domain";
+import { colors } from "@/theme/colors";
+import { useDatosCampo } from "./usar-datos-campo";
+import { MapaDensidad, type PuntoDensidad } from "./mapa-densidad";
 
 const ALTO_MAPA = 420;
 
-/** Mapa de densidad poblacional — portado de la pestaña "Resultados" /
- * `DensidadView` del prototipo. Sin imagen satelital (ver nota en
- * `lib/geo/densidad.ts`); el fondo es el mismo estilo claro del resto de la
- * app. Igual que en el prototipo, el Monitoreador no tiene acceso — ahí era
- * la pestaña "Resultados", oculta para ese rol (ver prototipo, comentario
- * "el monitoreador no ve Resultados/Salidas"). */
-export default function DensidadScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { usuario } = useAuth();
-  const { cargando, lote, puntos, cargas } = useDatosCampo(id);
+/** Pestaña "Resultados" — portada de `DensidadView` del prototipo: el mapa
+ * de densidad poblacional (Voronoi recortado al perímetro real) tanto de
+ * Bichos bolita como de Babosas. Sin imagen satelital todavía (ver nota en
+ * lib/geo/densidad.ts). Quién puede ver esta pestaña lo decide LoteTabs, no
+ * este componente. */
+export function ResultadosView({ lote }: { lote: Lote }) {
+  const { cargando, puntos, cargas } = useDatosCampo(lote.id);
   const { width } = useWindowDimensions();
   const [plaga, setPlaga] = useState<Plaga>("bicho");
 
@@ -41,18 +36,10 @@ export default function DensidadScreen() {
 
   const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
 
-  if (cargando || !lote) {
+  if (cargando) {
     return (
       <View style={styles.centrado}>
         <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
-  }
-
-  if (!usuario || !puedeAdministrarLotes(usuario.rol)) {
-    return (
-      <View style={styles.centrado}>
-        <Text style={styles.aviso}>Esta vista no está disponible para tu rol.</Text>
       </View>
     );
   }
@@ -106,9 +93,8 @@ export default function DensidadScreen() {
 }
 
 const styles = StyleSheet.create({
-  centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
-  aviso: { color: colors.textMuted, fontSize: 13, textAlign: "center", paddingHorizontal: 24 },
-  container: { padding: 16, gap: 12, alignItems: "center", backgroundColor: colors.background },
+  centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
+  container: { padding: 16, gap: 12, alignItems: "center" },
   plagaToggle: { flexDirection: "row", gap: 8 },
   plagaBoton: {
     borderWidth: 1,
