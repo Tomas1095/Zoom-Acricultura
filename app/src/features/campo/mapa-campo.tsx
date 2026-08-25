@@ -160,7 +160,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     .onEnd(() => {
       "worklet";
       savedScale.value = scale.value;
-      runOnJS(avisarInteraccion)();
+      // El zoom solo no cuenta como "interacción" en modo trabajo — acercar
+      // o alejar no debería pausar el seguimiento de rumbo ni mostrar
+      // "Volver a mi marcha" (eso sí pasa con arrastrar o girar). En vista
+      // general el zoom sigue contando para "Restablecer", como se pidió.
+      if (!seguirRumbo) {
+        runOnJS(avisarInteraccion)();
+      }
     });
 
   const pan = Gesture.Pan()
@@ -197,6 +203,22 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
       { scale: scale.value },
       { rotateZ: `${rotacion.value}rad` },
     ],
+  }));
+
+  // Contra-rotación para que la numeración de cada punto se lea siempre en
+  // horizontal, gire lo que gire el mapa — un solo estilo animado
+  // reutilizado en todas las etiquetas (no se puede llamar useAnimatedStyle
+  // adentro del .map() de abajo, así que va una vez acá arriba).
+  const estiloContraRotacionEtiqueta = useAnimatedStyle(() => ({
+    transform: [{ rotateZ: `${-rotacion.value}rad` }],
+  }));
+
+  // Solo modo trabajo: el marcador "Yo" queda fijo en el ancla (ver JSX,
+  // está fuera del grupo que gira/escala/arrastra), así que su flecha
+  // necesita sumar a mano la rotación que tendría el grupo — heading más
+  // la rotación actual del mapa en grados — para seguir apuntando bien.
+  const estiloFlechaYoFija = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${heading + (rotacion.value * 180) / Math.PI}deg` }],
   }));
 
   const puntosPerimetro = perimetro.map((p) => {
@@ -260,20 +282,24 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                   },
                 ]}
               >
-                <Text
+                <Animated.Text
                   numberOfLines={1}
                   style={[
                     styles.puntoLabel,
                     { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
+                    estiloContraRotacionEtiqueta,
                   ]}
                 >
                   {p.id}
-                </Text>
+                </Animated.Text>
               </Pressable>
             );
           })}
 
-          {posMi && (
+          {/* Vista general: "Yo" es un punto más del mapa, gira y se mueve
+              con el resto (no hay "ancla" en esta vista). En modo trabajo
+              va afuera, fijo — ver más abajo. */}
+          {!pantallaCompleta && posMi && (
             <View style={[styles.yoMarker, { left: posMi.left - 12, top: posMi.top - 12 }]}>
               <View style={styles.yoMarkerPulso} />
               <Navigation size={13} color="#FFFFFF" style={{ transform: [{ rotate: `${heading}deg` }] }} />
@@ -281,6 +307,19 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           )}
         </Animated.View>
       </GestureDetector>
+
+      {/* Modo trabajo: "Yo" queda clavado en el ancla (centro, un poco hacia
+          abajo) pase lo que pase con el gesto — solo el lote y los puntos
+          se mueven/giran/escalan debajo. Por eso está fuera del grupo con
+          el transform animado, no adentro. */}
+      {pantallaCompleta && miPos && (
+        <View style={[styles.yoMarker, { left: anclaX - 12, top: anclaY - 12 }]}>
+          <View style={styles.yoMarkerPulso} />
+          <Animated.View style={estiloFlechaYoFija}>
+            <Navigation size={13} color="#FFFFFF" />
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 });
