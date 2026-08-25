@@ -27,9 +27,11 @@ const ZOOM_MAX = 2.5;
 // lote grande (probado con uno real de ~117ha) ni el mínimo de antes
 // alcanzaba para que el límite completo entrara en pantalla — se veía
 // "cortado" no por un error de dibujo sino porque esas esquinas quedaban
-// directamente afuera de la pantalla. Con este piso más bajo, alejando del
-// todo se puede ver el lote completo sea cual sea su tamaño real.
-const NIVELES_ZOOM = [0.15, 0.25, 0.4, 0.6, 0.8, 1, 1.3, 1.6, 2, ZOOM_MAX];
+// directamente afuera de la pantalla. El productor puede tener lotes de
+// 500ha o más, así que el piso baja bastante (500ha son ~2x más grandes
+// en cada dimensión que el lote de 117ha con el que se probó, y esto deja
+// margen de sobra incluso para algo más grande todavía).
+const NIVELES_ZOOM = [0.04, 0.07, 0.15, 0.25, 0.4, 0.6, 0.8, 1, 1.3, 1.6, 2, ZOOM_MAX];
 const NIVEL_ZOOM_INICIAL = NIVELES_ZOOM.indexOf(1);
 
 export interface PuntoMapa {
