@@ -46,7 +46,7 @@ const MARGEN = 12;
 // de teclado en iOS a veces no incluye del todo la barra de sugerencias de
 // texto, así que sin este margen la barra quedaba parcialmente tapada por
 // el borde del teclado.
-const MARGEN_TECLADO = 8;
+const MARGEN_TECLADO = 20;
 
 const FORM_VACIO: FormCarga = {
   bicho: 0,
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   botonListoFlotante: { paddingHorizontal: 14, paddingVertical: 10 },
-  botonListoFlotanteTexto: { color: colors.primary, fontWeight: "700", fontSize: 15 },
+  botonListoFlotanteTexto: { color: colors.primary, fontWeight: "700", fontSize: 18 },
   fotosFila: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   fotoItem: { width: 64, height: 64 },
   fotoImg: { width: 64, height: 64, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
