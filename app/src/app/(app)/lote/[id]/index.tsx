@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { ChevronLeft } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import * as db from "@/lib/db/lotes";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
+import { AppHeader } from "@/components/app-header";
 import { SubirKmz } from "@/features/lotes/subir-kmz";
 import { VistaGeneral } from "@/features/campo/vista-general";
 import { LoteTabs } from "@/features/campo/lote-tabs";
 
+/** Pantalla del lote — mantiene el mismo header de marca que "Mis lotes"
+ * (ver AppHeader), con el nombre del lote agregado debajo de la línea
+ * naranja, tal como en el prototipo (`{lote && <div style={loteName}>}`,
+ * ver reference/prototipo-app.jsx). Por eso el Stack la lleva con
+ * `headerShown: false` — este header reemplaza al nativo. */
 export default function LoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { usuario } = useAuth();
@@ -27,51 +35,59 @@ export default function LoteScreen() {
     refrescar();
   }, [refrescar]);
 
-  if (cargando) {
-    return (
-      <View style={styles.centrado}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
-  }
-
-  if (!lote) {
-    return (
-      <View style={styles.centrado}>
-        <Text style={styles.aviso}>No se encontró el lote.</Text>
-      </View>
-    );
-  }
-
-  if (lote.tieneGrilla) {
-    // El Monitoreador solo ve la grilla (vista general), sin pestañas —
-    // mismo criterio que el prototipo: "Resultados"/"Salidas" no son para
-    // ese rol (ver CONTEXTO.md).
-    const puedeVerPestanas = !!usuario && puedeAdministrarLotes(usuario.rol);
-    return puedeVerPestanas ? <LoteTabs lote={lote} /> : <VistaGeneral lote={lote} />;
-  }
-
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.nombre}>{lote.nombre}</Text>
-      <Text style={styles.cultivo}>{lote.cultivo}</Text>
+    <View style={styles.pantalla}>
+      <StatusBar style="light" />
+      <AppHeader loteNombre={lote?.nombre} />
+      <Pressable style={styles.backRow} onPress={() => router.back()}>
+        <ChevronLeft size={15} color={colors.textMuted} />
+        <Text style={styles.backTexto}>Mis lotes</Text>
+      </Pressable>
 
-      {usuario && puedeAdministrarLotes(usuario.rol) ? (
-        <SubirKmz loteId={lote.id} onListo={refrescar} />
-      ) : (
-        <Text style={styles.aviso}>
-          Este lote todavía no tiene grilla generada. Avisale a tu Encargado o Socio Gerente para que
-          suba el KMZ.
-        </Text>
-      )}
-    </ScrollView>
+      <View style={styles.contenido}>
+        {cargando ? (
+          <View style={styles.centrado}>
+            <ActivityIndicator color={colors.primary} size="large" />
+          </View>
+        ) : !lote ? (
+          <View style={styles.centrado}>
+            <Text style={styles.aviso}>No se encontró el lote.</Text>
+          </View>
+        ) : lote.tieneGrilla ? (
+          // El Monitoreador solo ve la grilla (vista general), sin
+          // pestañas — mismo criterio que el prototipo: "Resultados"/
+          // "Salidas" no son para ese rol (ver CONTEXTO.md).
+          usuario && puedeAdministrarLotes(usuario.rol) ? (
+            <LoteTabs lote={lote} />
+          ) : (
+            <VistaGeneral lote={lote} />
+          )
+        ) : (
+          <ScrollView contentContainerStyle={styles.sinGrilla}>
+            <Text style={styles.cultivo}>{lote.cultivo}</Text>
+
+            {usuario && puedeAdministrarLotes(usuario.rol) ? (
+              <SubirKmz loteId={lote.id} onListo={refrescar} />
+            ) : (
+              <Text style={styles.aviso}>
+                Este lote todavía no tiene grilla generada. Avisale a tu Encargado o Socio Gerente para que
+                suba el KMZ.
+              </Text>
+            )}
+          </ScrollView>
+        )}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
-  container: { flexGrow: 1, backgroundColor: colors.background, padding: 20, gap: 4 },
-  nombre: { fontSize: 22, fontWeight: "800", color: colors.text },
+  pantalla: { flex: 1, backgroundColor: colors.background },
+  backRow: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 16, paddingVertical: 10 },
+  backTexto: { color: colors.textMuted, fontSize: 13, fontWeight: "600" },
+  contenido: { flex: 1 },
+  centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
+  sinGrilla: { flexGrow: 1, padding: 20, gap: 4 },
   cultivo: { fontSize: 14, color: colors.textMuted },
   aviso: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 12 },
 });

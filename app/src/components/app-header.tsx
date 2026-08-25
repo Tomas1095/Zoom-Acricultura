@@ -3,6 +3,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ZoomLogo } from "./zoom-logo";
 
+interface AppHeaderProps {
+  /** Nombre del lote — portado de `{lote && <div style={loteName}>}` del
+   * prototipo: cuando se pasa, aparece debajo de la línea naranja para
+   * saber en qué lote estás parado (ver lote/[id]/index.tsx). */
+  loteNombre?: string;
+}
+
 /** Header de la app — portado de `styles.header` del prototipo (fondo
  * verde oscuro, "MONITOREO DE PLAGAS" arriba, nombre de la comunidad, y el
  * logo a la derecha). Debajo de esto sigue el mismo layout que ya
@@ -12,7 +19,7 @@ import { ZoomLogo } from "./zoom-logo";
  * Stack — este componente reemplaza al header nativo, y por eso maneja el
  * margen del notch/status bar él mismo (con `useSafeAreaInsets`, no un
  * número fijo que se rompería en otro celular). */
-export function AppHeader() {
+export function AppHeader({ loteNombre }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
@@ -20,6 +27,7 @@ export function AppHeader() {
         <Text style={styles.eyebrow}>MONITOREO DE PLAGAS</Text>
         <Text style={styles.titulo}>Zoom Agricultura</Text>
         <View style={styles.rule} />
+        {loteNombre && <Text style={styles.loteNombre}>{loteNombre}</Text>}
       </View>
       <ZoomLogo variant="light" iconSize={32} wordSize={21} />
     </View>
@@ -54,6 +62,12 @@ const styles = StyleSheet.create({
     height: 3,
     backgroundColor: "#DB945D",
     borderRadius: 2,
+    marginTop: 8,
+  },
+  loteNombre: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#FFFFFF",
     marginTop: 8,
   },
 });

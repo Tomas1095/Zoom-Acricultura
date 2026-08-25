@@ -4,11 +4,12 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDi
 import { Maximize2, RotateCcw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
+import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "./mapa-campo";
-import { GpsEstadoPill } from "./gps-estado-pill";
+import { ObservacionesPanel } from "./observaciones-panel";
 
 const FIT_ALTO = 460;
 
@@ -37,6 +38,7 @@ export function VistaGeneral({ lote }: { lote: Lote }) {
   );
 
   const puedeTocarPuntos = usuario?.rol !== "monitoreador";
+  const puedeVerObservaciones = !!usuario && puedeAdministrarLotes(usuario.rol);
   const anchoMapa = Math.min(width - 32, 400);
 
   if (cargando) {
@@ -49,26 +51,23 @@ export function VistaGeneral({ lote }: { lote: Lote }) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.filaEstado}>
-        <GpsEstadoPill estado={gps.estado} />
-        <View style={styles.accionesFila}>
-          {vistaModificada && (
-            <Pressable
-              style={styles.botonRestablecer}
-              onPress={() => {
-                mapaRef.current?.restablecer();
-                setVistaModificada(false);
-              }}
-            >
-              <RotateCcw size={13} color={colors.primaryDark} />
-              <Text style={styles.botonRestablecerTexto}>Restablecer</Text>
-            </Pressable>
-          )}
-          <Pressable style={styles.botonModoTrabajo} onPress={() => router.push(`/(app)/lote/${lote.id}/modo-trabajo`)}>
-            <Maximize2 size={14} color={colors.surface} />
-            <Text style={styles.botonModoTrabajoTexto}>Modo trabajo</Text>
+      <View style={styles.accionesFila}>
+        {vistaModificada && (
+          <Pressable
+            style={styles.botonRestablecer}
+            onPress={() => {
+              mapaRef.current?.restablecer();
+              setVistaModificada(false);
+            }}
+          >
+            <RotateCcw size={13} color={colors.primaryDark} />
+            <Text style={styles.botonRestablecerTexto}>Restablecer</Text>
           </Pressable>
-        </View>
+        )}
+        <Pressable style={styles.botonModoTrabajo} onPress={() => router.push(`/(app)/lote/${lote.id}/modo-trabajo`)}>
+          <Maximize2 size={14} color={colors.surface} />
+          <Text style={styles.botonModoTrabajoTexto}>Modo trabajo</Text>
+        </Pressable>
       </View>
 
       <MapaCampo
@@ -92,6 +91,8 @@ export function VistaGeneral({ lote }: { lote: Lote }) {
           Esta vista es solo para ubicarte. Para cargar datos, entrá a "Modo trabajo".
         </Text>
       )}
+
+      {puedeVerObservaciones && <ObservacionesPanel puntos={puntos} cargas={cargas} />}
     </ScrollView>
   );
 }
@@ -99,8 +100,7 @@ export function VistaGeneral({ lote }: { lote: Lote }) {
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
   container: { padding: 16, gap: 12, alignItems: "center" },
-  filaEstado: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" },
-  accionesFila: { flexDirection: "row", alignItems: "center", gap: 8 },
+  accionesFila: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, width: "100%" },
   botonRestablecer: {
     flexDirection: "row",
     alignItems: "center",

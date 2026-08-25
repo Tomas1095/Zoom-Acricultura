@@ -63,17 +63,7 @@ export function ResultadosView({ lote }: { lote: Lote }) {
 
       <Text style={styles.titulo}>Mapa de densidad poblacional</Text>
 
-      <View style={styles.filaMapa}>
-        <View style={styles.leyenda}>
-          <Text style={styles.leyendaTitulo}>{etiqueta}</Text>
-          {rangos.map((r, i) => (
-            <View key={i} style={styles.leyendaFila}>
-              <View style={[styles.leyendaMuestra, { backgroundColor: NIVEL_COLORES[i] }]} />
-              <Text style={styles.leyendaTexto}>{r.label}</Text>
-            </View>
-          ))}
-        </View>
-
+      <View style={styles.recuadroDorado}>
         <MapaDensidad
           puntos={puntosDensidad}
           perimetro={lote.perimetro}
@@ -82,6 +72,18 @@ export function ResultadosView({ lote }: { lote: Lote }) {
           ancho={anchoMapa}
           alto={ALTO_MAPA}
         />
+
+        <View style={styles.leyenda}>
+          <Text style={styles.leyendaTitulo}>{etiqueta}</Text>
+          <View style={styles.leyendaFilas}>
+            {rangos.map((r, i) => (
+              <View key={i} style={styles.leyendaItem}>
+                <View style={[styles.leyendaMuestra, { backgroundColor: NIVEL_COLORES[i] }]} />
+                <Text style={styles.leyendaTexto}>{r.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
       </View>
 
       <Text style={styles.pie}>
@@ -113,11 +115,30 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   titulo: { fontSize: 16, fontWeight: "800", color: colors.text, textAlign: "center" },
-  filaMapa: { width: "100%", alignItems: "center", gap: 10 },
-  leyenda: { width: "100%", maxWidth: 400, gap: 3 },
-  leyendaTitulo: { fontSize: 11, fontWeight: "700", color: colors.textMuted, marginBottom: 2 },
-  leyendaFila: { flexDirection: "row", alignItems: "center", gap: 6 },
-  leyendaMuestra: { width: 12, height: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
-  leyendaTexto: { fontSize: 12, color: colors.text },
+  recuadroDorado: {
+    width: "100%",
+    maxWidth: 400,
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.border,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 16,
+    padding: 14,
+  },
+  leyenda: { width: "100%", gap: 6 },
+  leyendaTitulo: { fontSize: 11, fontWeight: "700", color: colors.accentGold },
+  leyendaFilas: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  leyendaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  leyendaMuestra: { width: 11, height: 11, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
+  leyendaTexto: { fontSize: 11.5, color: colors.text, fontWeight: "600" },
   pie: { fontSize: 11, color: colors.textMuted, textAlign: "center" },
 });
