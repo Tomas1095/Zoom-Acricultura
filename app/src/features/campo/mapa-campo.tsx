@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { forwardRef, useImperativeHandle, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Polygon } from "react-native-svg";
 import { Navigation } from "lucide-react-native";
 
@@ -34,6 +34,15 @@ interface MapaCampoProps {
   onTapPunto: (id: string) => void;
   ancho: number;
   alto: number;
+  /** Avisa cuando el mapa deja de estar en su posición original (zoom 1x,
+   * sin arrastrar, sin girar) — para que la pantalla que lo contiene pueda
+   * mostrar un botón "Restablecer". */
+  onInteraccion?: (interactuado: boolean) => void;
+}
+
+export interface MapaCampoHandle {
+  /** Vuelve a zoom 1x, sin arrastre ni giro — animado. */
+  restablecer: () => void;
 }
 
 /** El mapa de campo — portado de `contenidoMapa` del prototipo. En vez de
@@ -41,19 +50,23 @@ interface MapaCampoProps {
  * CSS), acá el layout base se calcula una sola vez con `toPx` y el
  * pinch/pan/rotate interactivo se aplica como una transformada GPU sobre
  * todo el grupo — más fluido en un dispositivo real. */
-export function MapaCampo({
-  puntos,
-  perimetro,
-  miPos,
-  puntoCercanoId,
-  enRango,
-  heading,
-  pantallaCompleta,
-  puedeTocarPuntos,
-  onTapPunto,
-  ancho,
-  alto,
-}: MapaCampoProps) {
+export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function MapaCampo(
+  {
+    puntos,
+    perimetro,
+    miPos,
+    puntoCercanoId,
+    enRango,
+    heading,
+    pantallaCompleta,
+    puedeTocarPuntos,
+    onTapPunto,
+    ancho,
+    alto,
+    onInteraccion,
+  },
+  ref
+) {
   const bounds = useMemo(() => {
     const xs = perimetro.map((p) => p.x);
     const ys = perimetro.map((p) => p.y);
@@ -92,6 +105,24 @@ export function MapaCampo({
   const rotacion = useSharedValue(0);
   const savedRotacion = useSharedValue(0);
 
+  function avisarInteraccion() {
+    onInteraccion?.(true);
+  }
+
+  function restablecer() {
+    scale.value = withTiming(1);
+    savedScale.value = 1;
+    translateX.value = withTiming(0);
+    savedTranslateX.value = 0;
+    translateY.value = withTiming(0);
+    savedTranslateY.value = 0;
+    rotacion.value = withTiming(0);
+    savedRotacion.value = 0;
+    onInteraccion?.(false);
+  }
+
+  useImperativeHandle(ref, () => ({ restablecer }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const pinch = Gesture.Pinch()
     .onUpdate((e) => {
       "worklet";
@@ -101,6 +132,7 @@ export function MapaCampo({
     .onEnd(() => {
       "worklet";
       savedScale.value = scale.value;
+      runOnJS(avisarInteraccion)();
     });
 
   const pan = Gesture.Pan()
@@ -114,6 +146,7 @@ export function MapaCampo({
       "worklet";
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
+      runOnJS(avisarInteraccion)();
     });
 
   const rotar = Gesture.Rotation()
@@ -124,6 +157,7 @@ export function MapaCampo({
     .onEnd(() => {
       "worklet";
       savedRotacion.value = rotacion.value;
+      runOnJS(avisarInteraccion)();
     });
 
   const gestoCompuesto = Gesture.Simultaneous(pinch, pan, rotar);
@@ -187,7 +221,13 @@ export function MapaCampo({
                   },
                 ]}
               >
-                <Text style={[styles.puntoLabel, { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1 }]}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.puntoLabel,
+                    { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
+                  ]}
+                >
                   {p.id}
                 </Text>
               </Pressable>
@@ -204,7 +244,7 @@ export function MapaCampo({
       </GestureDetector>
     </View>
   );
-}
+});
 
 export { ZOOM_MIN, ZOOM_MAX };
 
@@ -227,6 +267,7 @@ const styles = StyleSheet.create({
   },
   puntoLabel: {
     position: "absolute",
+    width: 40,
     fontWeight: "700",
     textAlign: "center",
   },
