@@ -342,22 +342,59 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                 llega hasta un punto, ese punto está realmente afuera del
                 límite cargado (no es un problema de dibujo). */}
             <Path d={perimetroPath} fill={pantallaCompleta ? "rgba(59,143,92,0.22)" : "rgba(59,143,92,0.08)"} stroke="none" />
-            {perimetroPx.map((a, i) => {
+            {/* Vista general: el contorno con <Line> anda bien acá (lote
+                chico, sin la rotación grande de seguir rumbo) — se deja
+                como estaba. */}
+            {!pantallaCompleta &&
+              perimetroPx.map((a, i) => {
+                const b = perimetroPx[(i + 1) % perimetroPx.length];
+                return (
+                  <Line
+                    key={`lado-${i}`}
+                    x1={a.left}
+                    y1={a.top}
+                    x2={b.left}
+                    y2={b.top}
+                    stroke={colors.primary}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                  />
+                );
+              })}
+          </Svg>
+
+          {/* Modo trabajo: el contorno se dibuja con vistas comunes (un
+              rectángulo finito por lado, rotado para calzar con el ángulo
+              de cada arista), no con SVG — ni <Polygon>, ni <Path>, ni
+              <Line> sueltas dibujaban bien las dos aristas que tocan un
+              vértice en particular, con datos reales de un lote real y la
+              rotación grande que aplica seguir el rumbo. Las vistas
+              comunes sí vienen andando perfecto en todo este mapa (los
+              puntos, "Yo", los marcadores de prueba), así que el contorno
+              pasa a usar el mismo mecanismo. */}
+          {pantallaCompleta &&
+            perimetroPx.map((a, i) => {
               const b = perimetroPx[(i + 1) % perimetroPx.length];
+              const dx = b.left - a.left;
+              const dy = b.top - a.top;
+              const longitud = Math.hypot(dx, dy);
+              const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
+              const grosor = 2.5;
               return (
-                <Line
+                <View
                   key={`lado-${i}`}
-                  x1={a.left}
-                  y1={a.top}
-                  x2={b.left}
-                  y2={b.top}
-                  stroke={colors.primary}
-                  strokeWidth={pantallaCompleta ? 2.5 : 1.5}
-                  strokeDasharray={pantallaCompleta ? undefined : "4 3"}
+                  style={{
+                    position: "absolute",
+                    left: (a.left + b.left) / 2 - longitud / 2,
+                    top: (a.top + b.top) / 2 - grosor / 2,
+                    width: longitud,
+                    height: grosor,
+                    backgroundColor: colors.primary,
+                    transform: [{ rotate: `${angulo}deg` }],
+                  }}
                 />
               );
             })}
-          </Svg>
 
           {/* DEBUG TEMPORAL — marcadores rojos en cada vértice del
               perímetro, con View normal (no SVG), adentro del mismo grupo
