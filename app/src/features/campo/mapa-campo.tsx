@@ -336,6 +336,33 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             />
           </Svg>
 
+          {/* DEBUG TEMPORAL — marcadores rojos en cada vértice del
+              perímetro, con View normal (no SVG), adentro del mismo grupo
+              que gira/escala. Si quedan en un lugar distinto de por dónde
+              pasa la línea verde, el problema es del SVG específicamente,
+              no de los datos ni del cálculo de posición. Sacar apenas se
+              resuelva. */}
+          {pantallaCompleta &&
+            perimetro.map((p, i) => {
+              const pos = toPx(p.x, p.y);
+              return (
+                <View
+                  key={`debug-v${i}`}
+                  style={{
+                    position: "absolute",
+                    left: pos.left - 6,
+                    top: pos.top - 6,
+                    width: 12,
+                    height: 12,
+                    borderRadius: 6,
+                    backgroundColor: "red",
+                    borderWidth: 1,
+                    borderColor: "white",
+                  }}
+                />
+              );
+            })}
+
           {puntos.map((p) => {
             const pos = toPx(p.x, p.y);
             const cercano = puntoCercanoId === p.id;
