@@ -334,14 +334,15 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               tamaño real, desalineando el perímetro de los puntos (que se
               posicionan aparte, con estilos normales, sin ese reescalado). */}
           <Svg width={ancho} height={altoGrupo} style={{ position: "absolute", top: 0, left: 0 }}>
-            {/* En pantalla completa el relleno va bastante más marcado que
-                en vista general (8% → 22%) — con puntos más grandes (24px)
-                y trazo sólido, un relleno casi imperceptible dejaba dudar
-                si el límite real llegaba hasta la última fila de puntos o
-                no. Con más contraste no hay ambigüedad: si el relleno no
-                llega hasta un punto, ese punto está realmente afuera del
-                límite cargado (no es un problema de dibujo). */}
-            <Path d={perimetroPath} fill={pantallaCompleta ? "rgba(59,143,92,0.22)" : "rgba(59,143,92,0.08)"} stroke="none" />
+            {/* El relleno sombreado (Path con fill) tenía el mismo problema
+                que el contorno — se veía "cortado" en franjas, con datos
+                reales de un lote real. El contorno con vistas comunes (ver
+                más abajo) ya se ve perfecto y es lo que de verdad importa
+                para saber si estás adentro o afuera, así que en modo
+                trabajo se saca el relleno en vez de seguir peleando con la
+                misma librería. Vista general sí lo mantiene — ahí nunca
+                dio problema. */}
+            {!pantallaCompleta && <Path d={perimetroPath} fill="rgba(59,143,92,0.08)" stroke="none" />}
             {/* Vista general: el contorno con <Line> anda bien acá (lote
                 chico, sin la rotación grande de seguir rumbo) — se deja
                 como estaba. */}
@@ -391,33 +392,6 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     height: grosor,
                     backgroundColor: colors.primary,
                     transform: [{ rotate: `${angulo}deg` }],
-                  }}
-                />
-              );
-            })}
-
-          {/* DEBUG TEMPORAL — marcadores rojos en cada vértice del
-              perímetro, con View normal (no SVG), adentro del mismo grupo
-              que gira/escala. Si quedan en un lugar distinto de por dónde
-              pasa la línea verde, el problema es del SVG específicamente,
-              no de los datos ni del cálculo de posición. Sacar apenas se
-              resuelva. */}
-          {pantallaCompleta &&
-            perimetro.map((p, i) => {
-              const pos = toPx(p.x, p.y);
-              return (
-                <View
-                  key={`debug-v${i}`}
-                  style={{
-                    position: "absolute",
-                    left: pos.left - 6,
-                    top: pos.top - 6,
-                    width: 12,
-                    height: 12,
-                    borderRadius: 6,
-                    backgroundColor: "red",
-                    borderWidth: 1,
-                    borderColor: "white",
                   }}
                 />
               );

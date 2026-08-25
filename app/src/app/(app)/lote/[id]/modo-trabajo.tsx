@@ -110,18 +110,6 @@ export default function ModoTrabajoScreen() {
         </View>
       )}
 
-      {/* DEBUG TEMPORAL — para diagnosticar lo del perímetro cortado, sacar
-          apenas se resuelva. Muestra los datos reales que está usando este
-          celular en este momento, en vez de seguir simulando a ciegas. */}
-      <View style={styles.debugBox} pointerEvents="none">
-        <Text style={styles.debugTexto}>
-          perimetro: {lote.perimetro.length} vértices{"\n"}
-          {lote.perimetro.map((p, i) => `  v${i}: (${p.x.toFixed(1)}, ${p.y.toFixed(1)})`).join("\n")}
-          {"\n"}miPos: {gps.posicion ? `(${gps.posicion.x.toFixed(1)}, ${gps.posicion.y.toFixed(1)})` : "null"}
-          {"\n"}ancho×alto: {width.toFixed(0)}×{height.toFixed(0)}
-          {"\n"}heading: {gps.heading.toFixed(1)}° disponible={String(gps.headingDisponible)}
-        </Text>
-      </View>
     </View>
   );
 }
@@ -181,14 +169,4 @@ const styles = StyleSheet.create({
   tarjetaPunto: { fontSize: 15, fontWeight: "800", color: colors.text },
   tarjetaEstado: { fontSize: 12, fontWeight: "700", marginTop: 1 },
   tarjetaDistanciaValor: { fontSize: 20, fontWeight: "800", color: colors.text },
-  debugBox: {
-    position: "absolute",
-    top: 150,
-    left: 12,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    borderRadius: 8,
-    padding: 8,
-  },
-  debugTexto: { color: "#FFFFFF", fontSize: 10, fontFamily: "monospace" },
 });
