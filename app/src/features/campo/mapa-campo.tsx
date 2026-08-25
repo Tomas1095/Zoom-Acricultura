@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -36,8 +36,13 @@ interface MapaCampoProps {
   alto: number;
   /** Avisa cuando el mapa deja de estar en su posición original (zoom 1x,
    * sin arrastrar, sin girar) — para que la pantalla que lo contiene pueda
-   * mostrar un botón "Restablecer". */
+   * mostrar un botón "Restablecer"/"Volver a mi marcha". */
   onInteraccion?: (interactuado: boolean) => void;
+  /** Solo modo trabajo: el mapa entero rota para que "arriba" sea siempre
+   * hacia donde estás caminando (heading-up), portado de `contenidoMapa`
+   * del prototipo (rotate(-heading) sobre todo el mapa). Se pausa apenas el
+   * usuario toca el mapa con los dedos — cualquier gesto manual gana. */
+  seguirRumbo?: boolean;
 }
 
 export interface MapaCampoHandle {
@@ -64,6 +69,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     ancho,
     alto,
     onInteraccion,
+    seguirRumbo,
   },
   ref
 ) {
@@ -104,8 +110,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   const savedTranslateY = useSharedValue(0);
   const rotacion = useSharedValue(0);
   const savedRotacion = useSharedValue(0);
+  // Espejo en React state de "hay un gesto manual pisando la vista" — lo
+  // necesitamos acá adentro (no solo afuera, vía onInteraccion) para poder
+  // pausar el useEffect de seguirRumbo de abajo.
+  const [interactuado, setInteractuado] = useState(false);
 
   function avisarInteraccion() {
+    setInteractuado(true);
     onInteraccion?.(true);
   }
 
@@ -118,10 +129,23 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     savedTranslateY.value = 0;
     rotacion.value = withTiming(0);
     savedRotacion.value = 0;
+    setInteractuado(false);
     onInteraccion?.(false);
   }
 
   useImperativeHandle(ref, () => ({ restablecer }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Portado de `rotate(-headingUsado)` sobre todo `mapWorld` en el
+  // prototipo: mientras nadie tocó el mapa a mano, rota el grupo entero
+  // para que arriba sea tu rumbo real — el marcador "Yo" ya rota al revés
+  // (`heading` sobre sí mismo, ver más abajo) así que dentro de este grupo
+  // queda siempre apuntando derecho para arriba.
+  useEffect(() => {
+    if (!seguirRumbo || interactuado) return;
+    const rad = (-heading * Math.PI) / 180;
+    rotacion.value = withTiming(rad, { duration: 350 });
+    savedRotacion.value = rad;
+  }, [heading, seguirRumbo, interactuado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pinch = Gesture.Pinch()
     .onUpdate((e) => {
@@ -179,7 +203,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
 
   return (
-    <View style={[styles.contenedor, { width: ancho, height: alto }]}>
+    <View
+      style={[
+        styles.contenedor,
+        pantallaCompleta ? styles.contenedorPantallaCompleta : styles.contenedorEncuadrado,
+        { width: ancho, height: alto },
+      ]}
+    >
       <GestureDetector gesture={gestoCompuesto}>
         <Animated.View style={[StyleSheet.absoluteFill, estiloAnimado]}>
           <Svg width={ancho} height={alto} style={StyleSheet.absoluteFill}>
@@ -195,11 +225,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           {puntos.map((p) => {
             const pos = toPx(p.x, p.y);
             const cercano = puntoCercanoId === p.id;
-            // En modo trabajo solo se puede cargar el punto más cercano y en
-            // rango (te tenés que acercar de verdad); en vista general lo
-            // único que restringe es el rol (ver `puedeTocarPuntos`, que ya
-            // viene calculado según si sos Monitoreador).
-            const tocable = puedeTocarPuntos && (!pantallaCompleta || (cercano && enRango));
+            // Portado del prototipo: la distancia al punto (enRango) es
+            // solo informativa (ver tarjeta de distancia en modo trabajo,
+            // que muestra "Acercate al punto" / "En rango"), no bloquea el
+            // toque — cualquier punto se puede cargar desde cualquier
+            // distancia. Lo único que sí restringe es el rol (Monitoreador
+            // solo desde Modo trabajo, ver `puedeTocarPuntos`).
+            const tocable = puedeTocarPuntos;
             return (
               <Pressable
                 key={p.id}
@@ -249,13 +281,18 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 export { ZOOM_MIN, ZOOM_MAX };
 
 const styles = StyleSheet.create({
-  contenedor: {
+  contenedor: { overflow: "hidden" },
+  // Vista general: recuadro clarito con borde, como una tarjeta más.
+  contenedorEncuadrado: {
     backgroundColor: colors.background,
     borderRadius: 14,
-    overflow: "hidden",
     borderWidth: 1,
     borderColor: colors.border,
   },
+  // Modo trabajo: fondo oscuro de borde a borde, sin recuadro — los colores
+  // pensados para pantalla completa (etiquetas color hueso, perímetro
+  // claro) están pensados para verse sobre este fondo, no sobre el claro.
+  contenedorPantallaCompleta: { backgroundColor: colors.mapaOscuro },
   punto: {
     position: "absolute",
     alignItems: "center",

@@ -1,22 +1,25 @@
-import { useEffect, useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { ChevronLeft } from "lucide-react-native";
+import { ChevronLeft, Compass } from "lucide-react-native";
 import { useKeepAwake } from "expo-keep-awake";
 
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "@/features/campo/usar-datos-campo";
-import { MapaCampo, type PuntoMapa } from "@/features/campo/mapa-campo";
+import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "@/features/campo/mapa-campo";
 import { GpsEstadoPill } from "@/features/campo/gps-estado-pill";
 
 /** Modo trabajo — portado de UbicacionView del prototipo en su modo
  * pantalla completa: la cámara te sigue caminando, letras y puntos más
- * grandes (pensado para leerse al sol), y acá sí se puede cargar
- * cualquier rol, siempre que el punto sea el más cercano y estés en rango. */
+ * grandes (pensado para leerse al sol), y acá se puede cargar cualquier
+ * punto sin importar la distancia (esa restricción no existía en el
+ * prototipo — la distancia es solo informativa, ver tarjetaDistancia). */
 export default function ModoTrabajoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width, height } = useWindowDimensions();
   const { cargando, lote, puntos, cargas, gps, puntoCercano, enRango } = useDatosCampo(id);
+  const mapaRef = useRef<MapaCampoHandle>(null);
+  const [vistaModificada, setVistaModificada] = useState(false);
 
   useKeepAwake(); // la pantalla no se apaga mientras estás caminando el lote
 
@@ -44,6 +47,7 @@ export default function ModoTrabajoScreen() {
   return (
     <View style={styles.container}>
       <MapaCampo
+        ref={mapaRef}
         puntos={puntosMapa}
         perimetro={lote.perimetro}
         miPos={gps.posicion}
@@ -55,6 +59,8 @@ export default function ModoTrabajoScreen() {
         onTapPunto={(pid) => router.push(`/(app)/lote/${lote.id}/punto/${pid}`)}
         ancho={width}
         alto={height}
+        seguirRumbo
+        onInteraccion={setVistaModificada}
       />
 
       <Pressable style={styles.volver} onPress={() => router.back()}>
@@ -64,6 +70,21 @@ export default function ModoTrabajoScreen() {
       <View style={styles.pillTop}>
         <GpsEstadoPill estado={gps.estado} />
       </View>
+
+      {vistaModificada && (
+        <Pressable
+          style={styles.botonVolverMarcha}
+          onPress={() => {
+            mapaRef.current?.restablecer();
+            setVistaModificada(false);
+          }}
+        >
+          <Compass size={13} color={colors.surface} />
+          <Text style={styles.botonVolverMarchaTexto}>
+            {gps.headingDisponible ? "Volver a mi marcha" : "Volver al norte"}
+          </Text>
+        </Pressable>
+      )}
 
       {puntoCercano && (
         <View style={[styles.tarjetaDistancia, { borderColor: enRango ? colors.primary : colors.warning }]}>
@@ -95,6 +116,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pillTop: { position: "absolute", top: 58, right: 16 },
+  botonVolverMarcha: {
+    position: "absolute",
+    top: 106,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primaryConfirm,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  botonVolverMarchaTexto: { color: colors.surface, fontWeight: "700", fontSize: 11.5 },
   tarjetaDistancia: {
     position: "absolute",
     bottom: 28,
