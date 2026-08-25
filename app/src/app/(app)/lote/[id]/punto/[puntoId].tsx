@@ -26,7 +26,7 @@ import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Carga, Lote, Punto, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
-import { ACCESORIO_NUMEROS, NumberField, YesNoField } from "@/features/campo/campos-carga";
+import { ACCESORIO_TECLADO, NumberField, YesNoField } from "@/features/campo/campos-carga";
 
 interface FormCarga {
   bicho: number;
@@ -37,11 +37,6 @@ interface FormCarga {
   gusanoBlanco: boolean;
   observaciones: string;
 }
-
-// nativeID que conecta el TextInput de observaciones con su barra "Listo"
-// pegada arriba del teclado (ver InputAccessoryView más abajo) — solo iOS,
-// que es la plataforma con la que se está probando la app por ahora.
-const ACCESORIO_OBSERVACIONES = "accesorio-observaciones";
 
 const FORM_VACIO: FormCarga = {
   bicho: 0,
@@ -289,8 +284,11 @@ export default function PuntoScreen() {
         disabled={camposDeshabilitados}
         onChange={(v) => setForm((f) => ({ ...f, babosa: v }))}
       />
+
+      {/* Una sola barra "Listo" para toda la pantalla (conteos y
+          observaciones) — ver comentario en ACCESORIO_TECLADO. */}
       {Platform.OS === "ios" && (
-        <InputAccessoryView nativeID={ACCESORIO_NUMEROS}>
+        <InputAccessoryView nativeID={ACCESORIO_TECLADO}>
           <View style={styles.barraAccesoria}>
             <Pressable style={styles.botonListoAccesorio} onPress={() => Keyboard.dismiss()}>
               <Text style={styles.botonListoAccesorioTexto}>Listo</Text>
@@ -342,18 +340,8 @@ export default function PuntoScreen() {
               multiline
               value={form.observaciones}
               onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
-              inputAccessoryViewID={Platform.OS === "ios" ? ACCESORIO_OBSERVACIONES : undefined}
+              inputAccessoryViewID={Platform.OS === "ios" ? ACCESORIO_TECLADO : undefined}
             />
-          )}
-
-          {Platform.OS === "ios" && (
-            <InputAccessoryView nativeID={ACCESORIO_OBSERVACIONES}>
-              <View style={styles.barraAccesoria}>
-                <Pressable style={styles.botonListoAccesorio} onPress={() => Keyboard.dismiss()}>
-                  <Text style={styles.botonListoAccesorioTexto}>Listo</Text>
-                </Pressable>
-              </View>
-            </InputAccessoryView>
           )}
 
           {carga && carga.fotos.length > 0 && (
