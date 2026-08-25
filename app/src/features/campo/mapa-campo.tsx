@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import Svg, { Polygon } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import { Navigation } from "lucide-react-native";
 
 import type { XY } from "@/lib/geo/geometria";
@@ -301,6 +301,14 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     const pos = toPx(p.x, p.y);
     return `${pos.left},${pos.top}`;
   });
+  // Path (M...L...Z) en vez de Polygon (points): con los datos reales de un
+  // lote real, Polygon dejaba sin dibujar las dos aristas que tocaban un
+  // vértice en particular (confirmado con marcadores puestos aparte, en la
+  // posición correcta) — un bug puntual de cómo esta versión de
+  // react-native-svg arma el polígono a partir de la lista de puntos. Path,
+  // con instrucciones explícitas de dibujo, no tiene ese problema.
+  const perimetroPath =
+    puntosPerimetro.length > 0 ? `M ${puntosPerimetro[0]} L ${puntosPerimetro.slice(1).join(" L ")} Z` : "";
 
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
 
@@ -327,8 +335,8 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                 no. Con más contraste no hay ambigüedad: si el relleno no
                 llega hasta un punto, ese punto está realmente afuera del
                 límite cargado (no es un problema de dibujo). */}
-            <Polygon
-              points={puntosPerimetro.join(" ")}
+            <Path
+              d={perimetroPath}
               fill={pantallaCompleta ? "rgba(59,143,92,0.22)" : "rgba(59,143,92,0.08)"}
               stroke={colors.primary}
               strokeWidth={pantallaCompleta ? 2.5 : 1.5}
