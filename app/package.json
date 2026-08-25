@@ -45,6 +45,7 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
+    "@types/d3-delaunay": "^6.0.4",
     "@types/react": "~19.1.0",
     "typescript": "~6.0.3"
   },
