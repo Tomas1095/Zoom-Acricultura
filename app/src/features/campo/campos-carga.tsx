@@ -1,8 +1,13 @@
-import { useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Bug, Check } from "lucide-react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Bug } from "lucide-react-native";
 
 import { colors } from "@/theme/colors";
+
+// nativeID compartido por todos los NumberField de la pantalla — el teclado
+// numérico de iOS no tiene tecla de "Listo" propia, así que se cierra con
+// una barra pegada arriba del teclado (ver InputAccessoryView en la
+// pantalla que usa este campo), la misma lógica que las observaciones.
+export const ACCESORIO_NUMEROS = "accesorio-numeros";
 
 interface NumberFieldProps {
   label: string;
@@ -11,46 +16,26 @@ interface NumberFieldProps {
   disabled?: boolean;
 }
 
-/** Portado de NumberField del prototipo — con un botón "Visto" agregado
- * para cerrar el teclado numérico con una confirmación visual explícita
- * (pedido en la prueba de campo: sin esto no quedaba claro cuándo un
- * conteo ya estaba "cargado" para pasar al siguiente). */
+/** Portado de NumberField del prototipo. */
 export function NumberField({ label, value, onChange, disabled }: NumberFieldProps) {
-  const inputRef = useRef<TextInput>(null);
-  const [visto, setVisto] = useState(false);
-
   return (
     <View style={styles.fila}>
       <View style={styles.etiquetaFila}>
         <Bug size={14} color={colors.textMuted} />
         <Text style={styles.etiqueta}>{label}</Text>
       </View>
-      <View style={styles.numeroYVisto}>
-        <TextInput
-          ref={inputRef}
-          style={[styles.input, disabled && styles.inputDeshabilitado]}
-          keyboardType="number-pad"
-          editable={!disabled}
-          value={String(value)}
-          selectTextOnFocus
-          onFocus={() => setVisto(false)}
-          onChangeText={(t) => {
-            const n = parseInt(t, 10);
-            onChange(Number.isFinite(n) && n >= 0 ? n : 0);
-          }}
-        />
-        {!disabled && (
-          <Pressable
-            style={[styles.botonVisto, visto && styles.botonVistoActivo]}
-            onPress={() => {
-              inputRef.current?.blur();
-              setVisto(true);
-            }}
-          >
-            <Check size={16} color={visto ? colors.surface : colors.primary} />
-          </Pressable>
-        )}
-      </View>
+      <TextInput
+        style={[styles.input, disabled && styles.inputDeshabilitado]}
+        keyboardType="number-pad"
+        editable={!disabled}
+        value={String(value)}
+        selectTextOnFocus
+        onChangeText={(t) => {
+          const n = parseInt(t, 10);
+          onChange(Number.isFinite(n) && n >= 0 ? n : 0);
+        }}
+        inputAccessoryViewID={Platform.OS === "ios" ? ACCESORIO_NUMEROS : undefined}
+      />
     </View>
   );
 }
@@ -98,17 +83,6 @@ const styles = StyleSheet.create({
   },
   etiquetaFila: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
   etiqueta: { fontSize: 14, color: colors.text, flex: 1 },
-  numeroYVisto: { flexDirection: "row", alignItems: "center", gap: 8 },
-  botonVisto: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  botonVistoActivo: { backgroundColor: colors.primary },
   input: {
     width: 60,
     borderWidth: 1,

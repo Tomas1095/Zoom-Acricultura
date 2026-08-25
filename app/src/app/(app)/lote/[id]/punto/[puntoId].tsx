@@ -26,7 +26,7 @@ import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Carga, Lote, Punto, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
-import { NumberField, YesNoField } from "@/features/campo/campos-carga";
+import { ACCESORIO_NUMEROS, NumberField, YesNoField } from "@/features/campo/campos-carga";
 
 interface FormCarga {
   bicho: number;
@@ -289,6 +289,15 @@ export default function PuntoScreen() {
         disabled={camposDeshabilitados}
         onChange={(v) => setForm((f) => ({ ...f, babosa: v }))}
       />
+      {Platform.OS === "ios" && (
+        <InputAccessoryView nativeID={ACCESORIO_NUMEROS}>
+          <View style={styles.barraAccesoria}>
+            <Pressable style={styles.botonListoAccesorio} onPress={() => Keyboard.dismiss()}>
+              <Text style={styles.botonListoAccesorioTexto}>Listo</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      )}
 
       <Text style={styles.grupoLabel}>Presencia</Text>
       <YesNoField
