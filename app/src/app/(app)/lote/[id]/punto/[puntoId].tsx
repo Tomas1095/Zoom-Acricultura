@@ -4,6 +4,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  InputAccessoryView,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -37,6 +39,11 @@ interface FormCarga {
   gusanoBlanco: boolean;
   observaciones: string;
 }
+
+// nativeID que conecta el TextInput de observaciones con su barra "Listo"
+// pegada arriba del teclado (ver InputAccessoryView más abajo) — solo iOS,
+// que es la plataforma con la que se está probando la app por ahora.
+const ACCESORIO_OBSERVACIONES = "accesorio-observaciones";
 
 const FORM_VACIO: FormCarga = {
   bicho: 0,
@@ -328,22 +335,27 @@ export default function PuntoScreen() {
             </Text>
           </Pressable>
           {mostrarObservaciones && (
-            <>
-              <TextInput
-                ref={observacionesRef}
-                style={styles.observaciones}
-                placeholder="Anotá algo puntual sobre este punto…"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                value={form.observaciones}
-                onFocus={desplazarAObservaciones}
-                onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
-              />
-              <Pressable style={styles.botonVistoObs} onPress={() => observacionesRef.current?.blur()}>
-                <Check size={14} color={colors.surface} />
-                <Text style={styles.botonVistoObsTexto}>Visto</Text>
-              </Pressable>
-            </>
+            <TextInput
+              ref={observacionesRef}
+              style={styles.observaciones}
+              placeholder="Anotá algo puntual sobre este punto…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              value={form.observaciones}
+              onFocus={desplazarAObservaciones}
+              onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
+              inputAccessoryViewID={Platform.OS === "ios" ? ACCESORIO_OBSERVACIONES : undefined}
+            />
+          )}
+
+          {Platform.OS === "ios" && (
+            <InputAccessoryView nativeID={ACCESORIO_OBSERVACIONES}>
+              <View style={styles.barraAccesoria}>
+                <Pressable style={styles.botonListoAccesorio} onPress={() => Keyboard.dismiss()}>
+                  <Text style={styles.botonListoAccesorioTexto}>Listo</Text>
+                </Pressable>
+              </View>
+            </InputAccessoryView>
           )}
 
           {carga && carga.fotos.length > 0 && (
@@ -462,18 +474,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlignVertical: "top",
   },
-  botonVistoObs: {
+  barraAccesoria: {
     flexDirection: "row",
-    alignSelf: "flex-end",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginTop: 8,
+    justifyContent: "flex-end",
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    padding: 8,
   },
-  botonVistoObsTexto: { color: colors.surface, fontWeight: "700", fontSize: 12 },
+  botonListoAccesorio: { paddingHorizontal: 14, paddingVertical: 6 },
+  botonListoAccesorioTexto: { color: colors.primary, fontWeight: "700", fontSize: 15 },
   fotosFila: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   fotoItem: { width: 64, height: 64 },
   fotoImg: { width: 64, height: 64, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
