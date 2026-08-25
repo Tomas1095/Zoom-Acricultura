@@ -266,10 +266,21 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     transform: [{ rotateZ: `${-rotacion.value}rad` }],
   }));
 
-  // Solo modo trabajo: el marcador "Yo" queda fijo en el ancla (ver JSX,
-  // está fuera del grupo que gira/escala/arrastra), así que su flecha
-  // necesita sumar a mano la rotación que tendría el grupo — heading más
-  // la rotación actual del mapa en grados — para seguir apuntando bien.
+  // Solo modo trabajo: el marcador "Yo" está fuera del grupo que
+  // gira/escala/arrastra (ver JSX), pero necesita moverse CON el arrastre
+  // (pan) — arrastrar el mapa con dos dedos tiene que mover "Yo" también,
+  // es lo lógico, y "Volver a mi marcha" te devuelve a los dos al lugar
+  // original. Lo que "Yo" no hace es rotar ni escalar con el resto: girar
+  // o hacer zoom tienen que pivotear alrededor suyo, no moverlo — por eso
+  // solo toma translateX/Y acá, nunca scale ni rotateZ.
+  const estiloYoArrastrado = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
+  }));
+
+  // Su flecha, aparte, necesita sumar a mano la rotación que tendría si
+  // estuviera adentro del grupo — heading más la rotación actual del mapa
+  // en grados — para seguir apuntando bien (el translate de arriba no la
+  // afecta, así que esto es independiente).
   const estiloFlechaYoFija = useAnimatedStyle(() => ({
     transform: [{ rotate: `${heading + (rotacion.value * 180) / Math.PI}deg` }],
   }));
@@ -291,7 +302,12 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     >
       <GestureDetector gesture={gestoCompuesto}>
         <Animated.View style={[{ position: "absolute", top: 0, left: 0, width: ancho, height: altoGrupo }, estiloAnimado]}>
-          <Svg width={ancho} height={alto} style={StyleSheet.absoluteFill}>
+          {/* El width/height del SVG tienen que coincidir con el tamaño real
+              de esta vista (altoGrupo, no el `alto` de la pantalla) — si no
+              coinciden, el SVG reescala su contenido para "entrar" en el
+              tamaño real, desalineando el perímetro de los puntos (que se
+              posicionan aparte, con estilos normales, sin ese reescalado). */}
+          <Svg width={ancho} height={altoGrupo} style={{ position: "absolute", top: 0, left: 0 }}>
             {/* Mismo verde tenue de relleno y borde sólido en los dos modos
                 — en pantalla completa un poco más grueso, nomás, porque
                 se ve a más distancia. */}
@@ -361,17 +377,21 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
         </Animated.View>
       </GestureDetector>
 
-      {/* Modo trabajo: "Yo" queda clavado en el ancla (centro, un poco hacia
-          abajo) pase lo que pase con el gesto — solo el lote y los puntos
-          se mueven/giran/escalan debajo. Por eso está fuera del grupo con
-          el transform animado, no adentro. */}
+      {/* Modo trabajo: "Yo" arranca en el ancla (centro, un poco hacia
+          abajo) y se mueve CON el arrastre (estiloYoArrastrado), pero girar
+          o hacer zoom pivotea a su alrededor en vez de moverlo — por eso
+          está fuera del grupo con el transform animado completo, no
+          adentro (ese grupo sí tiene scale/rotateZ, que "Yo" no debe
+          heredar). "Volver a mi marcha" devuelve todo al lugar original. */}
       {pantallaCompleta && miPos && (
-        <View style={[styles.yoMarker, { left: anclaX - 12, top: anclaY - 12 }]}>
+        <Animated.View
+          style={[styles.yoMarker, { left: anclaX - 12, top: anclaY - 12 }, estiloYoArrastrado]}
+        >
           <View style={styles.yoMarkerPulso} />
           <Animated.View style={estiloFlechaYoFija}>
             <Navigation size={13} color="#FFFFFF" />
           </Animated.View>
-        </View>
+        </Animated.View>
       )}
     </View>
   );
