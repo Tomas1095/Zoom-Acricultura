@@ -99,7 +99,11 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
-  const colorEtiqueta = pantallaCompleta ? "#F2E9C9" : colors.textMuted;
+  // Fondo claro en los dos modos (no oscuro en pantalla completa como en
+  // una primera versión) — así que la etiqueta necesita un color oscuro
+  // legible sobre claro en ambos casos, no el hueso que se pensó para
+  // fondo oscuro.
+  const colorEtiqueta = colors.textMuted;
 
   // ---- Gestos: pinch (zoom) + pan (arrastrar) + rotación con 2 dedos ----
   const scale = useSharedValue(1);
@@ -213,11 +217,14 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
       <GestureDetector gesture={gestoCompuesto}>
         <Animated.View style={[StyleSheet.absoluteFill, estiloAnimado]}>
           <Svg width={ancho} height={alto} style={StyleSheet.absoluteFill}>
+            {/* Mismo verde tenue de relleno y borde sólido en los dos modos
+                — en pantalla completa un poco más grueso, nomás, porque
+                se ve a más distancia. */}
             <Polygon
               points={puntosPerimetro.join(" ")}
-              fill={pantallaCompleta ? "rgba(255,255,255,0.06)" : "rgba(59,143,92,0.08)"}
-              stroke={pantallaCompleta ? "#F2E9C9" : colors.primary}
-              strokeWidth={pantallaCompleta ? 2 : 1.5}
+              fill="rgba(59,143,92,0.08)"
+              stroke={colors.primary}
+              strokeWidth={pantallaCompleta ? 2.5 : 1.5}
               strokeDasharray={pantallaCompleta ? undefined : "4 3"}
             />
           </Svg>
@@ -289,10 +296,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  // Modo trabajo: fondo oscuro de borde a borde, sin recuadro — los colores
-  // pensados para pantalla completa (etiquetas color hueso, perímetro
-  // claro) están pensados para verse sobre este fondo, no sobre el claro.
-  contenedorPantallaCompleta: { backgroundColor: colors.mapaOscuro },
+  // Modo trabajo: mismo fondo claro que vista general, pero de borde a
+  // borde (sin recuadro ni radio, ya que ocupa toda la pantalla).
+  contenedorPantallaCompleta: { backgroundColor: colors.background },
   punto: {
     position: "absolute",
     alignItems: "center",

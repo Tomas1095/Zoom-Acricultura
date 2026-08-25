@@ -37,7 +37,7 @@ export default function ModoTrabajoScreen() {
   if (cargando || !lote) {
     return (
       <View style={styles.centrado}>
-        <ActivityIndicator color={colors.surface} size="large" />
+        <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
   }
@@ -102,8 +102,8 @@ export default function ModoTrabajoScreen() {
 }
 
 const styles = StyleSheet.create({
-  centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryDark },
-  container: { flex: 1, backgroundColor: colors.primaryDark },
+  centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.background },
   volver: {
     position: "absolute",
     top: 50,
