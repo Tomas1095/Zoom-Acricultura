@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Bug } from "lucide-react-native";
 
@@ -8,13 +9,18 @@ interface NumberFieldProps {
   value: number;
   onChange: (v: number) => void;
   disabled?: boolean;
+  onFocus?: () => void;
 }
 
-/** Portado de NumberField del prototipo. El cierre del teclado numérico
- * (que no tiene tecla de "Listo" propia) lo resuelve la pantalla que
- * contiene este campo con una barra flotante propia — ver comentario en
- * punto/[puntoId].tsx sobre por qué no es un InputAccessoryView. */
-export function NumberField({ label, value, onChange, disabled }: NumberFieldProps) {
+/** Portado de NumberField del prototipo. Expone el ref del TextInput hacia
+ * afuera (forwardRef) para que la pantalla que lo contiene pueda medir su
+ * posición y subir el scroll cuando se enfoca — ver enfocarCampo en
+ * punto/[puntoId].tsx. El teclado numérico no tiene tecla de "Listo"
+ * propia, así que esa pantalla también le agrega una barra flotante. */
+export const NumberField = forwardRef<TextInput, NumberFieldProps>(function NumberField(
+  { label, value, onChange, disabled, onFocus },
+  ref
+) {
   return (
     <View style={styles.fila}>
       <View style={styles.etiquetaFila}>
@@ -22,11 +28,13 @@ export function NumberField({ label, value, onChange, disabled }: NumberFieldPro
         <Text style={styles.etiqueta}>{label}</Text>
       </View>
       <TextInput
+        ref={ref}
         style={[styles.input, disabled && styles.inputDeshabilitado]}
         keyboardType="number-pad"
         editable={!disabled}
         value={String(value)}
         selectTextOnFocus
+        onFocus={onFocus}
         onChangeText={(t) => {
           const n = parseInt(t, 10);
           onChange(Number.isFinite(n) && n >= 0 ? n : 0);
@@ -34,7 +42,7 @@ export function NumberField({ label, value, onChange, disabled }: NumberFieldPro
       />
     </View>
   );
-}
+});
 
 interface YesNoFieldProps {
   label: string;

@@ -37,6 +37,17 @@ interface FormCarga {
   observaciones: string;
 }
 
+// Altura fija de la barra "Listo" flotante (ver styles.barraFlotante — la
+// altura está fijada por style, no depende del contenido, para que este
+// número sea siempre exacto) y un margen extra de respiro.
+const ALTURA_BARRA = 48;
+const MARGEN = 12;
+// Colchón chico entre la barra y el teclado: el alto que reporta el evento
+// de teclado en iOS a veces no incluye del todo la barra de sugerencias de
+// texto, así que sin este margen la barra quedaba parcialmente tapada por
+// el borde del teclado.
+const MARGEN_TECLADO = 8;
+
 const FORM_VACIO: FormCarga = {
   bicho: 0,
   babosa: 0,
@@ -68,6 +79,17 @@ export default function PuntoScreen() {
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [alturaTeclado, setAlturaTeclado] = useState(0);
   const observacionesRef = useRef<TextInput>(null);
+  const bichoRef = useRef<TextInput>(null);
+  const babosaRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  // Espejo de alturaTeclado en un ref: enfocarCampo se dispara con un
+  // pequeño delay (para esperar la animación del teclado) y para ese
+  // entonces necesita el valor más nuevo, no el que tenía la pantalla
+  // renderizada en el momento del focus — un state normal ahí quedaría
+  // desactualizado.
+  const alturaTecladoRef = useRef(0);
+  const altoScrollRef = useRef(0);
+  const scrollYRef = useRef(0);
 
   // InputAccessoryView resultó poco confiable acá: con dos o más campos
   // apuntando al mismo nativeID, solo el primero que se enfocaba mostraba
@@ -80,13 +102,48 @@ export default function PuntoScreen() {
   useEffect(() => {
     const mostrar = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const ocultar = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const subMostrar = Keyboard.addListener(mostrar, (e) => setAlturaTeclado(e.endCoordinates.height));
-    const subOcultar = Keyboard.addListener(ocultar, () => setAlturaTeclado(0));
+    const subMostrar = Keyboard.addListener(mostrar, (e) => {
+      alturaTecladoRef.current = e.endCoordinates.height;
+      setAlturaTeclado(e.endCoordinates.height);
+    });
+    const subOcultar = Keyboard.addListener(ocultar, () => {
+      alturaTecladoRef.current = 0;
+      setAlturaTeclado(0);
+    });
     return () => {
       subMostrar.remove();
       subOcultar.remove();
     };
   }, []);
+
+  // Sube el scroll lo justo y necesario para que el campo enfocado quede
+  // visible por encima del teclado + la barra "Listo" — reemplaza tanto al
+  // scrollToEnd() (que subía de más/de menos porque no medía nada) como a
+  // automaticallyAdjustKeyboardInsets (que no sabe que además está la barra
+  // flotante encima del teclado, así que dejaba tapado igual el pedacito
+  // de abajo). La clave para que measureLayout funcione bien acá es pasarle
+  // getNativeScrollRef() del ScrollView como referencia — NO
+  // getInnerViewNode(), que es la función vieja (pre-Fabric) que se había
+  // usado en el primer intento y tiraba el error "ref.measureLayout debe
+  // ser llamado con un ref a...": bajo Fabric ya no devuelve un nodo válido.
+  function enfocarCampo(inputRef: React.RefObject<TextInput | null>) {
+    setTimeout(() => {
+      const nodoScroll = scrollRef.current?.getNativeScrollRef();
+      if (!inputRef.current || !nodoScroll) return;
+      inputRef.current.measureLayout(
+        nodoScroll,
+        (_x, y, _w, height) => {
+          const obstruccion = alturaTecladoRef.current + MARGEN_TECLADO + ALTURA_BARRA + MARGEN;
+          const visible = altoScrollRef.current - obstruccion;
+          const desborde = y + height - visible;
+          if (desborde > 0) {
+            scrollRef.current?.scrollTo({ y: scrollYRef.current + desborde, animated: true });
+          }
+        },
+        () => {}
+      );
+    }, 300);
+  }
 
   const refrescar = useCallback(async () => {
     try {
@@ -242,15 +299,23 @@ export default function PuntoScreen() {
 
   return (
     <View style={styles.raiz}>
-      {/* automaticallyAdjustKeyboardInsets (iOS, requiere New Architecture —
-          ya activa en este proyecto) es el reemplazo nativo de
-          KeyboardAvoidingView acá: ajusta solo el contentInset del
-          ScrollView y sube lo justo y necesario para que el campo enfocado
-          quede visible arriba del teclado. */}
       <ScrollView
-        contentContainerStyle={styles.container}
+        ref={scrollRef}
+        contentContainerStyle={[
+          styles.container,
+          // Colchón real (no un número inventado) para que siempre haya
+          // lugar de sobra debajo del último campo y enfocarCampo pueda
+          // subir el scroll lo que haga falta, sea cual sea el teclado.
+          alturaTeclado > 0 && { paddingBottom: 20 + alturaTeclado + MARGEN_TECLADO + ALTURA_BARRA + MARGEN },
+        ]}
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        onLayout={(e) => {
+          altoScrollRef.current = e.nativeEvent.layout.height;
+        }}
+        onScroll={(e) => {
+          scrollYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
       >
       <View style={styles.filaTitulo}>
         <MapPin size={16} color={colors.primaryDark} />
@@ -292,16 +357,20 @@ export default function PuntoScreen() {
 
       <Text style={styles.grupoLabel}>Conteos</Text>
       <NumberField
+        ref={bichoRef}
         label="Bichos bolita"
         value={form.bicho}
         disabled={camposDeshabilitados}
         onChange={(v) => setForm((f) => ({ ...f, bicho: v }))}
+        onFocus={() => enfocarCampo(bichoRef)}
       />
       <NumberField
+        ref={babosaRef}
         label="Babosas"
         value={form.babosa}
         disabled={camposDeshabilitados}
         onChange={(v) => setForm((f) => ({ ...f, babosa: v }))}
+        onFocus={() => enfocarCampo(babosaRef)}
       />
 
       <Text style={styles.grupoLabel}>Presencia</Text>
@@ -347,6 +416,7 @@ export default function PuntoScreen() {
               multiline
               value={form.observaciones}
               onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
+              onFocus={() => enfocarCampo(observacionesRef)}
             />
           )}
 
@@ -391,7 +461,7 @@ export default function PuntoScreen() {
       </ScrollView>
 
       {alturaTeclado > 0 && (
-        <View style={[styles.barraFlotante, { bottom: alturaTeclado }]}>
+        <View style={[styles.barraFlotante, { bottom: alturaTeclado + MARGEN_TECLADO }]}>
           <Pressable style={styles.botonListoFlotante} onPress={() => Keyboard.dismiss()}>
             <Text style={styles.botonListoFlotanteTexto}>Listo</Text>
           </Pressable>
@@ -464,13 +534,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    // paddingBottom más grande que el resto (no un padding parejo) — le da
-    // al ajuste automático del teclado un colchón real debajo del cursor,
-    // que si no quedaba justo tapado por el borde del teclado/la barra
-    // "Listo" cuando escribías la última línea.
-    paddingBottom: 34,
+    padding: 12,
     marginTop: 8,
     minHeight: 70,
     fontSize: 14,
@@ -479,19 +543,25 @@ const styles = StyleSheet.create({
   },
   // Barra "Listo" propia, posicionada a mano justo arriba del teclado (ver
   // alturaTeclado) — reemplaza a InputAccessoryView, que resultó poco
-  // confiable con varios campos de texto en la misma pantalla.
+  // confiable con varios campos de texto en la misma pantalla. Altura fija
+  // (no por contenido) para que ALTURA_BARRA sea siempre exacta, y con
+  // padding generoso para que aunque el teclado tape algún pixel de más
+  // (el iOS a veces no reporta el alto exacto del todo, ej. con la barra
+  // de sugerencias) el texto del botón no quede cortado.
   barraFlotante: {
     position: "absolute",
     left: 0,
     right: 0,
+    height: ALTURA_BARRA,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "flex-end",
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    padding: 8,
+    paddingHorizontal: 8,
   },
-  botonListoFlotante: { paddingHorizontal: 14, paddingVertical: 6 },
+  botonListoFlotante: { paddingHorizontal: 14, paddingVertical: 10 },
   botonListoFlotanteTexto: { color: colors.primary, fontWeight: "700", fontSize: 15 },
   fotosFila: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   fotoItem: { width: 64, height: 64 },
