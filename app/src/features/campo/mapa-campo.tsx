@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Line, Path } from "react-native-svg";
 import { Navigation } from "lucide-react-native";
 
 import type { XY } from "@/lib/geo/geometria";
@@ -297,18 +297,24 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     transform: [{ rotate: `${heading + (rotacion.value * 180) / Math.PI}deg` }],
   }));
 
-  const puntosPerimetro = perimetro.map((p) => {
-    const pos = toPx(p.x, p.y);
-    return `${pos.left},${pos.top}`;
-  });
-  // Path (M...L...Z) en vez de Polygon (points): con los datos reales de un
-  // lote real, Polygon dejaba sin dibujar las dos aristas que tocaban un
-  // vértice en particular (confirmado con marcadores puestos aparte, en la
-  // posición correcta) — un bug puntual de cómo esta versión de
-  // react-native-svg arma el polígono a partir de la lista de puntos. Path,
-  // con instrucciones explícitas de dibujo, no tiene ese problema.
+  const perimetroPx = perimetro.map((p) => toPx(p.x, p.y));
+  // El relleno usa Path (M...L...Z) armado a mano con las mismas
+  // coordenadas — sirve para el área sombreada, pero el CONTORNO (lo que
+  // de verdad se está evaluando acá) se dibuja aparte, como líneas sueltas
+  // (ver más abajo): con datos reales de un lote real, tanto Polygon como
+  // Path (como un solo trazo con stroke) dejaban alguna arista sin
+  // dibujar — un bug de esta versión de react-native-svg al armar una
+  // figura de varios segmentos de una sola vez. Una <Line> por lado,
+  // cada una con sus 4 números sueltos (nada de texto para parsear), es
+  // lo más básico que se puede pedirle a la librería — si esto también
+  // falla, el problema no está en cómo se arma la figura.
   const perimetroPath =
-    puntosPerimetro.length > 0 ? `M ${puntosPerimetro[0]} L ${puntosPerimetro.slice(1).join(" L ")} Z` : "";
+    perimetroPx.length > 0
+      ? `M ${perimetroPx[0].left},${perimetroPx[0].top} L ${perimetroPx
+          .slice(1)
+          .map((p) => `${p.left},${p.top}`)
+          .join(" L ")} Z`
+      : "";
 
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
 
@@ -335,13 +341,22 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                 no. Con más contraste no hay ambigüedad: si el relleno no
                 llega hasta un punto, ese punto está realmente afuera del
                 límite cargado (no es un problema de dibujo). */}
-            <Path
-              d={perimetroPath}
-              fill={pantallaCompleta ? "rgba(59,143,92,0.22)" : "rgba(59,143,92,0.08)"}
-              stroke={colors.primary}
-              strokeWidth={pantallaCompleta ? 2.5 : 1.5}
-              strokeDasharray={pantallaCompleta ? undefined : "4 3"}
-            />
+            <Path d={perimetroPath} fill={pantallaCompleta ? "rgba(59,143,92,0.22)" : "rgba(59,143,92,0.08)"} stroke="none" />
+            {perimetroPx.map((a, i) => {
+              const b = perimetroPx[(i + 1) % perimetroPx.length];
+              return (
+                <Line
+                  key={`lado-${i}`}
+                  x1={a.left}
+                  y1={a.top}
+                  x2={b.left}
+                  y2={b.top}
+                  stroke={colors.primary}
+                  strokeWidth={pantallaCompleta ? 2.5 : 1.5}
+                  strokeDasharray={pantallaCompleta ? undefined : "4 3"}
+                />
+              );
+            })}
           </Svg>
 
           {/* DEBUG TEMPORAL — marcadores rojos en cada vértice del
