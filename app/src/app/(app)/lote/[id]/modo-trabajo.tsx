@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { ChevronLeft, Compass } from "lucide-react-native";
+import { ChevronLeft, Compass, Minus, Plus } from "lucide-react-native";
 import { useKeepAwake } from "expo-keep-awake";
 
 import { colors } from "@/theme/colors";
@@ -71,6 +71,18 @@ export default function ModoTrabajoScreen() {
         <GpsEstadoPill estado={gps.estado} />
       </View>
 
+      {/* Zoom con botones fijos, no pellizcando — como los botones físicos
+          de +/- de un GPS de mano (Garmin eTrex y similares). */}
+      <View style={styles.rockerZoom}>
+        <Pressable style={styles.botonZoom} onPress={() => mapaRef.current?.acercar()}>
+          <Plus size={20} color={colors.text} />
+        </Pressable>
+        <View style={styles.rockerZoomSeparador} />
+        <Pressable style={styles.botonZoom} onPress={() => mapaRef.current?.alejar()}>
+          <Minus size={20} color={colors.text} />
+        </Pressable>
+      </View>
+
       {vistaModificada && (
         <Pressable
           style={styles.botonVolverMarcha}
@@ -116,6 +128,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pillTop: { position: "absolute", top: 58, right: 16 },
+  rockerZoom: {
+    position: "absolute",
+    top: "50%",
+    right: 16,
+    transform: [{ translateY: -44 }], // centrado vertical (2 botones de 44px c/u)
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  botonZoom: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  rockerZoomSeparador: { height: 1, backgroundColor: colors.border },
   botonVolverMarcha: {
     position: "absolute",
     top: 106,

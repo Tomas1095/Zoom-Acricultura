@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -12,6 +12,15 @@ const MAP_PAD = 26; // px de margen alrededor de la grilla
 const MAP_SCALE_MAX = 3.2; // px por metro, a zoom 1x
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 2.5;
+
+// Niveles fijos de zoom para modo trabajo — botones +/- en vez de pellizcar
+// con los dedos (como un GPS de mano tipo Garmin eTrex, que tiene dos
+// botones físicos de zoom, sin pinch). De paso resuelve que pellizcar
+// contaba como "interacción" y disparaba "Volver a mi marcha" sin querer:
+// como ya no hay gesto de pinch en modo trabajo, ese problema desaparece
+// solo. Vista general sigue con pellizcar para zoom, como antes.
+const NIVELES_ZOOM = [ZOOM_MIN, 0.8, 1, 1.3, 1.6, 2, ZOOM_MAX];
+const NIVEL_ZOOM_INICIAL = NIVELES_ZOOM.indexOf(1);
 
 export interface PuntoMapa {
   id: string;
@@ -48,6 +57,11 @@ interface MapaCampoProps {
 export interface MapaCampoHandle {
   /** Vuelve a zoom 1x, sin arrastre ni giro — animado. */
   restablecer: () => void;
+  /** Solo modo trabajo: sube/baja un escalón fijo de zoom (ver
+   * NIVELES_ZOOM). No cuenta como interacción — no dispara "Volver a mi
+   * marcha". */
+  acercar: () => void;
+  alejar: () => void;
 }
 
 /** El mapa de campo — portado de `contenidoMapa` del prototipo. En vez de
@@ -105,7 +119,8 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // fondo oscuro.
   const colorEtiqueta = colors.textMuted;
 
-  // ---- Gestos: pinch (zoom) + pan (arrastrar) + rotación con 2 dedos ----
+  // ---- Gestos: pinch (zoom, solo vista general) + pan (arrastrar) +
+  // rotación con 2 dedos ----
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -118,6 +133,10 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // necesitamos acá adentro (no solo afuera, vía onInteraccion) para poder
   // pausar el useEffect de seguirRumbo de abajo.
   const [interactuado, setInteractuado] = useState(false);
+  // Índice actual dentro de NIVELES_ZOOM (solo modo trabajo, con los
+  // botones +/-) — no hace falta que sea reactivo, solo lo lee acercar()/
+  // alejar()/restablecer().
+  const indiceZoomRef = useRef(NIVEL_ZOOM_INICIAL);
 
   function avisarInteraccion() {
     setInteractuado(true);
@@ -133,11 +152,31 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     savedTranslateY.value = 0;
     rotacion.value = withTiming(0);
     savedRotacion.value = 0;
+    indiceZoomRef.current = NIVEL_ZOOM_INICIAL;
     setInteractuado(false);
     onInteraccion?.(false);
   }
 
-  useImperativeHandle(ref, () => ({ restablecer }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  function irANivelZoom(indice: number) {
+    const clamped = Math.max(0, Math.min(NIVELES_ZOOM.length - 1, indice));
+    indiceZoomRef.current = clamped;
+    const nuevaEscala = NIVELES_ZOOM[clamped];
+    scale.value = withTiming(nuevaEscala);
+    savedScale.value = nuevaEscala;
+    // A propósito NO se llama avisarInteraccion acá — acercar/alejar con
+    // los botones no tiene que pausar el seguimiento de rumbo ni mostrar
+    // "Volver a mi marcha", que era justo la queja con el pellizco.
+  }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      restablecer,
+      acercar: () => irANivelZoom(indiceZoomRef.current + 1),
+      alejar: () => irANivelZoom(indiceZoomRef.current - 1),
+    }),
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // Portado de `rotate(-headingUsado)` sobre todo `mapWorld` en el
   // prototipo: mientras nadie tocó el mapa a mano, rota el grupo entero
@@ -151,7 +190,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     savedRotacion.value = rad;
   }, [heading, seguirRumbo, interactuado]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Pellizcar para hacer zoom solo en vista general — en modo trabajo el
+  // zoom es con los botones +/- (ver acercar/alejar), no con los dedos,
+  // así que acá directamente no hay gesto de pinch que pueda pisar el
+  // seguimiento de rumbo por accidente (era el reclamo: pellizcar
+  // disparaba "Volver a mi marcha" sin querer).
   const pinch = Gesture.Pinch()
+    .enabled(!pantallaCompleta)
     .onUpdate((e) => {
       "worklet";
       const nuevo = savedScale.value * e.scale;
@@ -160,13 +205,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     .onEnd(() => {
       "worklet";
       savedScale.value = scale.value;
-      // El zoom solo no cuenta como "interacción" en modo trabajo — acercar
-      // o alejar no debería pausar el seguimiento de rumbo ni mostrar
-      // "Volver a mi marcha" (eso sí pasa con arrastrar o girar). En vista
-      // general el zoom sigue contando para "Restablecer", como se pidió.
-      if (!seguirRumbo) {
-        runOnJS(avisarInteraccion)();
-      }
+      runOnJS(avisarInteraccion)();
     });
 
   const pan = Gesture.Pan()
