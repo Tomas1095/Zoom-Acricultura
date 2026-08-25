@@ -6,7 +6,6 @@ import {
   Image,
   InputAccessoryView,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -16,7 +15,6 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { Camera, Check, Lock, MapPin, Pencil, X } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
@@ -62,7 +60,6 @@ const FORM_VACIO: FormCarga = {
 export default function PuntoScreen() {
   const { id: loteId, puntoId: etiqueta } = useLocalSearchParams<{ id: string; puntoId: string }>();
   const { usuario } = useAuth();
-  const headerHeight = useHeaderHeight();
 
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
@@ -75,19 +72,7 @@ export default function PuntoScreen() {
   const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
   const observacionesRef = useRef<TextInput>(null);
-
-  // Al tocar "Observaciones" bajamos el scroll del todo en vez de depender
-  // solo del ajuste automático del teclado — con el padding extra de abajo
-  // (ver styles.container) esto alcanza para dejar el textarea visible
-  // arriba del teclado. measureLayout (la forma "prolija" de hacer esto)
-  // tira error con la versión de React Native de este proyecto — ver
-  // https://github.com/facebook/react-native/issues (Fabric cambió cómo
-  // funcionan los refs de host component), así que vamos por lo simple.
-  function desplazarAObservaciones() {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
-  }
 
   const refrescar = useCallback(async () => {
     try {
@@ -242,12 +227,17 @@ export default function PuntoScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
+    // automaticallyAdjustKeyboardInsets (iOS, requiere New Architecture — ya
+    // activa en este proyecto) es el reemplazo nativo de KeyboardAvoidingView
+    // acá: ajusta solo el contentInset del ScrollView y sube lo justo y
+    // necesario para que el campo enfocado quede visible arriba del teclado,
+    // sin los cálculos manuales de offset que traía KeyboardAvoidingView (y
+    // que no daban con la altura justa en esta pantalla).
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.filaTitulo}>
         <MapPin size={16} color={colors.primaryDark} />
         <Text style={styles.titulo}>Punto {etiqueta}</Text>
@@ -342,7 +332,6 @@ export default function PuntoScreen() {
               placeholderTextColor={colors.textMuted}
               multiline
               value={form.observaciones}
-              onFocus={desplazarAObservaciones}
               onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
               inputAccessoryViewID={Platform.OS === "ios" ? ACCESORIO_OBSERVACIONES : undefined}
             />
@@ -396,19 +385,14 @@ export default function PuntoScreen() {
           </Text>
         </Pressable>
       )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
   aviso: { color: colors.textMuted },
-  // paddingBottom extra (no solo el padding parejo de 20) — le da al
-  // ScrollView suficiente "colchón" debajo del botón final para que
-  // scrollToEnd() pueda subir de verdad las observaciones por encima del
-  // teclado en vez de quedarse corto contra el final del contenido.
-  container: { padding: 20, paddingBottom: 260, gap: 4, backgroundColor: colors.background },
+  container: { padding: 20, gap: 4, backgroundColor: colors.background },
   filaTitulo: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
   titulo: { fontSize: 18, fontWeight: "800", color: colors.text },
   tagUsuario: {
