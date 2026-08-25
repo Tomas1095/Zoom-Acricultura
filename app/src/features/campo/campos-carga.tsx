@@ -1,16 +1,7 @@
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Bug } from "lucide-react-native";
 
 import { colors } from "@/theme/colors";
-
-// nativeID de la barra "Listo" pegada arriba del teclado — la comparten
-// TODOS los campos de texto de la pantalla de carga (conteos numéricos y
-// observaciones), no solo estos. Iba a ser un accesorio por campo, pero
-// iOS/Fabric no anda bien con más de un InputAccessoryView vivo a la vez
-// en la misma pantalla (perdía la barra en algunos campos y no en otros) —
-// con uno solo, compartido, no hay ambigüedad posible. La pantalla que
-// arma el <InputAccessoryView> real es punto/[puntoId].tsx.
-export const ACCESORIO_TECLADO = "accesorio-teclado";
 
 interface NumberFieldProps {
   label: string;
@@ -19,7 +10,10 @@ interface NumberFieldProps {
   disabled?: boolean;
 }
 
-/** Portado de NumberField del prototipo. */
+/** Portado de NumberField del prototipo. El cierre del teclado numérico
+ * (que no tiene tecla de "Listo" propia) lo resuelve la pantalla que
+ * contiene este campo con una barra flotante propia — ver comentario en
+ * punto/[puntoId].tsx sobre por qué no es un InputAccessoryView. */
 export function NumberField({ label, value, onChange, disabled }: NumberFieldProps) {
   return (
     <View style={styles.fila}>
@@ -37,7 +31,6 @@ export function NumberField({ label, value, onChange, disabled }: NumberFieldPro
           const n = parseInt(t, 10);
           onChange(Number.isFinite(n) && n >= 0 ? n : 0);
         }}
-        inputAccessoryViewID={Platform.OS === "ios" ? ACCESORIO_TECLADO : undefined}
       />
     </View>
   );

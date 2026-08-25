@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  InputAccessoryView,
   Keyboard,
   Platform,
   Pressable,
@@ -26,7 +25,7 @@ import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Carga, Lote, Punto, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
-import { ACCESORIO_TECLADO, NumberField, YesNoField } from "@/features/campo/campos-carga";
+import { NumberField, YesNoField } from "@/features/campo/campos-carga";
 
 interface FormCarga {
   bicho: number;
@@ -67,7 +66,27 @@ export default function PuntoScreen() {
   const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [alturaTeclado, setAlturaTeclado] = useState(0);
   const observacionesRef = useRef<TextInput>(null);
+
+  // InputAccessoryView resultó poco confiable acá: con dos o más campos
+  // apuntando al mismo nativeID, solo el primero que se enfocaba mostraba
+  // la barra "Listo" — los siguientes se quedaban sin ella (bug conocido
+  // de iOS/Fabric con accesorios compartidos entre inputs). En vez de
+  // pelear con eso, la barra "Listo" acá es una vista propia, posicionada
+  // a mano justo arriba del teclado usando su altura real — funciona
+  // igual para cualquier campo de texto de la pantalla (número u
+  // observaciones) sin depender de esa API.
+  useEffect(() => {
+    const mostrar = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const ocultar = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const subMostrar = Keyboard.addListener(mostrar, (e) => setAlturaTeclado(e.endCoordinates.height));
+    const subOcultar = Keyboard.addListener(ocultar, () => setAlturaTeclado(0));
+    return () => {
+      subMostrar.remove();
+      subOcultar.remove();
+    };
+  }, []);
 
   const refrescar = useCallback(async () => {
     try {
@@ -222,17 +241,17 @@ export default function PuntoScreen() {
   }
 
   return (
-    // automaticallyAdjustKeyboardInsets (iOS, requiere New Architecture — ya
-    // activa en este proyecto) es el reemplazo nativo de KeyboardAvoidingView
-    // acá: ajusta solo el contentInset del ScrollView y sube lo justo y
-    // necesario para que el campo enfocado quede visible arriba del teclado,
-    // sin los cálculos manuales de offset que traía KeyboardAvoidingView (y
-    // que no daban con la altura justa en esta pantalla).
-    <ScrollView
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-      automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
-    >
+    <View style={styles.raiz}>
+      {/* automaticallyAdjustKeyboardInsets (iOS, requiere New Architecture —
+          ya activa en este proyecto) es el reemplazo nativo de
+          KeyboardAvoidingView acá: ajusta solo el contentInset del
+          ScrollView y sube lo justo y necesario para que el campo enfocado
+          quede visible arriba del teclado. */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+      >
       <View style={styles.filaTitulo}>
         <MapPin size={16} color={colors.primaryDark} />
         <Text style={styles.titulo}>Punto {etiqueta}</Text>
@@ -285,18 +304,6 @@ export default function PuntoScreen() {
         onChange={(v) => setForm((f) => ({ ...f, babosa: v }))}
       />
 
-      {/* Una sola barra "Listo" para toda la pantalla (conteos y
-          observaciones) — ver comentario en ACCESORIO_TECLADO. */}
-      {Platform.OS === "ios" && (
-        <InputAccessoryView nativeID={ACCESORIO_TECLADO}>
-          <View style={styles.barraAccesoria}>
-            <Pressable style={styles.botonListoAccesorio} onPress={() => Keyboard.dismiss()}>
-              <Text style={styles.botonListoAccesorioTexto}>Listo</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
-      )}
-
       <Text style={styles.grupoLabel}>Presencia</Text>
       <YesNoField
         label="Huevo de babosas"
@@ -340,7 +347,6 @@ export default function PuntoScreen() {
               multiline
               value={form.observaciones}
               onChangeText={(t) => setForm((f) => ({ ...f, observaciones: t }))}
-              inputAccessoryViewID={Platform.OS === "ios" ? ACCESORIO_TECLADO : undefined}
             />
           )}
 
@@ -382,13 +388,23 @@ export default function PuntoScreen() {
           </Text>
         </Pressable>
       )}
-    </ScrollView>
+      </ScrollView>
+
+      {alturaTeclado > 0 && (
+        <View style={[styles.barraFlotante, { bottom: alturaTeclado }]}>
+          <Pressable style={styles.botonListoFlotante} onPress={() => Keyboard.dismiss()}>
+            <Text style={styles.botonListoFlotanteTexto}>Listo</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
   aviso: { color: colors.textMuted },
+  raiz: { flex: 1, backgroundColor: colors.background },
   container: { padding: 20, gap: 4, backgroundColor: colors.background },
   filaTitulo: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
   titulo: { fontSize: 18, fontWeight: "800", color: colors.text },
@@ -461,16 +477,22 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlignVertical: "top",
   },
-  barraAccesoria: {
+  // Barra "Listo" propia, posicionada a mano justo arriba del teclado (ver
+  // alturaTeclado) — reemplaza a InputAccessoryView, que resultó poco
+  // confiable con varios campos de texto en la misma pantalla.
+  barraFlotante: {
+    position: "absolute",
+    left: 0,
+    right: 0,
     flexDirection: "row",
     justifyContent: "flex-end",
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     padding: 8,
   },
-  botonListoAccesorio: { paddingHorizontal: 14, paddingVertical: 6 },
-  botonListoAccesorioTexto: { color: colors.primary, fontWeight: "700", fontSize: 15 },
+  botonListoFlotante: { paddingHorizontal: 14, paddingVertical: 6 },
+  botonListoFlotanteTexto: { color: colors.primary, fontWeight: "700", fontSize: 15 },
   fotosFila: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   fotoItem: { width: 64, height: 64 },
   fotoImg: { width: 64, height: 64, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
