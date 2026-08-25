@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Camera, Check, Lock, MapPin, Pencil, X } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
@@ -54,6 +55,7 @@ const FORM_VACIO: FormCarga = {
 export default function PuntoScreen() {
   const { id: loteId, puntoId: etiqueta } = useLocalSearchParams<{ id: string; puntoId: string }>();
   const { usuario } = useAuth();
+  const headerHeight = useHeaderHeight();
 
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
@@ -223,7 +225,7 @@ export default function PuntoScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.filaTitulo}>
