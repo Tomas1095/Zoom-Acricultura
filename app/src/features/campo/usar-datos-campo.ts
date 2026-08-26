@@ -10,10 +10,11 @@ import { useGps } from "./usar-gps";
 const TOLERANCE_M = 10; // mismo radio que el prototipo — ver PointSheet/enRango
 
 /** Junta todo lo que necesitan tanto la vista general como el modo trabajo:
- * el lote, sus puntos, el estado de carga de cada uno (campaña vigente), y
+ * el lote, sus puntos, el estado de carga de cada uno (campaña vigente, o
+ * `campana` si se pasa — ver el selector de historial en ResultadosView), y
  * el GPS ya convertido al plano local del lote — portado de las piezas de
  * `App()`/`UbicacionView` del prototipo que calculaban `puntoCercano`. */
-export function useDatosCampo(loteId: string) {
+export function useDatosCampo(loteId: string, campana?: string) {
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
   const [puntos, setPuntos] = useState<Punto[]>([]);
@@ -25,7 +26,10 @@ export function useDatosCampo(loteId: string) {
       const l = await fetchLote(loteId);
       setLote(l);
       if (l) {
-        const [ps, cs] = await Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, l.campanaActual)]);
+        const [ps, cs] = await Promise.all([
+          fetchPuntosDeLote(loteId),
+          fetchCargasDeLote(loteId, campana ?? l.campanaActual),
+        ]);
         setPuntos(ps);
         setCargas(cs);
       }
@@ -34,7 +38,7 @@ export function useDatosCampo(loteId: string) {
     } finally {
       setCargando(false);
     }
-  }, [loteId]);
+  }, [loteId, campana]);
 
   // useFocusEffect (no useEffect a secas) para que, al volver de cargar un
   // punto, el mapa se refresque solo con el color nuevo — sin esto quedaba
