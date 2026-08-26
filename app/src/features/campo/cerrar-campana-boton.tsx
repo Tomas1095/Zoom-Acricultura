@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text } from "react-native";
 import { Lock } from "lucide-react-native";
 
 import { cerrarCampanaDeLote } from "@/lib/db/lotes";
-import { fechaInicioCampanaTexto, puedeAvanzarACampana, siguienteCampana } from "@/lib/campanas";
+import { siguienteCampana } from "@/lib/campanas";
 import type { Carga, Lote, Punto } from "@/types/domain";
 import { colors } from "@/theme/colors";
 
@@ -20,14 +20,22 @@ interface CerrarCampanaBotonProps {
  * `restablecerCampanaBtn` del prototipo. Solo lo ve quien puede cerrar
  * campañas (ver `puedeCerrarCampana` en roles.ts — decisión de quien
  * renderiza esto, no de este componente), y solo tiene sentido mirando la
- * campaña vigente, no una archivada (eso también lo filtra quien llama). */
+ * campaña vigente, no una archivada (eso también lo filtra quien llama).
+ *
+ * No muestra nada hasta que la grilla está 100% cargada — sin cartel de
+ * "faltan puntos", igual que el prototipo (ahí tampoco se veía nada hasta
+ * que `loteBloqueadoParaMonitoreador` daba true). Tampoco hay tope por
+ * fecha real: cerrar (archivar) la campaña vigente se puede en cuanto está
+ * completa, sin esperar a que la campaña siguiente arranque de verdad (ver
+ * `lib/campanas.ts` — quedaron ahí las funciones de fecha por si hace
+ * falta un tope más adelante, pero no se usan acá). */
 export function CerrarCampanaBoton({ lote, puntos, cargas, onCerrado }: CerrarCampanaBotonProps) {
   const [cerrando, setCerrando] = useState(false);
 
   const completo = puntos.length > 0 && puntos.every((p) => cargas.get(p.id)?.cargado);
-  const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
   const siguiente = siguienteCampana(lote.campanaActual);
-  const yaArrancoLaSiguiente = puedeAvanzarACampana(siguiente);
+
+  if (!completo) return null;
 
   function confirmar() {
     Alert.alert(
@@ -50,27 +58,6 @@ export function CerrarCampanaBoton({ lote, puntos, cargas, onCerrado }: CerrarCa
     } finally {
       setCerrando(false);
     }
-  }
-
-  if (!completo) {
-    return (
-      <View style={styles.avisoIncompleto}>
-        <Text style={styles.avisoIncompletoTexto}>
-          Faltan puntos por cargar para poder cerrar la campaña {lote.campanaActual} ({cargados}/{puntos.length}).
-        </Text>
-      </View>
-    );
-  }
-
-  if (!yaArrancoLaSiguiente) {
-    return (
-      <View style={styles.avisoIncompleto}>
-        <Text style={styles.avisoIncompletoTexto}>
-          Grilla completa — pero todavía no se puede cerrar: la campaña {siguiente} arranca recién el{" "}
-          {fechaInicioCampanaTexto(siguiente)}.
-        </Text>
-      </View>
-    );
   }
 
   return (
@@ -97,11 +84,4 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   botonTexto: { color: colors.surface, fontWeight: "700", fontSize: 13 },
-  avisoIncompleto: {
-    width: "100%",
-    backgroundColor: colors.warningBg,
-    borderRadius: 10,
-    padding: 12,
-  },
-  avisoIncompletoTexto: { color: colors.text, fontSize: 12, textAlign: "center", lineHeight: 17 },
 });
