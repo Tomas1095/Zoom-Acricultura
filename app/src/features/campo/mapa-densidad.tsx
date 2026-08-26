@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
 import Svg, { Line, Polygon, Text as TextoSvg } from "react-native-svg";
 
 import { calcularCeldasDensidad, elegirEscalaBarra, type RangoDensidad } from "@/lib/geo/densidad";
@@ -31,7 +30,11 @@ interface MapaDensidadProps {
  * escala con gestos — es una foto fija — así que las celdas del Voronoi se
  * dibujan con `<Polygon>` de react-native-svg sin problema (el bug de
  * renderizado que encontramos era específico de transforms de rotación
- * grandes de Reanimated, que acá no existen). */
+ * grandes de Reanimated, que acá no existen).
+ *
+ * Sin fondo/borde propio a propósito — el marco lo pone quien lo use (ver
+ * ResultadosView), así el mapa y la leyenda comparten un mismo recuadro en
+ * vez de quedar cada uno en su caja. */
 export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, alto }: MapaDensidadProps) {
   const { toPx, escala } = useMemo(() => {
     const todasX = puntos.map((p) => p.x).concat(perimetro.map((v) => v.x));
@@ -61,7 +64,7 @@ export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, a
   const barraY = alto - 16;
 
   return (
-    <View style={[styles.caja, { width: ancho, height: alto }]}>
+    <>
       <Svg width={ancho} height={alto}>
         {celdas.map((c) => (
           <Polygon
@@ -110,16 +113,6 @@ export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, a
           {escalaBarra.metros} m
         </TextoSvg>
       </Svg>
-    </View>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  caja: {
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-});

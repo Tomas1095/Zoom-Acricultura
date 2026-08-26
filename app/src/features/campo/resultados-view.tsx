@@ -16,11 +16,15 @@ const GAP_RECUADRO = 12;
  * lib/geo/densidad.ts). Quién puede ver esta pestaña lo decide LoteTabs, no
  * este componente.
  *
+ * El mapa y la leyenda comparten un mismo marco fino (mismo verde claro de
+ * fondo que el resto de la app, ver `colors.background`) — por eso
+ * `MapaDensidad` no trae su propio fondo/borde, lo pone este componente.
+ *
  * Todo el contenido tiene que entrar en una pantalla fija, sin scroll (no
- * tiene sentido scrollear acá) — por eso el recuadro dorado usa `flex: 1`
- * (ocupa lo que sobra debajo del toggle/título/pie) y el mapa se mide con
- * `onLayout`, en vez de un tamaño fijo, para aprovechar exacto el espacio
- * que quede una vez descontada la leyenda. */
+ * tiene sentido scrollear acá) — por eso el marco usa `flex: 1` (ocupa lo
+ * que sobra debajo del toggle/título/pie) y el mapa se mide con `onLayout`,
+ * en vez de un tamaño fijo, para aprovechar exacto el espacio que quede una
+ * vez descontada la leyenda. */
 export function ResultadosView({ lote }: { lote: Lote }) {
   const { cargando, puntos, cargas } = useDatosCampo(lote.id);
   const [plaga, setPlaga] = useState<Plaga>("bicho");
@@ -79,7 +83,7 @@ export function ResultadosView({ lote }: { lote: Lote }) {
 
       <Text style={styles.titulo}>Mapa de densidad poblacional</Text>
 
-      <View style={styles.recuadroDorado} onLayout={onLayoutRecuadro}>
+      <View style={styles.marco} onLayout={onLayoutRecuadro}>
         {mapaListo && (
           <MapaDensidad
             puntos={puntosDensidad}
@@ -131,20 +135,20 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   titulo: { fontSize: 16, fontWeight: "800", color: colors.text, textAlign: "center" },
-  recuadroDorado: {
+  marco: {
     flex: 1,
     width: "100%",
     maxWidth: 400,
     alignItems: "center",
     gap: GAP_RECUADRO,
-    backgroundColor: colors.border,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: colors.border,
     borderRadius: 16,
     padding: PAD_RECUADRO,
   },
   leyenda: { width: "100%", gap: 3 },
-  leyendaTitulo: { fontSize: 11, fontWeight: "700", color: colors.accentGold, marginBottom: 2 },
+  leyendaTitulo: { fontSize: 11, fontWeight: "700", color: colors.textMuted, marginBottom: 2 },
   leyendaFila: { flexDirection: "row", alignItems: "center", gap: 6 },
   leyendaMuestra: { width: 12, height: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
   leyendaTexto: { fontSize: 12, color: colors.text },
