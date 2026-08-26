@@ -1,22 +1,45 @@
-// Informe técnico — texto para compartir (WhatsApp/lo que sea) y el HTML
-// que se convierte a PDF con expo-print. Portado de `textoInformeCompartir`
-// y de la parte de texto/tabla de `SalidasView` del prototipo — sin los
-// mini-mapas satelitales (ver nota en lib/geo/densidad.ts, mismo motivo:
-// requiere contratar un proveedor de mapas pago, pendiente de decidir).
+// Informe técnico — el HTML que se convierte a PDF con expo-print. Portado
+// de la parte de texto/tabla de `SalidasView` del prototipo, con dos
+// diferencias reales: acá SÍ van los mapas de densidad poblacional (como
+// SVG embebido, ver lib/exportar/mapa-svg.ts — el prototipo no los tenía
+// en el PDF) y cada "zona" ahora es un LOTE con posibilidad de varios
+// productos distintos aplicados a la vez (a dosis distintas cada uno), no
+// un producto único como antes.
 
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
-export interface ZonaCebo {
+export interface ProductoAplicado {
   id: string;
-  nombre: string;
   producto: string;
-  dosis: number;
-  superficie: number;
+  dosis: number; // kg/ha
 }
 
-export function kgDeZona(z: ZonaCebo): number {
-  return (Number(z.dosis) || 0) * (Number(z.superficie) || 0);
+export interface ZonaCebo {
+  id: string;
+  loteId: string;
+  loteNombre: string;
+  superficie: number; // ha
+  productos: ProductoAplicado[];
+}
+
+export function kgDeProducto(superficie: number, p: ProductoAplicado): number {
+  return (Number(p.dosis) || 0) * (Number(superficie) || 0);
+}
+
+/** Total de kg a comprar por producto, sumado entre TODOS los lotes/zonas
+ * del informe — esto es lo que le sirve al cliente para hacer el pedido,
+ * no el detalle lote por lote. "No aplicar" no suma (no es un producto
+ * real). */
+export function resumenPorProducto(zonas: ZonaCebo[]): Array<{ producto: string; totalKg: number }> {
+  const totales = new Map<string, number>();
+  for (const z of zonas) {
+    for (const p of z.productos) {
+      if (p.producto === "No aplicar") continue;
+      totales.set(p.producto, (totales.get(p.producto) ?? 0) + kgDeProducto(z.superficie, p));
+    }
+  }
+  return Array.from(totales.entries()).map(([producto, totalKg]) => ({ producto, totalKg }));
 }
 
 interface DatosInforme {
@@ -24,20 +47,12 @@ interface DatosInforme {
   establecimientoNombre?: string;
   situacion: string;
   zonas: ZonaCebo[];
-}
-
-/** Texto plano para compartir por WhatsApp/lo que sea — portado tal cual de
- * `textoInformeCompartir`. */
-export function textoInformeCompartir({ loteNombre, establecimientoNombre, situacion, zonas }: DatosInforme): string {
-  const lineasZonas = zonas
-    .map((z) => `• ${z.nombre || "Zona"}: ${z.producto}, ${z.dosis} kg/ha × ${z.superficie} ha = ${kgDeZona(z).toFixed(0)} kg`)
-    .join("\n");
-  return (
-    `*INFORME TÉCNICO — Zoom Agricultura*\n` +
-    `${loteNombre}${establecimientoNombre ? " — " + establecimientoNombre : ""}\n\n` +
-    `*Situación de plagas de suelo:*\n${situacion}\n\n` +
-    `*Recomendación de aplicación de cebo:*\n${lineasZonas || "Sin zonas cargadas."}`
-  );
+  /** SVG ya armado (ver lib/exportar/mapa-svg.ts) — informe.ts no calcula
+   * densidad, solo arma el documento. */
+  mapaBichoSvg: string;
+  mapaBabosaSvg: string;
+  leyendaBichoHtml: string;
+  leyendaBabosaHtml: string;
 }
 
 function escapeHtml(s: string): string {
@@ -47,14 +62,32 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/** HTML del informe, listo para pasarle a expo-print — mismo contenido que
- * el textarea/tabla editables de la pantalla, en formato imprimible. */
-export function construirInformeHtml({ loteNombre, establecimientoNombre, situacion, zonas }: DatosInforme): string {
+/** HTML del informe, listo para pasarle a expo-print. Orden pedido: mapas
+ * de densidad (bichos bolita, después babosas) → situación de plagas →
+ * recomendación de aplicación de cebo (lote por lote, con todos los
+ * productos de cada uno) → resumen de compra por producto. */
+export function construirInformeHtml({
+  loteNombre,
+  establecimientoNombre,
+  situacion,
+  zonas,
+  mapaBichoSvg,
+  mapaBabosaSvg,
+  leyendaBichoHtml,
+  leyendaBabosaHtml,
+}: DatosInforme): string {
   const filasZonas = zonas
-    .map(
-      (z) =>
-        `<tr><td>${escapeHtml(z.nombre || "Zona")}</td><td>${escapeHtml(z.producto)}</td><td>${z.dosis} kg/ha</td><td>${z.superficie} ha</td><td>${kgDeZona(z).toFixed(0)} kg</td></tr>`
+    .flatMap((z) =>
+      z.productos.map(
+        (p) =>
+          `<tr><td>${escapeHtml(z.loteNombre || "Lote")}</td><td>${escapeHtml(p.producto)}</td><td>${p.dosis} kg/ha</td><td>${z.superficie} ha</td><td>${kgDeProducto(z.superficie, p).toFixed(0)} kg</td></tr>`
+      )
     )
+    .join("");
+
+  const resumen = resumenPorProducto(zonas);
+  const filasResumen = resumen
+    .map((r) => `<tr><td>${escapeHtml(r.producto)}</td><td>${r.totalKg.toFixed(0)} kg</td></tr>`)
     .join("");
 
   return `<!DOCTYPE html>
@@ -71,6 +104,9 @@ export function construirInformeHtml({ loteNombre, establecimientoNombre, situac
   table { width: 100%; border-collapse: collapse; margin-top: 10px; }
   th, td { border: 1px solid #EDE0B8; padding: 7px 9px; font-size: 12px; text-align: left; }
   th { background: #F3F7F2; }
+  .mapasFila { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
+  .mapaBloque { display: flex; gap: 10px; align-items: flex-start; }
+  .mapaTitulo { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -78,13 +114,31 @@ export function construirInformeHtml({ loteNombre, establecimientoNombre, situac
   <h1>${escapeHtml(loteNombre)}</h1>
   ${establecimientoNombre ? `<div class="sub">${escapeHtml(establecimientoNombre)}</div>` : ""}
 
+  <h2>Mapa de densidad poblacional</h2>
+  <div class="mapasFila">
+    <div>
+      <div class="mapaTitulo">Bichos bolita</div>
+      <div class="mapaBloque">${mapaBichoSvg}${leyendaBichoHtml}</div>
+    </div>
+    <div>
+      <div class="mapaTitulo">Babosas</div>
+      <div class="mapaBloque">${mapaBabosaSvg}${leyendaBabosaHtml}</div>
+    </div>
+  </div>
+
   <h2>Situación de plagas de suelo</h2>
   <p>${escapeHtml(situacion)}</p>
 
   <h2>Recomendación de aplicación de cebo</h2>
   <table>
-    <thead><tr><th>Zona</th><th>Producto</th><th>Dosis</th><th>Superficie</th><th>Total</th></tr></thead>
-    <tbody>${filasZonas || `<tr><td colspan="5">Sin zonas cargadas.</td></tr>`}</tbody>
+    <thead><tr><th>Lote</th><th>Producto</th><th>Dosis</th><th>Superficie</th><th>Total</th></tr></thead>
+    <tbody>${filasZonas || `<tr><td colspan="5">Sin lotes cargados.</td></tr>`}</tbody>
+  </table>
+
+  <h2>Resumen — total a comprar por producto</h2>
+  <table>
+    <thead><tr><th>Producto</th><th>Total</th></tr></thead>
+    <tbody>${filasResumen || `<tr><td colspan="2">Sin productos cargados.</td></tr>`}</tbody>
   </table>
 </body>
 </html>`;

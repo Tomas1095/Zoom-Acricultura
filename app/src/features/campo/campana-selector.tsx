@@ -23,8 +23,9 @@ interface CampanaSelectorProps {
  * hasta que se acumule historial) se muestra fija, sin flecha de desplegar
  * — no hay nada más para elegir todavía.
  *
- * El aviso de "solo lectura" va EN LA MISMA fila que la pastilla (no una
- * tarjeta aparte debajo) — a propósito: si agregara una fila entera nueva,
+ * Los links de "Reabrir para editar"/"Volver a la actual" van EN LA MISMA
+ * fila que la pastilla (no una tarjeta aparte debajo) — a propósito: si
+ * agregara una fila entera nueva,
  * el resto de la pantalla (el mapa de Resultados, que se mide con
  * `onLayout` para ocupar justo lo que queda libre) se achicaría cada vez
  * que se mira una campaña archivada. Así, mirar historial no le saca
@@ -53,7 +54,6 @@ export function CampanaSelector({ campanas, campanaActual, campanaViendo, onCamb
 
         {!viendoActual && (
           <View style={styles.aviso}>
-            <Text style={styles.avisoTexto}>Solo lectura</Text>
             {onReabrir && (
               <Pressable onPress={onReabrir}>
                 <Text style={styles.avisoLink}>Reabrir para editar</Text>
@@ -105,7 +105,6 @@ const styles = StyleSheet.create({
   pillTexto: { fontSize: 12.5, fontWeight: "700", color: colors.accentGold },
   chevronAbierto: { transform: [{ rotate: "180deg" }] },
   aviso: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
-  avisoTexto: { fontSize: 11, fontWeight: "600", color: colors.warning },
   avisoLink: { fontSize: 11, fontWeight: "700", color: colors.primaryDark },
   avisoLinkVolver: { fontSize: 11, fontWeight: "700", color: colors.warning },
   menu: {

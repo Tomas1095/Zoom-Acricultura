@@ -25,12 +25,20 @@ export default function LoteScreen() {
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
   const [establecimientoNombre, setEstablecimientoNombre] = useState<string | undefined>(undefined);
+  const [lotesEstablecimiento, setLotesEstablecimiento] = useState<Lote[]>([]);
 
   const refrescar = useCallback(async () => {
     const arbol = await db.fetchArbol();
     const l = arbol.lotes.find((l) => l.id === id) ?? null;
     setLote(l);
     setEstablecimientoNombre(arbol.establecimientos.find((e) => e.id === l?.establecimientoId)?.nombre);
+    // Lotes hermanos del mismo establecimiento, con grilla ya generada — se
+    // usa para elegir a qué lote corresponde cada zona del informe técnico
+    // (ver SalidasView), útil cuando se arma un informe conjunto para varios
+    // lotes de un mismo cliente.
+    setLotesEstablecimiento(
+      l ? arbol.lotes.filter((otro) => otro.establecimientoId === l.establecimientoId && otro.tieneGrilla) : []
+    );
     setCargando(false);
   }, [id]);
 
@@ -61,7 +69,12 @@ export default function LoteScreen() {
           // pestañas — mismo criterio que el prototipo: "Resultados"/
           // "Salidas" no son para ese rol (ver CONTEXTO.md).
           usuario && puedeAdministrarLotes(usuario.rol) ? (
-            <LoteTabs lote={lote} establecimientoNombre={establecimientoNombre} onLoteActualizado={refrescar} />
+            <LoteTabs
+              lote={lote}
+              establecimientoNombre={establecimientoNombre}
+              lotesEstablecimiento={lotesEstablecimiento}
+              onLoteActualizado={refrescar}
+            />
           ) : (
             <VistaGeneral lote={lote} establecimientoNombre={establecimientoNombre} />
           )
