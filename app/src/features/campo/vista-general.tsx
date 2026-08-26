@@ -173,6 +173,7 @@ export function VistaGeneral({
             miRutaHook.empezarAMarcar();
           }}
           onCancelarEditar={() => miRutaHook.setPidiendoEditar(false)}
+          onBorrarTodo={miRutaHook.borrarTodo}
         />
       )}
 

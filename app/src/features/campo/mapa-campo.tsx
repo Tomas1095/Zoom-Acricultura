@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Line, Path } from "react-native-svg";
-import { Navigation } from "lucide-react-native";
+import { Check, Navigation } from "lucide-react-native";
 
 import type { XY } from "@/lib/geo/geometria";
 import { colors } from "@/theme/colors";
@@ -335,6 +335,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
       : "";
 
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
+  // Mientras se está marcando el recorrido (no una vez confirmado — ver
+  // `marcandoRuta` más abajo), cada punto ya tocado muestra un tilde adentro
+  // del círculo, para saber de un vistazo cuáles ya se agregaron. Al
+  // confirmar el recorrido esto se apaga solo (deja de estar "marcandoRuta")
+  // y solo queda la línea celeste, sin el tilde de cada punto — no suma
+  // ruido visual una vez que el camino ya está trazado.
+  const miRutaSet = useMemo(() => new Set(miRuta ?? []), [miRuta]);
   const miRutaPx = (miRuta ?? [])
     .map((id) => puntos.find((p) => p.id === id))
     .filter((p): p is PuntoMapa => !!p)
@@ -484,6 +491,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             // propio recorrido, aunque no pueda cargar datos desde acá).
             const marcandoRuta = modoMarcarRuta && !pantallaCompleta;
             const tocable = marcandoRuta || puedeTocarPuntos;
+            const marcadoEnRuta = marcandoRuta && miRutaSet.has(p.id);
             return (
               <Pressable
                 key={p.id}
@@ -498,13 +506,14 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     borderRadius: tamPunto / 2,
                     left: pos.left - tamPunto / 2,
                     top: pos.top - tamPunto / 2,
-                    backgroundColor: p.confirmado ? colorFillCompleto : colors.surface,
-                    borderColor: p.confirmado ? colorBorderCompleto : colorBorderPendiente,
+                    backgroundColor: marcadoEnRuta ? colors.info : p.confirmado ? colorFillCompleto : colors.surface,
+                    borderColor: marcadoEnRuta ? colors.info : p.confirmado ? colorBorderCompleto : colorBorderPendiente,
                     borderWidth: pantallaCompleta ? 3 : 2,
                     shadowOpacity: cercano && enRango ? 1 : 0,
                   },
                 ]}
               >
+                {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
                 <Animated.Text
                   numberOfLines={1}
                   style={[

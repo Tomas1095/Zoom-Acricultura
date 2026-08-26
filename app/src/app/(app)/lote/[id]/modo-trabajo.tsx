@@ -89,6 +89,20 @@ export default function ModoTrabajoScreen() {
             <Text style={styles.pillMiRutaTexto}>Mi recorrido: {miRuta.length} puntos</Text>
           </View>
         )}
+        {vistaModificada && (
+          <Pressable
+            style={styles.botonVolverMarcha}
+            onPress={() => {
+              mapaRef.current?.restablecer();
+              setVistaModificada(false);
+            }}
+          >
+            <Compass size={13} color={colors.surface} />
+            <Text style={styles.botonVolverMarchaTexto}>
+              {gps.headingDisponible ? "Volver a mi marcha" : "Volver al norte"}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {/* Zoom con botones fijos, no pellizcando — como los botones físicos
@@ -102,21 +116,6 @@ export default function ModoTrabajoScreen() {
           <Minus size={20} color={colors.text} />
         </Pressable>
       </View>
-
-      {vistaModificada && (
-        <Pressable
-          style={styles.botonVolverMarcha}
-          onPress={() => {
-            mapaRef.current?.restablecer();
-            setVistaModificada(false);
-          }}
-        >
-          <Compass size={13} color={colors.surface} />
-          <Text style={styles.botonVolverMarchaTexto}>
-            {gps.headingDisponible ? "Volver a mi marcha" : "Volver al norte"}
-          </Text>
-        </Pressable>
-      )}
 
       {puntoCercano && (
         <View style={[styles.tarjetaDistancia, { borderColor: enRango ? colors.primary : colors.warning }]}>
@@ -171,9 +170,6 @@ const styles = StyleSheet.create({
   botonZoom: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   rockerZoomSeparador: { height: 1, backgroundColor: colors.border },
   botonVolverMarcha: {
-    position: "absolute",
-    top: 106,
-    right: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,

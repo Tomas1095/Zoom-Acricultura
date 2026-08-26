@@ -59,6 +59,17 @@ export function useMiRuta(loteId: string, usuarioId: string | undefined) {
     });
   }
 
+  function borrarTodo() {
+    setPidiendoEditar(false);
+    setModoMarcarRuta(false);
+    setRutaConfirmada(false);
+    setMiRuta([]);
+    if (usuarioId) {
+      guardarMiRuta(loteId, usuarioId, []);
+      guardarRutaConfirmada(loteId, usuarioId, false);
+    }
+  }
+
   return {
     miRuta,
     rutaConfirmada,
@@ -68,5 +79,6 @@ export function useMiRuta(loteId: string, usuarioId: string | undefined) {
     alternarPunto,
     empezarAMarcar,
     terminarDeMarcar,
+    borrarTodo,
   };
 }

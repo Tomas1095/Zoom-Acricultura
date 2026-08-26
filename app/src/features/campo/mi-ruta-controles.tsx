@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Check, Pencil } from "lucide-react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Check, Pencil, Trash2 } from "lucide-react-native";
 
 import { colors } from "@/theme/colors";
 
@@ -13,6 +13,7 @@ interface MiRutaControlesProps {
   onPedirEditar: () => void;
   onConfirmarEditar: () => void;
   onCancelarEditar: () => void;
+  onBorrarTodo: () => void;
 }
 
 /** Controles del recorrido personal — portado de `miRutaRow` del
@@ -28,7 +29,15 @@ export function MiRutaControles({
   onPedirEditar,
   onConfirmarEditar,
   onCancelarEditar,
+  onBorrarTodo,
 }: MiRutaControlesProps) {
+  function pedirBorrarTodo() {
+    Alert.alert("¿Borrar todo el recorrido?", "Se van a borrar los puntos marcados. No se puede deshacer.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Borrar todo", style: "destructive", onPress: onBorrarTodo },
+    ]);
+  }
+
   return (
     <View style={styles.fila}>
       {modoMarcarRuta ? (
@@ -50,6 +59,10 @@ export function MiRutaControles({
             </Pressable>
             <Pressable onPress={onCancelarEditar}>
               <Text style={styles.confirmNo}>No</Text>
+            </Pressable>
+            <Pressable style={styles.borrarTodoBtn} onPress={pedirBorrarTodo}>
+              <Trash2 size={12} color={colors.danger} />
+              <Text style={styles.borrarTodoTexto}>Borrar todo</Text>
             </Pressable>
           </View>
         ) : (
@@ -103,9 +116,11 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   pillConfirmadaTexto: { fontSize: 12, fontWeight: "700", color: colors.primaryDark },
-  confirmFila: { flexDirection: "row", alignItems: "center", gap: 10 },
+  confirmFila: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
   confirmTexto: { fontSize: 12, color: colors.text, fontWeight: "600" },
   confirmSi: { fontSize: 12, fontWeight: "800", color: colors.primary },
   confirmNo: { fontSize: 12, fontWeight: "800", color: colors.danger },
+  borrarTodoBtn: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: "auto" },
+  borrarTodoTexto: { fontSize: 11.5, fontWeight: "700", color: colors.danger },
   contador: { fontSize: 11, color: colors.textMuted, marginLeft: "auto" },
 });
