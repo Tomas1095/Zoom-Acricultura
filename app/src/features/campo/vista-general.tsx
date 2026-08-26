@@ -8,9 +8,11 @@ import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
+import { useMiRuta } from "./usar-mi-ruta";
 import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "./mapa-campo";
 import { ObservacionesPanel } from "./observaciones-panel";
 import { CerrarCampanaBoton } from "./cerrar-campana-boton";
+import { MiRutaControles } from "./mi-ruta-controles";
 
 const FIT_ALTO = 460;
 
@@ -43,6 +45,7 @@ export function VistaGeneral({ lote, campanaViendo, puedeMostrarCerrarCampana, o
   const { width } = useWindowDimensions();
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
+  const miRutaHook = useMiRuta(lote.id, usuario?.id);
 
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>
@@ -95,6 +98,23 @@ export function VistaGeneral({ lote, campanaViendo, puedeMostrarCerrarCampana, o
         )}
       </View>
 
+      {viendoActual && (
+        <MiRutaControles
+          miRuta={miRutaHook.miRuta}
+          rutaConfirmada={miRutaHook.rutaConfirmada}
+          modoMarcarRuta={miRutaHook.modoMarcarRuta}
+          pidiendoEditar={miRutaHook.pidiendoEditar}
+          onEmpezarAMarcar={miRutaHook.empezarAMarcar}
+          onTerminarDeMarcar={miRutaHook.terminarDeMarcar}
+          onPedirEditar={() => miRutaHook.setPidiendoEditar(true)}
+          onConfirmarEditar={() => {
+            miRutaHook.setPidiendoEditar(false);
+            miRutaHook.empezarAMarcar();
+          }}
+          onCancelarEditar={() => miRutaHook.setPidiendoEditar(false)}
+        />
+      )}
+
       <MapaCampo
         ref={mapaRef}
         puntos={puntosMapa}
@@ -106,6 +126,9 @@ export function VistaGeneral({ lote, campanaViendo, puedeMostrarCerrarCampana, o
         pantallaCompleta={false}
         puedeTocarPuntos={puedeTocarPuntos}
         onTapPunto={(id) => router.push(`/(app)/lote/${lote.id}/punto/${id}`)}
+        miRuta={viendoActual ? miRutaHook.miRuta : undefined}
+        modoMarcarRuta={viendoActual && miRutaHook.modoMarcarRuta}
+        onTogglePuntoRuta={miRutaHook.alternarPunto}
         ancho={anchoMapa}
         alto={FIT_ALTO}
         onInteraccion={setVistaModificada}

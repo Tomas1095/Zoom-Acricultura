@@ -53,6 +53,16 @@ interface MapaCampoProps {
   pantallaCompleta: boolean;
   puedeTocarPuntos: boolean;
   onTapPunto: (id: string) => void;
+  /** Recorrido personal (ayuda memoria) — portado de `miRuta` del
+   * prototipo: los ids de los puntos, en el orden en que se van a
+   * recorrer. Solo se dibuja la línea (celeste, entre esos puntos en ese
+   * orden); marcarlo/editarlo es siempre desde vista general (ver
+   * `modoMarcarRuta`), en modo trabajo es de solo lectura. */
+  miRuta?: string[];
+  /** Solo tiene efecto en vista general — mientras está en true, tocar un
+   * punto lo agrega/saca del recorrido en vez de abrir su carga de datos. */
+  modoMarcarRuta?: boolean;
+  onTogglePuntoRuta?: (id: string) => void;
   ancho: number;
   alto: number;
   /** Avisa cuando el mapa deja de estar en su posición original (zoom 1x,
@@ -92,6 +102,9 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     pantallaCompleta,
     puedeTocarPuntos,
     onTapPunto,
+    miRuta,
+    modoMarcarRuta,
+    onTogglePuntoRuta,
     ancho,
     alto,
     onInteraccion,
@@ -322,6 +335,10 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
       : "";
 
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
+  const miRutaPx = (miRuta ?? [])
+    .map((id) => puntos.find((p) => p.id === id))
+    .filter((p): p is PuntoMapa => !!p)
+    .map((p) => toPx(p.x, p.y));
 
   return (
     <View
@@ -367,6 +384,29 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                   />
                 );
               })}
+
+            {/* Recorrido personal — vista general nomás (en modo trabajo se
+                dibuja con vistas comunes más abajo, mismo motivo que el
+                perímetro: SVG con la rotación grande de seguir rumbo no
+                dibuja bien todos los tramos). */}
+            {!pantallaCompleta &&
+              miRutaPx.length > 1 &&
+              miRutaPx.slice(1).map((b, i) => {
+                const a = miRutaPx[i];
+                return (
+                  <Line
+                    key={`ruta-${i}`}
+                    x1={a.left}
+                    y1={a.top}
+                    x2={b.left}
+                    y2={b.top}
+                    stroke={colors.info}
+                    strokeWidth={2.5}
+                    strokeDasharray="7 6"
+                    strokeLinecap="round"
+                  />
+                );
+              })}
           </Svg>
 
           {/* Modo trabajo: el contorno se dibuja con vistas comunes (un
@@ -402,6 +442,34 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               );
             })}
 
+          {/* Recorrido personal en modo trabajo — de solo lectura (se marca
+              y edita siempre desde vista general), mismas vistas comunes
+              rotadas que el perímetro. */}
+          {pantallaCompleta &&
+            miRutaPx.length > 1 &&
+            miRutaPx.slice(1).map((b, i) => {
+              const a = miRutaPx[i];
+              const dx = b.left - a.left;
+              const dy = b.top - a.top;
+              const longitud = Math.hypot(dx, dy);
+              const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
+              const grosor = 3;
+              return (
+                <View
+                  key={`ruta-${i}`}
+                  style={{
+                    position: "absolute",
+                    left: (a.left + b.left) / 2 - longitud / 2,
+                    top: (a.top + b.top) / 2 - grosor / 2,
+                    width: longitud,
+                    height: grosor,
+                    backgroundColor: colors.info,
+                    transform: [{ rotate: `${angulo}deg` }],
+                  }}
+                />
+              );
+            })}
+
           {puntos.map((p) => {
             const pos = toPx(p.x, p.y);
             const cercano = puntoCercanoId === p.id;
@@ -410,14 +478,18 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             // que muestra "Acercate al punto" / "En rango"), no bloquea el
             // toque — cualquier punto se puede cargar desde cualquier
             // distancia. Lo único que sí restringe es el rol (Monitoreador
-            // solo desde Modo trabajo, ver `puedeTocarPuntos`).
-            const tocable = puedeTocarPuntos;
+            // solo desde Modo trabajo, ver `puedeTocarPuntos`). Marcar el
+            // recorrido personal es otro permiso aparte — no depende de
+            // `puedeTocarPuntos` (un Monitoreador también puede armarse su
+            // propio recorrido, aunque no pueda cargar datos desde acá).
+            const marcandoRuta = modoMarcarRuta && !pantallaCompleta;
+            const tocable = marcandoRuta || puedeTocarPuntos;
             return (
               <Pressable
                 key={p.id}
                 disabled={!tocable}
                 hitSlop={10}
-                onPress={() => onTapPunto(p.id)}
+                onPress={() => (marcandoRuta ? onTogglePuntoRuta?.(p.id) : onTapPunto(p.id))}
                 style={[
                   styles.punto,
                   {

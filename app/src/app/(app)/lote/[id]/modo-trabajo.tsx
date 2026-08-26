@@ -1,10 +1,12 @@
-import { useMemo, useRef, useState } from "react";
-import { router, useLocalSearchParams } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { ChevronLeft, Compass, Minus, Plus } from "lucide-react-native";
+import { ChevronLeft, Compass, Minus, Pencil, Plus } from "lucide-react-native";
 import { useKeepAwake } from "expo-keep-awake";
 
 import { colors } from "@/theme/colors";
+import { useAuth } from "@/lib/auth-context";
+import { cargarMiRuta } from "@/lib/local/mi-ruta";
 import { useDatosCampo } from "@/features/campo/usar-datos-campo";
 import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "@/features/campo/mapa-campo";
 import { GpsEstadoPill } from "@/features/campo/gps-estado-pill";
@@ -16,10 +18,21 @@ import { GpsEstadoPill } from "@/features/campo/gps-estado-pill";
  * prototipo — la distancia es solo informativa, ver tarjetaDistancia). */
 export default function ModoTrabajoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { usuario } = useAuth();
   const { width, height } = useWindowDimensions();
   const { cargando, lote, puntos, cargas, gps, puntoCercano, enRango } = useDatosCampo(id);
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
+  // Recorrido personal, de solo lectura acá — se marca/edita solo desde
+  // vista general (ver usarMiRuta) — se vuelve a leer cada vez que se
+  // entra a esta pantalla, por si se editó justo antes de entrar.
+  const [miRuta, setMiRuta] = useState<string[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!usuario) return;
+      cargarMiRuta(id, usuario.id).then(setMiRuta);
+    }, [id, usuario])
+  );
 
   useKeepAwake(); // la pantalla no se apaga mientras estás caminando el lote
 
@@ -57,6 +70,7 @@ export default function ModoTrabajoScreen() {
         pantallaCompleta
         puedeTocarPuntos
         onTapPunto={(pid) => router.push(`/(app)/lote/${lote.id}/punto/${pid}`)}
+        miRuta={miRuta}
         ancho={width}
         alto={height}
         seguirRumbo
@@ -69,6 +83,12 @@ export default function ModoTrabajoScreen() {
 
       <View style={styles.pillTop}>
         <GpsEstadoPill estado={gps.estado} />
+        {miRuta.length > 0 && (
+          <View style={styles.pillMiRuta}>
+            <Pencil size={11} color={colors.surface} />
+            <Text style={styles.pillMiRutaTexto}>Mi recorrido: {miRuta.length} puntos</Text>
+          </View>
+        )}
       </View>
 
       {/* Zoom con botones fijos, no pellizcando — como los botones físicos
@@ -128,7 +148,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pillTop: { position: "absolute", top: 58, right: 16 },
+  pillTop: { position: "absolute", top: 58, right: 16, alignItems: "flex-end", gap: 6 },
+  pillMiRuta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.info,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  pillMiRutaTexto: { color: colors.surface, fontWeight: "700", fontSize: 10.5 },
   rockerZoom: {
     position: "absolute",
     top: "50%",
