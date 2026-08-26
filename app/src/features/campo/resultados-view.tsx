@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 
 import { NIVEL_COLORES, rangosDe, type Plaga } from "@/lib/geo/densidad";
+import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
@@ -14,10 +15,10 @@ const GAP_RECUADRO = 12;
 type SubTab = "mapas" | "datos";
 
 /** Pestaña "Resultados" — portada de `DensidadView` del prototipo: el mapa
- * de densidad poblacional (Voronoi recortado al perímetro real) tanto de
- * Bichos bolita como de Babosas, más la sub-pestaña "Datos" (tabla con
- * todos los puntos). Sin imagen satelital todavía (ver nota en
- * lib/geo/densidad.ts). Quién puede ver esta pestaña lo decide LoteTabs, no
+ * de densidad poblacional (Voronoi recortado al perímetro real, con la
+ * imagen satelital de fondo — ver lib/geo/satelital.ts) tanto de Bichos
+ * bolita como de Babosas, más la sub-pestaña "Datos" (tabla con todos los
+ * puntos). Quién puede ver esta pestaña lo decide LoteTabs, no
  * este componente — igual que el selector de historial de campañas, que
  * vive en LoteTabs (arriba de Grilla/Resultados/Salidas, compartido entre
  * las dos) y llega acá como prop.
@@ -52,6 +53,7 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
   );
 
   const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
+  const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
 
   const anchoMapa = cajaSize.ancho - PAD_RECUADRO * 2;
   const altoMapa = cajaSize.alto - PAD_RECUADRO * 2 - GAP_RECUADRO - altoLeyenda;
@@ -119,6 +121,7 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
                 nivelColores={NIVEL_COLORES}
                 ancho={anchoMapa}
                 alto={altoMapa}
+                origen={origen}
               />
             )}
 

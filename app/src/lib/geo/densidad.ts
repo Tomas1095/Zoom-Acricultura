@@ -3,9 +3,10 @@
 // más cercana a este punto que a cualquier otro"), recortado al perímetro
 // real del lote, coloreado según el conteo de cada punto llevado a m².
 //
-// No se porta la imagen satelital (necesitaría contratar un proveedor de
-// mapas con API key — pendiente de decidir con el usuario) ni `maxVal`
-// (llegaba como prop a DensidadView del prototipo pero nunca se usaba ahí).
+// La imagen satelital de fondo va aparte, en lib/geo/satelital.ts (Esri
+// World Imagery, gratuita, sin API key — mismo servicio que ya usaba el
+// prototipo). No se porta `maxVal` (llegaba como prop a DensidadView del
+// prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
 import type { XY } from "./geometria";
