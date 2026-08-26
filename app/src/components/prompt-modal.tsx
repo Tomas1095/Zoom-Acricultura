@@ -3,6 +3,16 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 import { colors } from "@/theme/colors";
 
+/** Esperar esto DESPUÉS de cerrar el modal (poner `visible={false}`) y ANTES
+ * de disparar algo que abra su propia ventana nativa (la hoja de compartir,
+ * un selector de archivos, etc.) — en iOS, presentar una encima de la otra
+ * sin esta pausa hace que la segunda no llegue a aparecer, sin tirar ningún
+ * error (choque de animaciones de UIKit). Quien use `onConfirmar` para
+ * disparar algo así tiene que awaitear esto primero. */
+export function esperarCierreModal(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 400));
+}
+
 export interface PromptField {
   key: string;
   label: string;

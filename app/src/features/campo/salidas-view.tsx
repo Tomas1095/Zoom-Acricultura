@@ -20,7 +20,7 @@ import { exportarGPX, exportarKML } from "@/lib/exportar/manchones";
 import { formatearHectareas } from "@/lib/format";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
-import { PromptModal } from "@/components/prompt-modal";
+import { esperarCierreModal, PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaManchoneo } from "./mapa-manchoneo";
 
@@ -153,6 +153,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     setPedidoExport(null);
     if (!pedido) return;
     setExportando(pedido);
+    await esperarCierreModal();
     try {
       if (pedido === "pdf") {
         const html = construirInformeHtml({ loteNombre: lote.nombre, establecimientoNombre, situacion, zonas });

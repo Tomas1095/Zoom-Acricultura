@@ -8,7 +8,7 @@ import { puedeAdministrarLotes } from "@/lib/roles";
 import { exportarPuntos } from "@/lib/exportar/puntos";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
-import { PromptModal } from "@/components/prompt-modal";
+import { esperarCierreModal, PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { useMiRuta } from "./usar-mi-ruta";
 import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "./mapa-campo";
@@ -75,12 +75,13 @@ export function VistaGeneral({
   const puedeExportarGrilla = !!usuario && puedeAdministrarLotes(usuario.rol);
   const anchoMapa = Math.min(width - 32, 400);
 
-  const nombreGrillaDefault = `Puntos Lote ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+  const nombreGrillaDefault = `Puntos Lote ${lote.nombre}${establecimientoNombre ? " Establecimiento " + establecimientoNombre : ""}`;
 
   async function confirmarExportarGrilla(valores: Record<string, string>) {
     const formato = formatoAExportar;
     setFormatoAExportar(null);
     if (!formato || !origen) return;
+    await esperarCierreModal();
     try {
       await exportarPuntos(
         puntos.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y })),
@@ -104,42 +105,43 @@ export function VistaGeneral({
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.accionesFila}>
-        {vistaModificada && (
-          <Pressable
-            style={styles.botonRestablecer}
-            onPress={() => {
-              mapaRef.current?.restablecer();
-              setVistaModificada(false);
-            }}
-          >
-            <RotateCcw size={13} color={colors.primaryDark} />
-            <Text style={styles.botonRestablecerTexto}>Restablecer</Text>
-          </Pressable>
+        {puedeExportarGrilla && puntos.length > 0 && (
+          <View style={styles.exportarGrillaFila}>
+            <Text style={styles.exportarGrillaTexto}>Exportar grilla:</Text>
+            <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("kml")}>
+              <Download size={12} color={colors.primaryDark} />
+              <Text style={styles.botonExportarGrillaTexto}>KML</Text>
+            </Pressable>
+            <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("gpx")}>
+              <Download size={12} color={colors.primaryDark} />
+              <Text style={styles.botonExportarGrillaTexto}>GPX</Text>
+            </Pressable>
+          </View>
         )}
-        {viendoActual && (
-          <Pressable
-            style={styles.botonModoTrabajo}
-            onPress={() => router.push(`/(app)/lote/${lote.id}/modo-trabajo`)}
-          >
-            <Maximize2 size={14} color={colors.surface} />
-            <Text style={styles.botonModoTrabajoTexto}>Modo trabajo</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {puedeExportarGrilla && puntos.length > 0 && (
-        <View style={styles.exportarGrillaFila}>
-          <Text style={styles.exportarGrillaTexto}>Exportar grilla:</Text>
-          <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("kml")}>
-            <Download size={12} color={colors.primaryDark} />
-            <Text style={styles.botonExportarGrillaTexto}>KML</Text>
-          </Pressable>
-          <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("gpx")}>
-            <Download size={12} color={colors.primaryDark} />
-            <Text style={styles.botonExportarGrillaTexto}>GPX</Text>
-          </Pressable>
+        <View style={styles.accionesFilaDerecha}>
+          {vistaModificada && (
+            <Pressable
+              style={styles.botonRestablecer}
+              onPress={() => {
+                mapaRef.current?.restablecer();
+                setVistaModificada(false);
+              }}
+            >
+              <RotateCcw size={13} color={colors.primaryDark} />
+              <Text style={styles.botonRestablecerTexto}>Restablecer</Text>
+            </Pressable>
+          )}
+          {viendoActual && (
+            <Pressable
+              style={styles.botonModoTrabajo}
+              onPress={() => router.push(`/(app)/lote/${lote.id}/modo-trabajo`)}
+            >
+              <Maximize2 size={14} color={colors.surface} />
+              <Text style={styles.botonModoTrabajoTexto}>Modo trabajo</Text>
+            </Pressable>
+          )}
         </View>
-      )}
+      </View>
 
       <PromptModal
         visible={formatoAExportar !== null}
@@ -204,7 +206,15 @@ export function VistaGeneral({
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
   container: { padding: 16, gap: 12, alignItems: "center" },
-  accionesFila: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, width: "100%" },
+  accionesFila: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    width: "100%",
+  },
+  accionesFilaDerecha: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: "auto" },
   botonRestablecer: {
     flexDirection: "row",
     alignItems: "center",
@@ -227,7 +237,7 @@ const styles = StyleSheet.create({
   },
   botonModoTrabajoTexto: { color: colors.surface, fontWeight: "700", fontSize: 12 },
   aviso: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
-  exportarGrillaFila: { flexDirection: "row", alignItems: "center", gap: 8, width: "100%" },
+  exportarGrillaFila: { flexDirection: "row", alignItems: "center", gap: 8 },
   exportarGrillaTexto: { fontSize: 12, fontWeight: "600", color: colors.textMuted },
   botonExportarGrilla: {
     flexDirection: "row",
