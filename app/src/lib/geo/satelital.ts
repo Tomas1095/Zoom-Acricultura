@@ -1,30 +1,26 @@
-// Imagen satelital de fondo para el mapa de densidad — portado tal cual de
-// `construirUrlSatelital`/`lonLatAWebMercator` del prototipo. Usa el
-// servicio público "World Imagery" de Esri (server.arcgisonline.com):
-// gratuito, sin cuenta ni API key — es el mismo que ya venía probado y
-// funcionando en el prototipo. Si en algún momento el volumen de uso real
-// lo justifica, se puede evaluar pasar a un plan pago con más garantías de
-// disponibilidad, pero no hace falta para arrancar.
+// Imagen satelital de fondo para el mapa de densidad. Usa el servicio de
+// mapas estáticos de Bing Maps ("Aerial", sin etiquetas) en vez del
+// World_Imagery gratuito de Esri que se usaba antes: probamos con datos
+// reales que Esri devuelve buena imagen pero mal georreferenciada en zonas
+// rurales de Argentina (el polígono del lote no coincidía con la foto,
+// aunque el recorte pedido era matemáticamente correcto — confirmado
+// ubicando el origen real del lote en Google Maps). Bing pide directo el
+// recorte en lat/lon geográficas (no hace falta reproyectar a Web
+// Mercator nosotros, lo resuelve el servicio) y en la práctica viene mejor
+// alineado.
+//
+// A diferencia de Esri, esto SÍ necesita una API key (gratuita, sin
+// tarjeta para el tier básico) — ver EXPO_PUBLIC_BING_MAPS_KEY en
+// .env.example. Sin la key configurada, `construirUrlSatelital` devuelve
+// `null` y el mapa de densidad se ve igual que sin foto de fondo (fondo
+// claro liso) — no rompe nada.
 
-import { xyALatLon, type LatLon, type XY } from "./geometria";
+import { xyALatLon, type LatLon } from "./geometria";
 
-const RADIO_TIERRA_M = 6378137; // WGS84
-
-/** Lon/lat (grados) -> Web Mercator (metros) — la proyección que usa
- * internamente el servicio de Esri (y casi todo servicio de mapas web,
- * incluido Google Maps). Pedir la imagen directo en Web Mercator evita que
- * el servidor tenga que reproyectar (lo que distorsionaría la forma del
- * recorte, no sería una simple rotación). */
-function lonLatAWebMercator(lon: number, lat: number): XY {
-  const x = (RADIO_TIERRA_M * lon * Math.PI) / 180;
-  const y = RADIO_TIERRA_M * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-  return { x, y };
-}
-
-/** Arma la URL de la imagen satelital calculando el recorte exacto que
- * hace falta para que encaje pixel a pixel con lo que se dibuja encima
- * (mismo `origen`, `minX`/`minY`/`escala`/tamaño que usa el resto del
- * mapa). */
+/** Arma la URL de la imagen satelital calculando el recorte exacto que hace
+ * falta para que encaje pixel a pixel con lo que se dibuja encima (mismo
+ * `origen`, `minX`/`minY`/`escala`/tamaño que usa el resto del mapa).
+ * `null` si no hay `EXPO_PUBLIC_BING_MAPS_KEY` configurada. */
 export function construirUrlSatelital(
   origen: LatLon,
   minX: number,
@@ -34,14 +30,19 @@ export function construirUrlSatelital(
   h: number,
   padIzqPx: number,
   padArribaPx: number
-): string {
+): string | null {
+  const key = process.env.EXPO_PUBLIC_BING_MAPS_KEY;
+  if (!key) return null;
+
   const nw = xyALatLon(origen, { x: minX - padIzqPx / escala, y: minY - padArribaPx / escala });
   const se = xyALatLon(origen, { x: minX + (w - padIzqPx) / escala, y: minY + (h - padArribaPx) / escala });
-  const nwM = lonLatAWebMercator(nw.lon, nw.lat);
-  const seM = lonLatAWebMercator(se.lon, se.lat);
-  const bbox = `${nwM.x},${seM.y},${seM.x},${nwM.y}`;
+  // mapArea: "sur,oeste,norte,este" en grados — NO es la esquina de la
+  // imagen en sí (Bing reproyecta y ajusta el recorte real puertas adentro),
+  // solo el área geográfica que tiene que quedar visible dentro del recuadro.
+  const mapArea = `${se.lat},${nw.lon},${nw.lat},${se.lon}`;
   return (
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export" +
-    `?bbox=${bbox}&bboxSR=102100&imageSR=102100&size=${Math.max(1, Math.round(w))},${Math.max(1, Math.round(h))}&format=png32&f=image`
+    "https://dev.virtualearth.net/REST/v1/Imagery/Map/Aerial" +
+    `?mapArea=${mapArea}&mapSize=${Math.max(1, Math.round(w))},${Math.max(1, Math.round(h))}` +
+    `&format=png&key=${encodeURIComponent(key)}`
   );
 }
