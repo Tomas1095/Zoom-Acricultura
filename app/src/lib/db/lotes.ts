@@ -79,6 +79,19 @@ export async function editarLote(id: string, nombre: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Cierra la campaña vigente del lote y pasa a la siguiente — a diferencia
+ * del prototipo (que archivaba una "foto" del grid en `historialCampanas`),
+ * acá no hace falta copiar nada: las cargas ya quedan tageadas con su
+ * `campana` en la tabla `cargas` (ver types/domain.ts), así que la vieja
+ * campaña sigue accesible tal cual desde el selector de historial apenas
+ * cambia `campanaActual`. La grilla de puntos tampoco cambia — arranca en
+ * blanco para la campaña nueva porque ninguna carga tiene todavía esa
+ * `campana`, no porque se haya borrado nada. */
+export async function cerrarCampanaDeLote(id: string, siguienteCampana: string): Promise<void> {
+  const { error } = await supabase.from("lotes").update({ campana_actual: siguienteCampana }).eq("id", id);
+  if (error) throw error;
+}
+
 export async function eliminarLote(id: string): Promise<void> {
   const { error } = await supabase.from("lotes").delete().eq("id", id);
   if (error) throw error;

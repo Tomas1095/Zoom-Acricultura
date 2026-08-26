@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 
-import { fetchCampanasDeLote } from "@/lib/db/puntos";
 import { NIVEL_COLORES, rangosDe, type Plaga } from "@/lib/geo/densidad";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaDensidad, type PuntoDensidad } from "./mapa-densidad";
-import { CampanaSelector } from "./campana-selector";
 import { TablaDatosPuntos } from "./tabla-datos-puntos";
 
 const PAD_RECUADRO = 14;
@@ -18,11 +16,11 @@ type SubTab = "mapas" | "datos";
 /** Pestaña "Resultados" — portada de `DensidadView` del prototipo: el mapa
  * de densidad poblacional (Voronoi recortado al perímetro real) tanto de
  * Bichos bolita como de Babosas, más la sub-pestaña "Datos" (tabla con
- * todos los puntos) y el selector de campaña para ver resultados de
- * campañas anteriores (portado de `historialBanner`/combo de campaña del
- * prototipo). Sin imagen satelital todavía (ver nota en
+ * todos los puntos). Sin imagen satelital todavía (ver nota en
  * lib/geo/densidad.ts). Quién puede ver esta pestaña lo decide LoteTabs, no
- * este componente.
+ * este componente — igual que el selector de historial de campañas, que
+ * vive en LoteTabs (arriba de Grilla/Resultados/Salidas, compartido entre
+ * las dos) y llega acá como prop.
  *
  * El mapa y la leyenda comparten un mismo marco fino (mismo verde claro de
  * fondo que el resto de la app, ver `colors.background`) — por eso
@@ -31,23 +29,13 @@ type SubTab = "mapas" | "datos";
  * "Mapas" tiene que entrar en una pantalla fija, sin scroll (no tiene
  * sentido scrollear un mapa acá) — por eso el marco usa `flex: 1` y el mapa
  * se mide con `onLayout`. "Datos" sí scrollea — es una tabla, no un mapa. */
-export function ResultadosView({ lote }: { lote: Lote }) {
+export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaViendo: string }) {
   const [subTab, setSubTab] = useState<SubTab>("mapas");
   const [plaga, setPlaga] = useState<Plaga>("bicho");
-  const [campanas, setCampanas] = useState<string[]>([lote.campanaActual]);
-  const [campanaViendo, setCampanaViendo] = useState(lote.campanaActual);
   const [cajaSize, setCajaSize] = useState({ ancho: 0, alto: 0 });
   const [altoLeyenda, setAltoLeyenda] = useState(0);
 
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
-
-  useEffect(() => {
-    fetchCampanasDeLote(lote.id)
-      .then((historicas) => {
-        setCampanas(Array.from(new Set([lote.campanaActual, ...historicas])).sort().reverse());
-      })
-      .catch(() => {}); // si falla, se queda solo con la actual — no rompe la pantalla
-  }, [lote.id, lote.campanaActual]);
 
   const rangos = rangosDe(plaga);
   const etiqueta = plaga === "bicho" ? "Nº BB/m²" : "Nº Babosas/m²";
@@ -84,13 +72,6 @@ export function ResultadosView({ lote }: { lote: Lote }) {
 
   return (
     <View style={styles.container}>
-      <CampanaSelector
-        campanas={campanas}
-        campanaActual={lote.campanaActual}
-        campanaViendo={campanaViendo}
-        onCambiar={setCampanaViendo}
-      />
-
       <View style={styles.subTabs}>
         <Text
           onPress={() => setSubTab("mapas")}

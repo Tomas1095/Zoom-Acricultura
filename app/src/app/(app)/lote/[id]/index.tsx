@@ -58,7 +58,7 @@ export default function LoteScreen() {
           // pestañas — mismo criterio que el prototipo: "Resultados"/
           // "Salidas" no son para ese rol (ver CONTEXTO.md).
           usuario && puedeAdministrarLotes(usuario.rol) ? (
-            <LoteTabs lote={lote} />
+            <LoteTabs lote={lote} onLoteActualizado={refrescar} />
           ) : (
             <VistaGeneral lote={lote} />
           )

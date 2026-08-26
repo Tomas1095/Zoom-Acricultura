@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useAuth } from "@/lib/auth-context";
+import { puedeCerrarCampana } from "@/lib/roles";
+import { fetchCampanasDeLote } from "@/lib/db/puntos";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { VistaGeneral } from "./vista-general";
 import { ResultadosView } from "./resultados-view";
 import { SalidasView } from "./salidas-view";
+import { CampanaSelector } from "./campana-selector";
 
 type Tab = "grilla" | "resultados" | "salidas";
 
@@ -15,14 +19,55 @@ const TABS: Array<{ id: Tab; etiqueta: string }> = [
   { id: "salidas", etiqueta: "Salidas" },
 ];
 
+interface LoteTabsProps {
+  lote: Lote;
+  /** Refresca el lote en el padre (lote/[id]/index.tsx) — hace falta
+   * después de cerrar una campaña, porque cambia `lote.campanaActual`. */
+  onLoteActualizado: () => void;
+}
+
 /** Portado de las pestañas Grilla/Resultados/Salidas del prototipo — solo
  * las ven los roles que pueden administrar lotes (ver LoteScreen, que
- * muestra `VistaGeneral` directo, sin pestañas, para el Monitoreador). */
-export function LoteTabs({ lote }: { lote: Lote }) {
+ * muestra `VistaGeneral` directo, sin pestañas, para el Monitoreador).
+ *
+ * El selector de campaña vive acá, arriba de las 3 pestañas — mismo lugar
+ * que el combo de campaña del prototipo — y se comparte entre Grilla y
+ * Resultados (las dos ven la misma campaña elegida a la vez, no una por
+ * pestaña). Solo Socio Fundador/Gerente lo ven (`puedeCerrarCampana`,
+ * mismo criterio que el prototipo: ahí tampoco lo veía Encargado). */
+export function LoteTabs({ lote, onLoteActualizado }: LoteTabsProps) {
+  const { usuario } = useAuth();
   const [tab, setTab] = useState<Tab>("grilla");
+  const [campanas, setCampanas] = useState<string[]>([lote.campanaActual]);
+  const [campanaViendo, setCampanaViendo] = useState(lote.campanaActual);
+
+  const puedeVerHistorial = !!usuario && puedeCerrarCampana(usuario.rol);
+
+  // Se resetea a la campaña vigente cada vez que cambia (por ejemplo, justo
+  // después de cerrar una) — y de paso refresca la lista de campañas con
+  // historial, que también cambió.
+  useEffect(() => {
+    setCampanaViendo(lote.campanaActual);
+    fetchCampanasDeLote(lote.id)
+      .then((historicas) => {
+        setCampanas(Array.from(new Set([lote.campanaActual, ...historicas])).sort().reverse());
+      })
+      .catch(() => {}); // si falla, se queda solo con la actual — no rompe la pantalla
+  }, [lote.id, lote.campanaActual]);
 
   return (
     <View style={styles.container}>
+      {puedeVerHistorial && (
+        <View style={styles.campanaFila}>
+          <CampanaSelector
+            campanas={campanas}
+            campanaActual={lote.campanaActual}
+            campanaViendo={campanaViendo}
+            onCambiar={setCampanaViendo}
+          />
+        </View>
+      )}
+
       <View style={styles.tabsRow}>
         {TABS.map((t) => (
           <Pressable
@@ -36,8 +81,15 @@ export function LoteTabs({ lote }: { lote: Lote }) {
       </View>
 
       <View style={styles.contenido}>
-        {tab === "grilla" && <VistaGeneral lote={lote} />}
-        {tab === "resultados" && <ResultadosView lote={lote} />}
+        {tab === "grilla" && (
+          <VistaGeneral
+            lote={lote}
+            campanaViendo={campanaViendo}
+            puedeMostrarCerrarCampana={puedeVerHistorial}
+            onCampanaCerrada={onLoteActualizado}
+          />
+        )}
+        {tab === "resultados" && <ResultadosView lote={lote} campanaViendo={campanaViendo} />}
         {tab === "salidas" && <SalidasView />}
       </View>
     </View>
@@ -46,6 +98,7 @@ export function LoteTabs({ lote }: { lote: Lote }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  campanaFila: { alignItems: "center", paddingHorizontal: 16, paddingTop: 12 },
   tabsRow: {
     flexDirection: "row",
     backgroundColor: colors.surface,

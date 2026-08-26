@@ -26,3 +26,13 @@ export function puedeAdministrarLotes(rol: Rol): boolean {
 export function puedeGestionarEquipo(rol: Rol): boolean {
   return rol === "socio_fundador" || rol === "socio_gerente";
 }
+
+/** Ver/elegir el historial de campañas y cerrar la campaña vigente — mismo
+ * criterio que el prototipo (`role === "jefe"`, ahí Encargado no entraba):
+ * ni el selector de campaña ni "Cerrar campaña" son cosa de Encargado, es
+ * una decisión de los socios. Mismo conjunto de roles que
+ * `puedeGestionarEquipo` — nombre aparte porque son permisos distintos que
+ * hoy coinciden, no necesariamente van a seguir coincidiendo. */
+export function puedeCerrarCampana(rol: Rol): boolean {
+  return rol === "socio_fundador" || rol === "socio_gerente";
+}
