@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, View } from "react-native";
 import Svg, { Line, Polygon, Text as TextoSvg } from "react-native-svg";
 
 import { calcularCeldasDensidad, elegirEscalaBarra, type RangoDensidad } from "@/lib/geo/densidad";
-import type { LatLon, XY } from "@/lib/geo/geometria";
+import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
 import { construirUrlSatelital } from "@/lib/geo/satelital";
 import { colors } from "@/theme/colors";
 
@@ -64,6 +64,25 @@ export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, a
 
   const satUrl = origen ? construirUrlSatelital(origen, minX, minY, escala, ancho, alto, PAD, PAD) : null;
 
+  // Diagnóstico temporal: si la foto no calza con el perímetro, comparar
+  // estas coordenadas (las de las esquinas del recorte pedido) contra el
+  // lote real en Google Maps deja ver si el problema es el cálculo de la
+  // URL (esquinas mal puestas) o la imagen en sí (Esri desalineada en esa
+  // zona). Sacar este log una vez resuelto.
+  useEffect(() => {
+    if (!__DEV__ || !origen) return;
+    const noroeste = xyALatLon(origen, { x: minX - PAD / escala, y: minY - PAD / escala });
+    const sureste = xyALatLon(origen, { x: minX + (ancho - PAD) / escala, y: minY + (alto - PAD) / escala });
+    console.log(
+      "[satelital] origen:",
+      origen,
+      "esquina NO (arriba-izq de la foto):",
+      noroeste,
+      "esquina SE (abajo-der de la foto):",
+      sureste
+    );
+  }, [origen, minX, minY, escala, ancho, alto]);
+
   const celdas = useMemo(() => {
     try {
       return calcularCeldasDensidad(puntos, perimetro, rangos);
@@ -88,6 +107,7 @@ export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, a
       {satUrl && satelitalOk && (
         <Image
           source={{ uri: satUrl }}
+          resizeMode="stretch"
           style={{ position: "absolute", top: 0, left: 0, width: ancho, height: alto }}
           onError={() => setSatelitalOk(false)}
         />
