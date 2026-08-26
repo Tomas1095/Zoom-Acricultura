@@ -117,7 +117,7 @@ export function LoteTabs({ lote, onLoteActualizado }: LoteTabsProps) {
           />
         )}
         {tab === "resultados" && <ResultadosView lote={lote} campanaViendo={campanaViendo} />}
-        {tab === "salidas" && <SalidasView />}
+        {tab === "salidas" && <SalidasView lote={lote} campanaViendo={campanaViendo} />}
       </View>
     </View>
   );
