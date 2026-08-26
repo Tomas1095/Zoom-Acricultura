@@ -22,6 +22,7 @@ const TABS: Array<{ id: Tab; etiqueta: string }> = [
 
 interface LoteTabsProps {
   lote: Lote;
+  establecimientoNombre?: string;
   /** Refresca el lote en el padre (lote/[id]/index.tsx) — hace falta
    * después de cerrar una campaña, porque cambia `lote.campanaActual`. */
   onLoteActualizado: () => void;
@@ -36,7 +37,7 @@ interface LoteTabsProps {
  * Resultados (las dos ven la misma campaña elegida a la vez, no una por
  * pestaña). Solo Socio Fundador/Gerente lo ven (`puedeCerrarCampana`,
  * mismo criterio que el prototipo: ahí tampoco lo veía Encargado). */
-export function LoteTabs({ lote, onLoteActualizado }: LoteTabsProps) {
+export function LoteTabs({ lote, establecimientoNombre, onLoteActualizado }: LoteTabsProps) {
   const { usuario } = useAuth();
   const [tab, setTab] = useState<Tab>("grilla");
   const [campanas, setCampanas] = useState<string[]>([lote.campanaActual]);
@@ -111,13 +112,16 @@ export function LoteTabs({ lote, onLoteActualizado }: LoteTabsProps) {
         {tab === "grilla" && (
           <VistaGeneral
             lote={lote}
+            establecimientoNombre={establecimientoNombre}
             campanaViendo={campanaViendo}
             puedeMostrarCerrarCampana={puedeVerHistorial}
             onCampanaCerrada={onLoteActualizado}
           />
         )}
         {tab === "resultados" && <ResultadosView lote={lote} campanaViendo={campanaViendo} />}
-        {tab === "salidas" && <SalidasView lote={lote} campanaViendo={campanaViendo} />}
+        {tab === "salidas" && (
+          <SalidasView lote={lote} establecimientoNombre={establecimientoNombre} campanaViendo={campanaViendo} />
+        )}
       </View>
     </View>
   );

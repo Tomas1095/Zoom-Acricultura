@@ -24,10 +24,13 @@ export default function LoteScreen() {
   const { usuario } = useAuth();
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
+  const [establecimientoNombre, setEstablecimientoNombre] = useState<string | undefined>(undefined);
 
   const refrescar = useCallback(async () => {
     const arbol = await db.fetchArbol();
-    setLote(arbol.lotes.find((l) => l.id === id) ?? null);
+    const l = arbol.lotes.find((l) => l.id === id) ?? null;
+    setLote(l);
+    setEstablecimientoNombre(arbol.establecimientos.find((e) => e.id === l?.establecimientoId)?.nombre);
     setCargando(false);
   }, [id]);
 
@@ -58,9 +61,9 @@ export default function LoteScreen() {
           // pestañas — mismo criterio que el prototipo: "Resultados"/
           // "Salidas" no son para ese rol (ver CONTEXTO.md).
           usuario && puedeAdministrarLotes(usuario.rol) ? (
-            <LoteTabs lote={lote} onLoteActualizado={refrescar} />
+            <LoteTabs lote={lote} establecimientoNombre={establecimientoNombre} onLoteActualizado={refrescar} />
           ) : (
-            <VistaGeneral lote={lote} />
+            <VistaGeneral lote={lote} establecimientoNombre={establecimientoNombre} />
           )
         ) : (
           <ScrollView contentContainerStyle={styles.sinGrilla}>

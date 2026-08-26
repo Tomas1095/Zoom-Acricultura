@@ -20,15 +20,18 @@ import { exportarGPX, exportarKML } from "@/lib/exportar/manchones";
 import { formatearHectareas } from "@/lib/format";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
+import { PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaManchoneo } from "./mapa-manchoneo";
 
 const PRODUCTOS = ["Crustacicida", "Molusquicida", "Crustacicida + Molusquicida", "No aplicar"];
 
 type SubTab = "informe" | "manchoneo";
+type PedidoExport = "pdf" | "gpx" | "kml" | null;
 
 interface SalidasViewProps {
   lote: Lote;
+  establecimientoNombre?: string;
   campanaViendo: string;
 }
 
@@ -39,7 +42,7 @@ interface SalidasViewProps {
  * (mismo motivo que en Resultados, ver lib/geo/densidad.ts) y sin arrastrar
  * los vértices del manchón a mano (el prototipo lo permitía; acá por ahora
  * el polígono es siempre el calculado automático). */
-export function SalidasView({ lote, campanaViendo }: SalidasViewProps) {
+export function SalidasView({ lote, establecimientoNombre, campanaViendo }: SalidasViewProps) {
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
   const [subTab, setSubTab] = useState<SubTab>("informe");
 
@@ -110,22 +113,15 @@ export function SalidasView({ lote, campanaViendo }: SalidasViewProps) {
   }
 
   const [exportando, setExportando] = useState<"pdf" | "gpx" | "kml" | null>(null);
-
-  async function exportarPdf() {
-    setExportando("pdf");
-    try {
-      const html = construirInformeHtml({ loteNombre: lote.nombre, situacion, zonas });
-      await exportarInformePdf(html, `informe_${lote.nombre.replace(/\s+/g, "_")}`);
-    } catch (e: any) {
-      Alert.alert("No se pudo generar el PDF", e.message ?? String(e));
-    } finally {
-      setExportando(null);
-    }
-  }
+  // Qué exportación se está por hacer — mientras no sea null, el modal de
+  // nombre está abierto, prellenado con el nombre por defecto de esa
+  // exportación puntual (ver nombreDefaultExport). El nombre final lo
+  // confirma la persona, siempre se puede sobrescribir.
+  const [pedidoExport, setPedidoExport] = useState<PedidoExport>(null);
 
   async function compartir() {
     try {
-      await Share.share({ message: textoInformeCompartir({ loteNombre: lote.nombre, situacion, zonas }) });
+      await Share.share({ message: textoInformeCompartir({ loteNombre: lote.nombre, establecimientoNombre, situacion, zonas }) });
     } catch (e: any) {
       Alert.alert("No se pudo compartir", e.message ?? String(e));
     }
@@ -143,24 +139,31 @@ export function SalidasView({ lote, campanaViendo }: SalidasViewProps) {
   );
   const sinEstaciones = zonaAplicacion.manchones.length === 0;
 
-  async function exportarGpxHandler() {
-    setExportando("gpx");
-    try {
-      const origen = inferirOrigenDesdePuntos(puntos);
-      await exportarGPX(zonaAplicacion.manchones, lote.nombre, origen);
-    } catch (e: any) {
-      Alert.alert("No se pudo exportar el GPX", e.message ?? String(e));
-    } finally {
-      setExportando(null);
+  // Nombre por defecto de cada exportación — siempre editable desde el
+  // modal (ver onConfirmar), esto solo prellena el campo.
+  function nombreDefaultExport(pedido: PedidoExport): string {
+    if (pedido === "pdf") {
+      return `Informe monitoreo de plagas Lote ${lote.nombre}${establecimientoNombre ? " Establecimiento " + establecimientoNombre : ""}`;
     }
+    return `BAB Lote ${lote.nombre} ${zonaAplicacion.haIncluidas.toFixed(1)} Ha`;
   }
-  async function exportarKmlHandler() {
-    setExportando("kml");
+
+  async function confirmarExport(valores: Record<string, string>) {
+    const pedido = pedidoExport;
+    setPedidoExport(null);
+    if (!pedido) return;
+    setExportando(pedido);
     try {
-      const origen = inferirOrigenDesdePuntos(puntos);
-      await exportarKML(zonaAplicacion.manchones, lote.nombre, origen);
+      if (pedido === "pdf") {
+        const html = construirInformeHtml({ loteNombre: lote.nombre, establecimientoNombre, situacion, zonas });
+        await exportarInformePdf(html, valores.nombre);
+      } else {
+        const origen = inferirOrigenDesdePuntos(puntos);
+        if (pedido === "gpx") await exportarGPX(zonaAplicacion.manchones, lote.nombre, origen, valores.nombre);
+        else await exportarKML(zonaAplicacion.manchones, lote.nombre, origen, valores.nombre);
+      }
     } catch (e: any) {
-      Alert.alert("No se pudo exportar el KML", e.message ?? String(e));
+      Alert.alert(`No se pudo exportar el ${pedido.toUpperCase()}`, e.message ?? String(e));
     } finally {
       setExportando(null);
     }
@@ -237,7 +240,7 @@ export function SalidasView({ lote, campanaViendo }: SalidasViewProps) {
             </Pressable>
           </View>
 
-          <Pressable style={styles.botonPdf} onPress={exportarPdf} disabled={exportando !== null}>
+          <Pressable style={styles.botonPdf} onPress={() => setPedidoExport("pdf")} disabled={exportando !== null}>
             {exportando === "pdf" ? (
               <ActivityIndicator color={colors.surface} size="small" />
             ) : (
@@ -281,7 +284,7 @@ export function SalidasView({ lote, campanaViendo }: SalidasViewProps) {
             ) : (
               <>
                 <View style={styles.exportRow}>
-                  <Pressable style={styles.botonExport} onPress={exportarGpxHandler} disabled={exportando !== null}>
+                  <Pressable style={styles.botonExport} onPress={() => setPedidoExport("gpx")} disabled={exportando !== null}>
                     {exportando === "gpx" ? (
                       <ActivityIndicator color={colors.primaryDark} size="small" />
                     ) : (
@@ -289,7 +292,7 @@ export function SalidasView({ lote, campanaViendo }: SalidasViewProps) {
                     )}
                     <Text style={styles.botonExportTexto}>Exportar GPX</Text>
                   </Pressable>
-                  <Pressable style={styles.botonExport} onPress={exportarKmlHandler} disabled={exportando !== null}>
+                  <Pressable style={styles.botonExport} onPress={() => setPedidoExport("kml")} disabled={exportando !== null}>
                     {exportando === "kml" ? (
                       <ActivityIndicator color={colors.primaryDark} size="small" />
                     ) : (
@@ -307,6 +310,15 @@ export function SalidasView({ lote, campanaViendo }: SalidasViewProps) {
           </View>
         </ScrollView>
       )}
+
+      <PromptModal
+        visible={pedidoExport !== null}
+        titulo={pedidoExport === "pdf" ? "Exportar PDF" : `Exportar manchoneo (${pedidoExport?.toUpperCase()})`}
+        fields={pedidoExport ? [{ key: "nombre", label: "Nombre del archivo", valorInicial: nombreDefaultExport(pedidoExport) }] : []}
+        textoConfirmar="Exportar"
+        onCancelar={() => setPedidoExport(null)}
+        onConfirmar={confirmarExport}
+      />
     </View>
   );
 }

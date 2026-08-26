@@ -1,12 +1,14 @@
 import { useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { Maximize2, RotateCcw } from "lucide-react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Download, Maximize2, RotateCcw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
+import { exportarPuntos } from "@/lib/exportar/puntos";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
+import { PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { useMiRuta } from "./usar-mi-ruta";
 import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "./mapa-campo";
@@ -18,6 +20,7 @@ const FIT_ALTO = 460;
 
 interface VistaGeneralProps {
   lote: Lote;
+  establecimientoNombre?: string;
   /** Qué campaña mirar — default la vigente. La pasa LoteTabs cuando hay
    * selector de historial (ver CampanaSelector); el Monitoreador, que usa
    * este componente directo sin pestañas, nunca la pasa. */
@@ -37,15 +40,22 @@ interface VistaGeneralProps {
  *
  * "Info" y "Cómo llegar" quedaron en la lista de "Mis lotes" (un nivel
  * arriba), no acá adentro — así el lote es solo mapa + acción de trabajar. */
-export function VistaGeneral({ lote, campanaViendo, puedeMostrarCerrarCampana, onCampanaCerrada }: VistaGeneralProps) {
+export function VistaGeneral({
+  lote,
+  establecimientoNombre,
+  campanaViendo,
+  puedeMostrarCerrarCampana,
+  onCampanaCerrada,
+}: VistaGeneralProps) {
   const { usuario } = useAuth();
   const campanaEfectiva = campanaViendo ?? lote.campanaActual;
   const viendoActual = campanaEfectiva === lote.campanaActual;
-  const { cargando, puntos, cargas, gps, puntoCercano, enRango } = useDatosCampo(lote.id, campanaEfectiva);
+  const { cargando, puntos, cargas, gps, puntoCercano, enRango, origen } = useDatosCampo(lote.id, campanaEfectiva);
   const { width } = useWindowDimensions();
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
   const miRutaHook = useMiRuta(lote.id, usuario?.id);
+  const [formatoAExportar, setFormatoAExportar] = useState<"gpx" | "kml" | null>(null);
 
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>
@@ -62,7 +72,26 @@ export function VistaGeneral({ lote, campanaViendo, puedeMostrarCerrarCampana, o
   // Monitoreador ni nadie más, es historial de solo lectura.
   const puedeTocarPuntos = usuario?.rol !== "monitoreador" && viendoActual;
   const puedeVerObservaciones = !!usuario && puedeAdministrarLotes(usuario.rol);
+  const puedeExportarGrilla = !!usuario && puedeAdministrarLotes(usuario.rol);
   const anchoMapa = Math.min(width - 32, 400);
+
+  const nombreGrillaDefault = `Puntos Lote ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+
+  async function confirmarExportarGrilla(valores: Record<string, string>) {
+    const formato = formatoAExportar;
+    setFormatoAExportar(null);
+    if (!formato || !origen) return;
+    try {
+      await exportarPuntos(
+        puntos.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y })),
+        origen,
+        formato,
+        valores.nombre
+      );
+    } catch (e: any) {
+      Alert.alert(`No se pudo exportar el ${formato.toUpperCase()}`, e.message ?? String(e));
+    }
+  }
 
   if (cargando) {
     return (
@@ -97,6 +126,29 @@ export function VistaGeneral({ lote, campanaViendo, puedeMostrarCerrarCampana, o
           </Pressable>
         )}
       </View>
+
+      {puedeExportarGrilla && puntos.length > 0 && (
+        <View style={styles.exportarGrillaFila}>
+          <Text style={styles.exportarGrillaTexto}>Exportar grilla:</Text>
+          <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("kml")}>
+            <Download size={12} color={colors.primaryDark} />
+            <Text style={styles.botonExportarGrillaTexto}>KML</Text>
+          </Pressable>
+          <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("gpx")}>
+            <Download size={12} color={colors.primaryDark} />
+            <Text style={styles.botonExportarGrillaTexto}>GPX</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <PromptModal
+        visible={formatoAExportar !== null}
+        titulo={`Exportar grilla (${formatoAExportar?.toUpperCase()})`}
+        fields={[{ key: "nombre", label: "Nombre del archivo", valorInicial: nombreGrillaDefault }]}
+        textoConfirmar="Exportar"
+        onCancelar={() => setFormatoAExportar(null)}
+        onConfirmar={confirmarExportarGrilla}
+      />
 
       {viendoActual && (
         <MiRutaControles
@@ -175,4 +227,17 @@ const styles = StyleSheet.create({
   },
   botonModoTrabajoTexto: { color: colors.surface, fontWeight: "700", fontSize: 12 },
   aviso: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
+  exportarGrillaFila: { flexDirection: "row", alignItems: "center", gap: 8, width: "100%" },
+  exportarGrillaTexto: { fontSize: 12, fontWeight: "600", color: colors.textMuted },
+  botonExportarGrilla: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  botonExportarGrillaTexto: { color: colors.primaryDark, fontWeight: "700", fontSize: 11 },
 });

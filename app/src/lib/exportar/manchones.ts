@@ -1,13 +1,19 @@
-// Exportar los manchones de la zona de aplicación a GPX/KML — portado tal
-// cual del prototipo (`exportarGPX`/`exportarKML`), para llevarlos a un GPS
-// de mano real o abrirlos en Google Earth / apps de agricultura de precisión.
+// Exportar los manchones de la zona de aplicación a GPX/KML — portado del
+// prototipo (`exportarGPX`/`exportarKML`), para llevarlos a un GPS de mano
+// real o abrirlos en Google Earth / apps de agricultura de precisión.
 
 import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
-import { guardarYCompartirTexto } from "./archivo";
+import { guardarYCompartirTexto, sanitizarNombreArchivo } from "./archivo";
+import { escapeXml } from "./xml";
 
-function nombreArchivo(nombreLote: string, extension: string): string {
-  return `manchoneo_${(nombreLote || "lote").replace(/\s+/g, "_")}.${extension}`;
-}
+// Namespace GPX 1.1 estándar (topografix) — sin esto algunos programas más
+// estrictos (Garmin MapSource, entre otros) rechazan el archivo con "could
+// not be imported" aunque el XML esté bien formado.
+const GPX_HEADER =
+  '<gpx version="1.1" creator="Monitoreo de plagas" ' +
+  'xmlns="http://www.topografix.com/GPX/1/1" ' +
+  'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+  'xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">';
 
 export function construirGPX(manchones: XY[][], nombreLote: string, origen: LatLon): string {
   let rutas = "";
@@ -19,9 +25,9 @@ export function construirGPX(manchones: XY[][], nombreLote: string, origen: LatL
         return `      <rtept lat="${lat.toFixed(7)}" lon="${lon.toFixed(7)}"></rtept>`;
       })
       .join("\n");
-    rutas += `  <rte>\n    <name>Manchón ${i + 1} - ${nombreLote || "Lote"}</name>\n${pts}\n  </rte>\n`;
+    rutas += `  <rte>\n    <name>${escapeXml(`Manchón ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n${pts}\n  </rte>\n`;
   });
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Monitoreo de plagas">\n${rutas}</gpx>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${GPX_HEADER}\n${rutas}</gpx>`;
 }
 
 export function construirKML(manchones: XY[][], nombreLote: string, origen: LatLon): string {
@@ -34,17 +40,19 @@ export function construirKML(manchones: XY[][], nombreLote: string, origen: LatL
         return `${lon.toFixed(7)},${lat.toFixed(7)},0`;
       })
       .join(" ");
-    placemarks += `  <Placemark>\n    <name>Manchón ${i + 1} - ${nombreLote || "Lote"}</name>\n    <Style><PolyStyle><color>7d3fa07b</color></PolyStyle></Style>\n    <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n  </Placemark>\n`;
+    placemarks += `  <Placemark>\n    <name>${escapeXml(`Manchón ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n    <Style><PolyStyle><color>7d3fa07b</color></PolyStyle></Style>\n    <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n  </Placemark>\n`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n${placemarks}</Document>\n</kml>`;
 }
 
-export async function exportarGPX(manchones: XY[][], nombreLote: string, origen: LatLon): Promise<void> {
+/** `nombreArchivo` es el nombre elegido por la persona (sin extensión, ver
+ * ExportarNombreModal) — ya no se arma solo acá adentro. */
+export async function exportarGPX(manchones: XY[][], nombreLote: string, origen: LatLon, nombreArchivo: string): Promise<void> {
   const gpx = construirGPX(manchones, nombreLote, origen);
-  await guardarYCompartirTexto(nombreArchivo(nombreLote, "gpx"), gpx, "application/gpx+xml");
+  await guardarYCompartirTexto(`${sanitizarNombreArchivo(nombreArchivo)}.gpx`, gpx, "application/gpx+xml");
 }
 
-export async function exportarKML(manchones: XY[][], nombreLote: string, origen: LatLon): Promise<void> {
+export async function exportarKML(manchones: XY[][], nombreLote: string, origen: LatLon, nombreArchivo: string): Promise<void> {
   const kml = construirKML(manchones, nombreLote, origen);
-  await guardarYCompartirTexto(nombreArchivo(nombreLote, "kml"), kml, "application/vnd.google-earth.kml+xml");
+  await guardarYCompartirTexto(`${sanitizarNombreArchivo(nombreArchivo)}.kml`, kml, "application/vnd.google-earth.kml+xml");
 }
