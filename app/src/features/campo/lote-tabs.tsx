@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { puedeCerrarCampana } from "@/lib/roles";
 import { fetchCampanasDeLote } from "@/lib/db/puntos";
+import { cerrarCampanaDeLote } from "@/lib/db/lotes";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { VistaGeneral } from "./vista-general";
@@ -55,6 +56,31 @@ export function LoteTabs({ lote, onLoteActualizado }: LoteTabsProps) {
       .catch(() => {}); // si falla, se queda solo con la actual — no rompe la pantalla
   }, [lote.id, lote.campanaActual]);
 
+  function pedirReabrir() {
+    Alert.alert(
+      `¿Reabrir la campaña ${campanaViendo}?`,
+      `Vuelve a ser la campaña vigente del lote — se puede seguir cargando datos ahí. Cuando termines, cerrala de nuevo.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Reabrir",
+          onPress: async () => {
+            try {
+              // Mismo mecanismo que "cerrar" — acá en vez de avanzar a la
+              // siguiente, vuelve `campanaActual` para atrás, a la que se
+              // estaba mirando. No se pierde ni se copia nada: las cargas ya
+              // están todas guardadas con su propia `campana`.
+              await cerrarCampanaDeLote(lote.id, campanaViendo);
+              onLoteActualizado();
+            } catch (e: any) {
+              Alert.alert("No se pudo reabrir la campaña", e.message ?? String(e));
+            }
+          },
+        },
+      ]
+    );
+  }
+
   return (
     <View style={styles.container}>
       {puedeVerHistorial && (
@@ -64,6 +90,7 @@ export function LoteTabs({ lote, onLoteActualizado }: LoteTabsProps) {
             campanaActual={lote.campanaActual}
             campanaViendo={campanaViendo}
             onCambiar={setCampanaViendo}
+            onReabrir={pedirReabrir}
           />
         </View>
       )}
@@ -98,7 +125,7 @@ export function LoteTabs({ lote, onLoteActualizado }: LoteTabsProps) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  campanaFila: { alignItems: "center", paddingHorizontal: 16, paddingTop: 12 },
+  campanaFila: { alignItems: "flex-start", paddingHorizontal: 16, paddingTop: 12 },
   tabsRow: {
     flexDirection: "row",
     backgroundColor: colors.surface,
