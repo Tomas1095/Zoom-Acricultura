@@ -21,7 +21,14 @@ interface CampanaSelectorProps {
  * prototipo. Vive en LoteTabs, arriba de Grilla/Resultados/Salidas, y se
  * comparte entre las dos. Si solo hay una campaña con datos (lo normal
  * hasta que se acumule historial) se muestra fija, sin flecha de desplegar
- * — no hay nada más para elegir todavía. */
+ * — no hay nada más para elegir todavía.
+ *
+ * El aviso de "solo lectura" va EN LA MISMA fila que la pastilla (no una
+ * tarjeta aparte debajo) — a propósito: si agregara una fila entera nueva,
+ * el resto de la pantalla (el mapa de Resultados, que se mide con
+ * `onLayout` para ocupar justo lo que queda libre) se achicaría cada vez
+ * que se mira una campaña archivada. Así, mirar historial no le saca
+ * espacio a nada más. */
 export function CampanaSelector({ campanas, campanaActual, campanaViendo, onCambiar, onReabrir }: CampanaSelectorProps) {
   const [abierto, setAbierto] = useState(false);
   const puedeElegir = campanas.length > 1;
@@ -29,19 +36,35 @@ export function CampanaSelector({ campanas, campanaActual, campanaViendo, onCamb
 
   return (
     <View style={styles.container}>
-      <Pressable
-        style={styles.pill}
-        onPress={() => puedeElegir && setAbierto((v) => !v)}
-        disabled={!puedeElegir}
-      >
-        <Text style={styles.pillTexto}>
-          Campaña {campanaViendo}
-          {viendoActual ? " (actual)" : ""}
-        </Text>
-        {puedeElegir && (
-          <ChevronDown size={13} color={colors.accentGold} style={abierto ? styles.chevronAbierto : undefined} />
+      <View style={styles.filaSuperior}>
+        <Pressable
+          style={styles.pill}
+          onPress={() => puedeElegir && setAbierto((v) => !v)}
+          disabled={!puedeElegir}
+        >
+          <Text style={styles.pillTexto}>
+            Campaña {campanaViendo}
+            {viendoActual ? " (actual)" : ""}
+          </Text>
+          {puedeElegir && (
+            <ChevronDown size={13} color={colors.accentGold} style={abierto ? styles.chevronAbierto : undefined} />
+          )}
+        </Pressable>
+
+        {!viendoActual && (
+          <View style={styles.aviso}>
+            <Text style={styles.avisoTexto}>Solo lectura</Text>
+            {onReabrir && (
+              <Pressable onPress={onReabrir}>
+                <Text style={styles.avisoLink}>Reabrir para editar</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={() => onCambiar(campanaActual)}>
+              <Text style={styles.avisoLinkVolver}>Volver a la actual</Text>
+            </Pressable>
+          </View>
         )}
-      </Pressable>
+      </View>
 
       {abierto && (
         <View style={styles.menu}>
@@ -62,28 +85,13 @@ export function CampanaSelector({ campanas, campanaActual, campanaViendo, onCamb
           ))}
         </View>
       )}
-
-      {!viendoActual && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerTexto}>Estás viendo la campaña {campanaViendo} — solo lectura.</Text>
-          <View style={styles.bannerAcciones}>
-            {onReabrir && (
-              <Pressable onPress={onReabrir}>
-                <Text style={styles.bannerReabrir}>Reabrir para editar</Text>
-              </Pressable>
-            )}
-            <Pressable onPress={() => onCambiar(campanaActual)}>
-              <Text style={styles.bannerVolver}>Volver a la actual</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { alignItems: "center", gap: 8 },
+  container: { alignItems: "flex-start", gap: 8 },
+  filaSuperior: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
   pill: {
     flexDirection: "row",
     alignItems: "center",
@@ -96,8 +104,11 @@ const styles = StyleSheet.create({
   },
   pillTexto: { fontSize: 12.5, fontWeight: "700", color: colors.accentGold },
   chevronAbierto: { transform: [{ rotate: "180deg" }] },
+  aviso: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
+  avisoTexto: { fontSize: 11, fontWeight: "600", color: colors.warning },
+  avisoLink: { fontSize: 11, fontWeight: "700", color: colors.primaryDark },
+  avisoLinkVolver: { fontSize: 11, fontWeight: "700", color: colors.warning },
   menu: {
-    width: "100%",
     maxWidth: 260,
     borderWidth: 1,
     borderColor: colors.border,
@@ -106,16 +117,4 @@ const styles = StyleSheet.create({
   },
   menuItem: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   menuItemTexto: { fontSize: 13, color: colors.text, fontWeight: "600" },
-  banner: {
-    width: "100%",
-    gap: 6,
-    backgroundColor: colors.warningBg,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  bannerTexto: { fontSize: 11.5, color: colors.text },
-  bannerAcciones: { flexDirection: "row", justifyContent: "flex-end", gap: 16 },
-  bannerReabrir: { fontSize: 11.5, fontWeight: "700", color: colors.primaryDark },
-  bannerVolver: { fontSize: 11.5, fontWeight: "700", color: colors.warning },
 });
