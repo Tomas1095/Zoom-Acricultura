@@ -221,6 +221,11 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     });
 
   const pan = Gesture.Pan()
+    // En vista general (no pantalla completa) el mapa vive adentro de un
+    // ScrollView — con 1 solo dedo tiene que scrollear la pantalla, no
+    // mover el mapa, así que acá el pan pide 2 dedos como mínimo. En modo
+    // trabajo no hay scroll alrededor, así que se mantiene con 1 dedo.
+    .minPointers(pantallaCompleta ? 1 : 2)
     .averageTouches(true)
     .onUpdate((e) => {
       "worklet";

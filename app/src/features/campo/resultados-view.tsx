@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 
 import { NIVEL_COLORES, rangosDe, type Plaga } from "@/lib/geo/densidad";
 import type { Lote } from "@/types/domain";
@@ -7,19 +7,26 @@ import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaDensidad, type PuntoDensidad } from "./mapa-densidad";
 
-const ALTO_MAPA = 420;
+const PAD_RECUADRO = 14;
+const GAP_RECUADRO = 12;
 
 /** Pestaña "Resultados" — portada de `DensidadView` del prototipo: el mapa
  * de densidad poblacional (Voronoi recortado al perímetro real) tanto de
  * Bichos bolita como de Babosas. Sin imagen satelital todavía (ver nota en
  * lib/geo/densidad.ts). Quién puede ver esta pestaña lo decide LoteTabs, no
- * este componente. */
+ * este componente.
+ *
+ * Todo el contenido tiene que entrar en una pantalla fija, sin scroll (no
+ * tiene sentido scrollear acá) — por eso el recuadro dorado usa `flex: 1`
+ * (ocupa lo que sobra debajo del toggle/título/pie) y el mapa se mide con
+ * `onLayout`, en vez de un tamaño fijo, para aprovechar exacto el espacio
+ * que quede una vez descontada la leyenda. */
 export function ResultadosView({ lote }: { lote: Lote }) {
   const { cargando, puntos, cargas } = useDatosCampo(lote.id);
-  const { width } = useWindowDimensions();
   const [plaga, setPlaga] = useState<Plaga>("bicho");
+  const [cajaSize, setCajaSize] = useState({ ancho: 0, alto: 0 });
+  const [altoLeyenda, setAltoLeyenda] = useState(0);
 
-  const anchoMapa = Math.min(width - 32, 400);
   const rangos = rangosDe(plaga);
   const etiqueta = plaga === "bicho" ? "Nº BB/m²" : "Nº Babosas/m²";
 
@@ -36,6 +43,15 @@ export function ResultadosView({ lote }: { lote: Lote }) {
 
   const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
 
+  const anchoMapa = cajaSize.ancho - PAD_RECUADRO * 2;
+  const altoMapa = cajaSize.alto - PAD_RECUADRO * 2 - GAP_RECUADRO - altoLeyenda;
+  const mapaListo = anchoMapa > 40 && altoMapa > 80;
+
+  function onLayoutRecuadro(e: LayoutChangeEvent) {
+    const { width, height } = e.nativeEvent.layout;
+    setCajaSize({ ancho: width, alto: height });
+  }
+
   if (cargando) {
     return (
       <View style={styles.centrado}>
@@ -45,7 +61,7 @@ export function ResultadosView({ lote }: { lote: Lote }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.container}>
       <View style={styles.plagaToggle}>
         <Text
           onPress={() => setPlaga("bicho")}
@@ -63,40 +79,40 @@ export function ResultadosView({ lote }: { lote: Lote }) {
 
       <Text style={styles.titulo}>Mapa de densidad poblacional</Text>
 
-      <View style={styles.recuadroDorado}>
-        <MapaDensidad
-          puntos={puntosDensidad}
-          perimetro={lote.perimetro}
-          rangos={rangos}
-          nivelColores={NIVEL_COLORES}
-          ancho={anchoMapa}
-          alto={ALTO_MAPA}
-        />
+      <View style={styles.recuadroDorado} onLayout={onLayoutRecuadro}>
+        {mapaListo && (
+          <MapaDensidad
+            puntos={puntosDensidad}
+            perimetro={lote.perimetro}
+            rangos={rangos}
+            nivelColores={NIVEL_COLORES}
+            ancho={anchoMapa}
+            alto={altoMapa}
+          />
+        )}
 
-        <View style={styles.leyenda}>
+        <View style={styles.leyenda} onLayout={(e) => setAltoLeyenda(e.nativeEvent.layout.height)}>
           <Text style={styles.leyendaTitulo}>{etiqueta}</Text>
-          <View style={styles.leyendaFilas}>
-            {rangos.map((r, i) => (
-              <View key={i} style={styles.leyendaItem}>
-                <View style={[styles.leyendaMuestra, { backgroundColor: NIVEL_COLORES[i] }]} />
-                <Text style={styles.leyendaTexto}>{r.label}</Text>
-              </View>
-            ))}
-          </View>
+          {rangos.map((r, i) => (
+            <View key={i} style={styles.leyendaFila}>
+              <View style={[styles.leyendaMuestra, { backgroundColor: NIVEL_COLORES[i] }]} />
+              <Text style={styles.leyendaTexto}>{r.label}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
-      <Text style={styles.pie}>
+      <Text style={styles.pie} numberOfLines={2}>
         {cargados}/{puntos.length} puntos cargados — valores llevados a m² (× 4 sobre el dato cargado a campo,
         tomado en 1/4 m²)
       </Text>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 16, gap: 12, alignItems: "center" },
+  container: { flex: 1, padding: 16, gap: 10, alignItems: "center" },
   plagaToggle: { flexDirection: "row", gap: 8 },
   plagaBoton: {
     borderWidth: 1,
@@ -116,29 +132,21 @@ const styles = StyleSheet.create({
   },
   titulo: { fontSize: 16, fontWeight: "800", color: colors.text, textAlign: "center" },
   recuadroDorado: {
+    flex: 1,
     width: "100%",
     maxWidth: 400,
     alignItems: "center",
-    gap: 12,
+    gap: GAP_RECUADRO,
     backgroundColor: colors.border,
     borderWidth: 1,
     borderColor: colors.borderStrong,
     borderRadius: 16,
-    padding: 14,
+    padding: PAD_RECUADRO,
   },
-  leyenda: { width: "100%", gap: 6 },
-  leyendaTitulo: { fontSize: 11, fontWeight: "700", color: colors.accentGold },
-  leyendaFilas: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  leyendaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  leyendaMuestra: { width: 11, height: 11, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
-  leyendaTexto: { fontSize: 11.5, color: colors.text, fontWeight: "600" },
+  leyenda: { width: "100%", gap: 3 },
+  leyendaTitulo: { fontSize: 11, fontWeight: "700", color: colors.accentGold, marginBottom: 2 },
+  leyendaFila: { flexDirection: "row", alignItems: "center", gap: 6 },
+  leyendaMuestra: { width: 12, height: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
+  leyendaTexto: { fontSize: 12, color: colors.text },
   pie: { fontSize: 11, color: colors.textMuted, textAlign: "center" },
 });
