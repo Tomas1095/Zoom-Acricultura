@@ -6,12 +6,20 @@ import { ChevronDown, ChevronRight, Info, Navigation, Pencil, Plus, Trash2, User
 import { PromptModal } from "@/components/prompt-modal";
 import { useAuth } from "@/lib/auth-context";
 import * as db from "@/lib/db/lotes";
-import { fetchCentroDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
+import { fetchCargasDeLote, fetchCentroDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
+import { fetchUsuarios } from "@/lib/db/equipo";
 import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { formatearHectareas } from "@/lib/format";
-import type { Cliente, Establecimiento, Lote } from "@/types/domain";
+import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesoModal } from "./acceso-modal";
+
+interface InfoLote {
+  puntosTotal: number;
+  /** Solo quienes tienen acceso a este lote, con cuántos puntos cargó cada
+   * uno — portado de "Quién hizo qué" del prototipo (ArbolLotesView). */
+  desglose: Array<{ usuarioId: string; cantidad: number }>;
+}
 
 type ModalState =
   | { tipo: "nuevoCliente" }
@@ -33,19 +41,21 @@ export function ArbolLotes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [expClientes, setExpClientes] = useState<Set<string>>(new Set());
   const [expEstablecimientos, setExpEstablecimientos] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<ModalState>(null);
   const [infoAbierta, setInfoAbierta] = useState<Set<string>>(new Set());
-  const [infoPorLote, setInfoPorLote] = useState<Record<string, number | "cargando">>({});
+  const [infoPorLote, setInfoPorLote] = useState<Record<string, InfoLote | "cargando">>({});
   const [buscandoComoLlegar, setBuscandoComoLlegar] = useState<string | null>(null);
 
   const refrescar = useCallback(async () => {
     try {
-      const arbol = await db.fetchArbol();
+      const [arbol, todosLosUsuarios] = await Promise.all([db.fetchArbol(), fetchUsuarios()]);
       setClientes(arbol.clientes);
       setEstablecimientos(arbol.establecimientos);
       setLotes(arbol.lotes);
+      setUsuarios(todosLosUsuarios);
     } catch (e: any) {
       Alert.alert("No se pudo cargar", e.message ?? String(e));
     } finally {
@@ -89,8 +99,20 @@ export function ArbolLotes() {
     if (!abierta && infoPorLote[lote.id] === undefined) {
       setInfoPorLote((prev) => ({ ...prev, [lote.id]: "cargando" }));
       try {
-        const puntos = await fetchPuntosDeLote(lote.id);
-        setInfoPorLote((prev) => ({ ...prev, [lote.id]: puntos.length }));
+        const [puntos, cargas, accesos] = await Promise.all([
+          fetchPuntosDeLote(lote.id),
+          fetchCargasDeLote(lote.id, lote.campanaActual),
+          db.fetchAccesos(lote.id),
+        ]);
+        const conteos = new Map<string, number>();
+        for (const carga of cargas.values()) {
+          if (!carga.cargado || !carga.cargadoPorId) continue;
+          conteos.set(carga.cargadoPorId, (conteos.get(carga.cargadoPorId) ?? 0) + 1);
+        }
+        const desglose = accesos
+          .map((usuarioId) => ({ usuarioId, cantidad: conteos.get(usuarioId) ?? 0 }))
+          .sort((a, b) => b.cantidad - a.cantidad);
+        setInfoPorLote((prev) => ({ ...prev, [lote.id]: { puntosTotal: puntos.length, desglose } }));
       } catch (e: any) {
         Alert.alert("No se pudo cargar la info", e.message ?? String(e));
       }
@@ -284,9 +306,41 @@ export function ArbolLotes() {
                                       <Text style={styles.loteInfoLinea}>Hectáreas: {formatearHectareas(l.hectareas)}</Text>
                                       <Text style={styles.loteInfoLinea}>Hectáreas por punto: {l.haPorPunto}</Text>
                                       <Text style={styles.loteInfoLinea}>
-                                        Puntos de muestreo: {infoValor === "cargando" || infoValor === undefined ? "…" : infoValor}
+                                        Puntos de muestreo:{" "}
+                                        {infoValor === "cargando" || infoValor === undefined ? "…" : infoValor.puntosTotal}
                                       </Text>
                                       <Text style={styles.loteInfoLinea}>Campaña: {l.campanaActual}</Text>
+
+                                      {infoValor !== "cargando" && infoValor !== undefined && (
+                                        <View style={styles.desgloseBox}>
+                                          <Text style={styles.desgloseTitulo}>
+                                            Quién hizo qué —{" "}
+                                            {infoValor.desglose.reduce((s, d) => s + d.cantidad, 0)}/
+                                            {infoValor.puntosTotal} puntos
+                                          </Text>
+                                          {infoValor.desglose.length === 0 ? (
+                                            <Text style={styles.desgloseVacio}>
+                                              Todavía no le diste acceso a este lote a nadie.
+                                            </Text>
+                                          ) : (
+                                            infoValor.desglose.map(({ usuarioId, cantidad }) => {
+                                              const persona = usuarios.find((u) => u.id === usuarioId);
+                                              if (!persona) return null;
+                                              return (
+                                                <View key={usuarioId} style={styles.desgloseFila}>
+                                                  <View style={[styles.desgloseAvatar, { backgroundColor: persona.color }]}>
+                                                    <Text style={styles.desgloseAvatarTexto}>
+                                                      {persona.nombre.charAt(0).toUpperCase()}
+                                                    </Text>
+                                                  </View>
+                                                  <Text style={styles.desgloseNombre}>{persona.nombre}</Text>
+                                                  <Text style={styles.desgloseCantidad}>{cantidad} puntos</Text>
+                                                </View>
+                                              );
+                                            })
+                                          )}
+                                        </View>
+                                      )}
                                     </View>
                                   )}
                                 </View>
@@ -456,4 +510,18 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   loteInfoLinea: { fontSize: 12, color: colors.text },
+  desgloseBox: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 6,
+  },
+  desgloseTitulo: { fontSize: 11, fontWeight: "700", color: colors.textMuted },
+  desgloseVacio: { fontSize: 12, color: colors.textMuted, fontStyle: "italic" },
+  desgloseFila: { flexDirection: "row", alignItems: "center", gap: 8 },
+  desgloseAvatar: { width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  desgloseAvatarTexto: { fontSize: 10, fontWeight: "800", color: colors.surface },
+  desgloseNombre: { flex: 1, fontSize: 12.5, fontWeight: "600", color: colors.text },
+  desgloseCantidad: { fontSize: 12, color: colors.textMuted },
 });
