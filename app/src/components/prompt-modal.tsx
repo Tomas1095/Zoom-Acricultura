@@ -1,17 +1,7 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { colors } from "@/theme/colors";
-
-/** Esperar esto DESPUÉS de cerrar el modal (poner `visible={false}`) y ANTES
- * de disparar algo que abra su propia ventana nativa (la hoja de compartir,
- * un selector de archivos, etc.) — en iOS, presentar una encima de la otra
- * sin esta pausa hace que la segunda no llegue a aparecer, sin tirar ningún
- * error (choque de animaciones de UIKit). Quien use `onConfirmar` para
- * disparar algo así tiene que awaitear esto primero. */
-export function esperarCierreModal(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 400));
-}
 
 export interface PromptField {
   key: string;
@@ -26,14 +16,32 @@ interface PromptModalProps {
   titulo: string;
   fields: PromptField[];
   textoConfirmar?: string;
+  /** Poner en `true` mientras `onConfirmar` está haciendo algo async que
+   * abre su propia ventana nativa (compartir, un selector de archivos,
+   * etc.) — deja el modal ABIERTO con un spinner en vez de cerrarlo al
+   * toque. Esto importa en iOS: presentar la hoja de compartir mientras
+   * este modal todavía está en pantalla (no cerrándose) es lo único que
+   * anda confiable — cerrar este modal y, en el mismo instante, abrir la
+   * hoja de compartir hace que la segunda no llegue a aparecer (choque de
+   * animaciones de UIKit, sin ningún error visible). Quien use esto tiene
+   * que recién poner `visible={false}` cuando `onConfirmar` ya terminó. */
+  confirmando?: boolean;
   onCancelar: () => void;
   onConfirmar: (valores: Record<string, string>) => void;
 }
 
 /** Modal chico genérico para "nombre de X" / "editar nombre de X" — evita
  * repetir el mismo TextInput + Cancelar/Guardar en cada formulario del
- * árbol de lotes. */
-export function PromptModal({ visible, titulo, fields, textoConfirmar = "Guardar", onCancelar, onConfirmar }: PromptModalProps) {
+ * árbol de lotes (y, con `confirmando`, en las exportaciones). */
+export function PromptModal({
+  visible,
+  titulo,
+  fields,
+  textoConfirmar = "Guardar",
+  confirmando = false,
+  onCancelar,
+  onConfirmar,
+}: PromptModalProps) {
   const [valores, setValores] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -45,13 +53,14 @@ export function PromptModal({ visible, titulo, fields, textoConfirmar = "Guardar
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function confirmar() {
+    if (confirmando) return;
     const primerCampoVacio = fields[0] && !valores[fields[0].key]?.trim();
     if (primerCampoVacio) return;
     onConfirmar(valores);
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancelar}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !confirmando && onCancelar()}>
       <View style={styles.overlay}>
         <View style={styles.card}>
           <Text style={styles.titulo}>{titulo}</Text>
@@ -66,15 +75,24 @@ export function PromptModal({ visible, titulo, fields, textoConfirmar = "Guardar
                 value={valores[f.key] ?? ""}
                 onChangeText={(t) => setValores((v) => ({ ...v, [f.key]: t }))}
                 autoFocus={f === fields[0]}
+                editable={!confirmando}
               />
             </View>
           ))}
           <View style={styles.botones}>
-            <Pressable style={[styles.boton, styles.botonCancelar]} onPress={onCancelar}>
+            <Pressable
+              style={[styles.boton, styles.botonCancelar, confirmando && styles.botonDeshabilitado]}
+              onPress={onCancelar}
+              disabled={confirmando}
+            >
               <Text style={styles.botonCancelarTexto}>Cancelar</Text>
             </Pressable>
-            <Pressable style={[styles.boton, styles.botonConfirmar]} onPress={confirmar}>
-              <Text style={styles.botonConfirmarTexto}>{textoConfirmar}</Text>
+            <Pressable style={[styles.boton, styles.botonConfirmar]} onPress={confirmar} disabled={confirmando}>
+              {confirmando ? (
+                <ActivityIndicator color={colors.surface} size="small" />
+              ) : (
+                <Text style={styles.botonConfirmarTexto}>{textoConfirmar}</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -100,6 +118,7 @@ const styles = StyleSheet.create({
   },
   botones: { flexDirection: "row", gap: 10, marginTop: 8 },
   boton: { flex: 1, borderRadius: 8, paddingVertical: 11, alignItems: "center" },
+  botonDeshabilitado: { opacity: 0.5 },
   botonCancelar: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
   botonCancelarTexto: { color: colors.textMuted, fontWeight: "600" },
   botonConfirmar: { backgroundColor: colors.primaryConfirm },

@@ -8,7 +8,7 @@ import { puedeAdministrarLotes } from "@/lib/roles";
 import { exportarPuntos } from "@/lib/exportar/puntos";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
-import { esperarCierreModal, PromptModal } from "@/components/prompt-modal";
+import { PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { useMiRuta } from "./usar-mi-ruta";
 import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "./mapa-campo";
@@ -56,6 +56,7 @@ export function VistaGeneral({
   const [vistaModificada, setVistaModificada] = useState(false);
   const miRutaHook = useMiRuta(lote.id, usuario?.id);
   const [formatoAExportar, setFormatoAExportar] = useState<"gpx" | "kml" | null>(null);
+  const [exportandoGrilla, setExportandoGrilla] = useState(false);
 
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>
@@ -75,13 +76,15 @@ export function VistaGeneral({
   const puedeExportarGrilla = !!usuario && puedeAdministrarLotes(usuario.rol);
   const anchoMapa = Math.min(width - 32, 400);
 
-  const nombreGrillaDefault = `Puntos Lote ${lote.nombre}${establecimientoNombre ? " Establecimiento " + establecimientoNombre : ""}`;
+  const nombreGrillaDefault = `Puntos ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
 
   async function confirmarExportarGrilla(valores: Record<string, string>) {
     const formato = formatoAExportar;
-    setFormatoAExportar(null);
-    if (!formato || !origen) return;
-    await esperarCierreModal();
+    if (!formato || !origen) {
+      setFormatoAExportar(null);
+      return;
+    }
+    setExportandoGrilla(true);
     try {
       await exportarPuntos(
         puntos.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y })),
@@ -91,6 +94,9 @@ export function VistaGeneral({
       );
     } catch (e: any) {
       Alert.alert(`No se pudo exportar el ${formato.toUpperCase()}`, e.message ?? String(e));
+    } finally {
+      setExportandoGrilla(false);
+      setFormatoAExportar(null);
     }
   }
 
@@ -148,6 +154,7 @@ export function VistaGeneral({
         titulo={`Exportar grilla (${formatoAExportar?.toUpperCase()})`}
         fields={[{ key: "nombre", label: "Nombre del archivo", valorInicial: nombreGrillaDefault }]}
         textoConfirmar="Exportar"
+        confirmando={exportandoGrilla}
         onCancelar={() => setFormatoAExportar(null)}
         onConfirmar={confirmarExportarGrilla}
       />

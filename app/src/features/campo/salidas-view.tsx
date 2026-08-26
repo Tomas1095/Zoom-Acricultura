@@ -19,7 +19,7 @@ import { exportarGPX, exportarKML } from "@/lib/exportar/manchones";
 import { formatearHectareas } from "@/lib/format";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
-import { esperarCierreModal, PromptModal } from "@/components/prompt-modal";
+import { PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaManchoneo } from "./mapa-manchoneo";
 
@@ -179,17 +179,18 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
   // modal (ver onConfirmar), esto solo prellena el campo.
   function nombreDefaultExport(pedido: PedidoExport): string {
     if (pedido === "pdf") {
-      return `Informe monitoreo de plagas Lote ${lote.nombre}${establecimientoNombre ? " Establecimiento " + establecimientoNombre : ""}`;
+      return `Informe monitoreo de plagas ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
     }
     return `BAB Lote ${lote.nombre} ${zonaAplicacion.haIncluidas.toFixed(1)} Ha`;
   }
 
   async function confirmarExport(valores: Record<string, string>) {
     const pedido = pedidoExport;
-    setPedidoExport(null);
-    if (!pedido) return;
+    if (!pedido) {
+      setPedidoExport(null);
+      return;
+    }
     setExportando(pedido);
-    await esperarCierreModal();
     try {
       if (pedido === "pdf") {
         const puntosBicho = puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.bicho }));
@@ -214,6 +215,7 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
       Alert.alert(`No se pudo exportar el ${pedido.toUpperCase()}`, e.message ?? String(e));
     } finally {
       setExportando(null);
+      setPedidoExport(null);
     }
   }
 
@@ -378,6 +380,7 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
         titulo={pedidoExport === "pdf" ? "Exportar PDF" : `Exportar manchoneo (${pedidoExport?.toUpperCase()})`}
         fields={pedidoExport ? [{ key: "nombre", label: "Nombre del archivo", valorInicial: nombreDefaultExport(pedidoExport) }] : []}
         textoConfirmar="Exportar"
+        confirmando={exportando !== null}
         onCancelar={() => setPedidoExport(null)}
         onConfirmar={confirmarExport}
       />
@@ -450,31 +453,22 @@ function ZonaFila({
         </Pressable>
       </View>
 
-      {zona.productos.map((p) => (
+      {zona.productos.map((p, i) => (
         <ProductoFila
           key={p.id}
           producto={p}
           superficie={zona.superficie}
           puedeQuitar={zona.productos.length > 1}
+          // El "+" de agregar otro producto va al lado del desplegable, pero
+          // solo en la última fila — si hubiera uno por fila, se repetiría
+          // sin sentido (todos hacen lo mismo: agregar una fila más).
+          mostrarAgregar={i === zona.productos.length - 1}
+          onAgregarProducto={onAgregarProducto}
           onCambiar={(campo, v) => onCambiarProducto(p.id, campo, v)}
+          onCambiarSuperficie={onCambiarSuperficie}
           onQuitar={() => onQuitarProducto(p.id)}
         />
       ))}
-      <Pressable style={styles.agregarProductoBtn} onPress={onAgregarProducto}>
-        <Plus size={12} color={colors.primaryDark} />
-        <Text style={styles.agregarProductoTexto}>Agregar producto</Text>
-      </Pressable>
-
-      <View style={styles.zonaSuperficieFila}>
-        <Text style={styles.zonaUnidad}>Superficie:</Text>
-        <TextInput
-          style={styles.zonaNumInput}
-          value={String(zona.superficie)}
-          keyboardType="decimal-pad"
-          onChangeText={onCambiarSuperficie}
-        />
-        <Text style={styles.zonaUnidad}>ha</Text>
-      </View>
     </View>
   );
 }
@@ -483,35 +477,59 @@ interface ProductoFilaProps {
   producto: ProductoAplicado;
   superficie: number;
   puedeQuitar: boolean;
+  mostrarAgregar: boolean;
+  onAgregarProducto: () => void;
   onCambiar: (campo: "producto" | "dosis", valor: string) => void;
+  onCambiarSuperficie: (valor: string) => void;
   onQuitar: () => void;
 }
 
-function ProductoFila({ producto, superficie, puedeQuitar, onCambiar, onQuitar }: ProductoFilaProps) {
+function ProductoFila({
+  producto,
+  superficie,
+  puedeQuitar,
+  mostrarAgregar,
+  onAgregarProducto,
+  onCambiar,
+  onCambiarSuperficie,
+  onQuitar,
+}: ProductoFilaProps) {
   const [productoAbierto, setProductoAbierto] = useState(false);
 
   return (
     <View style={styles.productoFila}>
-      <View style={styles.zonaProductoWrap}>
-        <Pressable style={styles.zonaProductoBtn} onPress={() => setProductoAbierto((v) => !v)}>
-          <Text style={styles.zonaProductoTexto}>{producto.producto}</Text>
-          <ChevronDown size={13} color={colors.textMuted} />
-        </Pressable>
-        {productoAbierto && (
-          <View style={styles.zonaProductoMenu}>
-            {PRODUCTOS.map((p) => (
-              <Pressable
-                key={p}
-                style={styles.zonaProductoItem}
-                onPress={() => {
-                  onCambiar("producto", p);
-                  setProductoAbierto(false);
-                }}
-              >
-                <Text style={styles.zonaProductoItemTexto}>{p}</Text>
-              </Pressable>
-            ))}
-          </View>
+      <View style={styles.zonaProductoFilaSuperior}>
+        <View style={styles.zonaProductoWrap}>
+          <Pressable style={styles.zonaProductoBtn} onPress={() => setProductoAbierto((v) => !v)}>
+            <Text style={styles.zonaProductoTexto}>{producto.producto}</Text>
+            <ChevronDown size={13} color={colors.textMuted} />
+          </Pressable>
+          {productoAbierto && (
+            <View style={styles.zonaProductoMenu}>
+              {PRODUCTOS.map((p) => (
+                <Pressable
+                  key={p}
+                  style={styles.zonaProductoItem}
+                  onPress={() => {
+                    onCambiar("producto", p);
+                    setProductoAbierto(false);
+                  }}
+                >
+                  <Text style={styles.zonaProductoItemTexto}>{p}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+        {mostrarAgregar && (
+          <Pressable style={styles.agregarProductoBtn} onPress={onAgregarProducto}>
+            <Plus size={16} color={colors.primaryDark} />
+          </Pressable>
+        )}
+        {puedeQuitar && (
+          <Pressable style={styles.zonaQuitarBtn} onPress={onQuitar}>
+            <X size={12} color={colors.danger} />
+          </Pressable>
         )}
       </View>
 
@@ -522,13 +540,15 @@ function ProductoFila({ producto, superficie, puedeQuitar, onCambiar, onQuitar }
           keyboardType="decimal-pad"
           onChangeText={(v) => onCambiar("dosis", v)}
         />
-        <Text style={styles.zonaUnidad}>kg/ha</Text>
+        <Text style={styles.zonaUnidad}>kg/ha ×</Text>
+        <TextInput
+          style={styles.zonaNumInput}
+          value={String(superficie)}
+          keyboardType="decimal-pad"
+          onChangeText={onCambiarSuperficie}
+        />
+        <Text style={styles.zonaUnidad}>ha</Text>
         <Text style={styles.zonaTotal}>= {kgDeProducto(superficie, producto).toFixed(0)} kg</Text>
-        {puedeQuitar && (
-          <Pressable style={styles.zonaQuitarBtn} onPress={onQuitar}>
-            <X size={12} color={colors.danger} />
-          </Pressable>
-        )}
       </View>
     </View>
   );
@@ -543,7 +563,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: 16,
-    paddingTop: 4,
+    paddingTop: 18,
   },
   subTabTexto: { fontSize: 13.5, fontWeight: "700", color: colors.textMuted, paddingBottom: 8 },
   subTabTextoActivo: { color: colors.primary, borderBottomWidth: 2, borderBottomColor: colors.primary },
@@ -607,7 +627,8 @@ const styles = StyleSheet.create({
   },
   zonaQuitarBtn: { padding: 6 },
   productoFila: { gap: 6 },
-  zonaProductoWrap: { position: "relative" },
+  zonaProductoFilaSuperior: { flexDirection: "row", alignItems: "center", gap: 6 },
+  zonaProductoWrap: { flex: 1, position: "relative" },
   zonaProductoBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -620,16 +641,22 @@ const styles = StyleSheet.create({
   },
   zonaProductoTexto: { fontSize: 13, color: colors.text },
   zonaProductoMenu: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
     marginTop: 4,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     overflow: "hidden",
+    backgroundColor: colors.surface,
+    zIndex: 10,
+    elevation: 10,
   },
   zonaProductoItem: { paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: colors.border },
   zonaProductoItemTexto: { fontSize: 13, color: colors.text },
   zonaNumRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
-  zonaSuperficieFila: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
   zonaNumInput: {
     width: 56,
     borderWidth: 1,
@@ -643,8 +670,15 @@ const styles = StyleSheet.create({
   },
   zonaUnidad: { fontSize: 12, color: colors.textMuted },
   zonaTotal: { fontSize: 12.5, fontWeight: "700", color: colors.text, marginLeft: "auto" },
-  agregarProductoBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
-  agregarProductoTexto: { fontSize: 11.5, fontWeight: "700", color: colors.primaryDark },
+  agregarProductoBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   agregarZonaBtn: {
     flexDirection: "row",
     alignItems: "center",
