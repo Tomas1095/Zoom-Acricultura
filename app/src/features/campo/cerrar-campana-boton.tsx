@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "rea
 import { Lock } from "lucide-react-native";
 
 import { cerrarCampanaDeLote } from "@/lib/db/lotes";
-import { siguienteCampana } from "@/lib/campanas";
+import { fechaInicioCampanaTexto, puedeAvanzarACampana, siguienteCampana } from "@/lib/campanas";
 import type { Carga, Lote, Punto } from "@/types/domain";
 import { colors } from "@/theme/colors";
 
@@ -27,6 +27,7 @@ export function CerrarCampanaBoton({ lote, puntos, cargas, onCerrado }: CerrarCa
   const completo = puntos.length > 0 && puntos.every((p) => cargas.get(p.id)?.cargado);
   const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
   const siguiente = siguienteCampana(lote.campanaActual);
+  const yaArrancoLaSiguiente = puedeAvanzarACampana(siguiente);
 
   function confirmar() {
     Alert.alert(
@@ -56,6 +57,17 @@ export function CerrarCampanaBoton({ lote, puntos, cargas, onCerrado }: CerrarCa
       <View style={styles.avisoIncompleto}>
         <Text style={styles.avisoIncompletoTexto}>
           Faltan puntos por cargar para poder cerrar la campaña {lote.campanaActual} ({cargados}/{puntos.length}).
+        </Text>
+      </View>
+    );
+  }
+
+  if (!yaArrancoLaSiguiente) {
+    return (
+      <View style={styles.avisoIncompleto}>
+        <Text style={styles.avisoIncompletoTexto}>
+          Grilla completa — pero todavía no se puede cerrar: la campaña {siguiente} arranca recién el{" "}
+          {fechaInicioCampanaTexto(siguiente)}.
         </Text>
       </View>
     );
