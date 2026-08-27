@@ -22,6 +22,8 @@ import { fetchPuntosDeLote } from "@/lib/db/puntos";
 import { fetchCarga, guardarYConfirmarCarga, reabrirCarga, agregarFotoACarga, quitarFotoDeCarga } from "@/lib/db/cargas";
 import { fetchUsuarios } from "@/lib/db/equipo";
 import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
+import { agregarCambioPendiente } from "@/lib/offline/cola";
+import { useSync } from "@/lib/sync-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Carga, Lote, Punto, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -65,6 +67,7 @@ const FORM_VACIO: FormCarga = {
 export default function PuntoScreen() {
   const { id: loteId, puntoId: etiqueta } = useLocalSearchParams<{ id: string; puntoId: string }>();
   const { usuario } = useAuth();
+  const { avisarCambioEncolado } = useSync();
 
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
@@ -234,7 +237,22 @@ export default function PuntoScreen() {
       await guardarYConfirmarCarga(punto.id, lote.campanaActual, form, usuario.id);
       router.back();
     } catch (e: any) {
-      Alert.alert("No se pudo guardar", e.message ?? String(e));
+      // Sin conexión (o el server no respondió a tiempo) — en vez de perder
+      // lo que se cargó, queda guardado en la cola local del dispositivo y
+      // se sube solo apenas vuelva la señal (ver lib/sync-context.tsx). El
+      // form ya está confirmado del lado de la persona, por eso sí se
+      // vuelve atrás — no tiene sentido dejarla trabada en la pantalla
+      // esperando a que haya señal.
+      agregarCambioPendiente({
+        tipo: "carga",
+        puntoId: punto.id,
+        campana: lote.campanaActual,
+        campos: form,
+        cargadoPorId: usuario.id,
+      });
+      avisarCambioEncolado();
+      Alert.alert("Sin conexión", "Se guardó en el celular y se va a sincronizar solo apenas haya señal.");
+      router.back();
     } finally {
       setGuardando(false);
     }
@@ -249,7 +267,21 @@ export default function PuntoScreen() {
       const c = await fetchCarga(punto.id, lote.campanaActual);
       setCarga(c);
     } catch (e: any) {
-      Alert.alert("No se pudo subir la foto", e.message ?? String(e));
+      // Mismo criterio que handleGuardar: sin conexión, la foto queda
+      // encolada (con su URI local) en vez de perderse — se sube sola
+      // cuando vuelva la señal. Acá no hay "carga" que actualizar en
+      // pantalla todavía (recién se crea cuando se sincroniza de verdad),
+      // así que solo se avisa que quedó pendiente.
+      agregarCambioPendiente({
+        tipo: "foto",
+        puntoId: punto.id,
+        campana: lote.campanaActual,
+        loteId: lote.id,
+        uriLocal: uri,
+        cargadoPorId: usuario.id,
+      });
+      avisarCambioEncolado();
+      Alert.alert("Sin conexión", "La foto quedó guardada en el celular y se va a subir sola apenas haya señal.");
     } finally {
       setSubiendoFoto(false);
     }

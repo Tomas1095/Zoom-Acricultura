@@ -100,13 +100,9 @@ export interface Acceso {
   usuarioId: string;
 }
 
-/** Entrada de la cola offline local (SQLite en el dispositivo). No existe en
- * el server: es la representación de "un cambio pendiente de subir". */
-export interface CambioPendiente {
-  id: string;
-  puntoId: string;
-  campana: string;
-  payload: Partial<Carga>;
-  createdAt: string;
-  intentos: number;
-}
+// La cola offline local (SQLite en el dispositivo) vive en
+// lib/offline/cola.ts, no acá — el tipo que había acá como placeholder
+// (un solo shape para cualquier cambio pendiente) no reflejaba que "guardar
+// los datos de un punto" y "subir una foto" son dos acciones bien
+// distintas contra el server; lib/offline/cola.ts ya tiene el tipo real
+// (CambioPendienteCarga | CambioPendienteFoto).

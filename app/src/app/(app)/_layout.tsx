@@ -2,6 +2,7 @@ import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { useAuth } from "@/lib/auth-context";
+import { SyncProvider } from "@/lib/sync-context";
 import { colors } from "@/theme/colors";
 
 export default function AppLayout() {
@@ -16,6 +17,17 @@ export default function AppLayout() {
   }
   if (!session || !usuario) return <Redirect href="/login" />;
 
+  // La cola offline (ver lib/sync-context.tsx) solo tiene sentido con
+  // sesión activa — cargadoPorId sale del usuario logueado, así que
+  // arrancarla acá (adentro del gate de auth) en vez de en el _layout raíz.
+  return (
+    <SyncProvider>
+      <AppLayoutStack />
+    </SyncProvider>
+  );
+}
+
+function AppLayoutStack() {
   return (
     <Stack
       screenOptions={{
