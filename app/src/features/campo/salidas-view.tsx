@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ChevronDown, Download, Plus, RotateCcw, Upload, X } from "lucide-react-native";
 
 import { calcularZonaAplicacion, UMBRAL_APLICACION_BABOSA, type EstacionAplicacion } from "@/lib/geo/zona-aplicacion";
@@ -49,6 +38,30 @@ interface SalidasViewProps {
   campanaViendo: string;
 }
 
+/** Deja pasar dígitos y como mucho UN separador decimal (coma o punto) con
+ * un solo dígito después — "5", "5." y "5.5" quedan igual; un segundo
+ * dígito decimal o un segundo separador se descartan en el momento. Vuelve
+ * a procesar el texto completo en cada cambio (no solo el último
+ * caracter), así que también funciona bien borrando/pegando texto. */
+function limitarUnDecimal(valor: string): string {
+  let resultado = "";
+  let tuvoSeparador = false;
+  let digitosDecimales = 0;
+  for (const ch of valor) {
+    if (ch >= "0" && ch <= "9") {
+      if (tuvoSeparador) {
+        if (digitosDecimales >= 1) continue;
+        digitosDecimales++;
+      }
+      resultado += ch;
+    } else if ((ch === "." || ch === ",") && !tuvoSeparador) {
+      tuvoSeparador = true;
+      resultado += ch;
+    }
+  }
+  return resultado;
+}
+
 function zonaInicial(lote: Lote): ZonaCebo {
   return {
     id: "1",
@@ -56,8 +69,10 @@ function zonaInicial(lote: Lote): ZonaCebo {
     // nombre del lote, una zona dentro del lote, lo que sea), no un lote
     // elegido de una lista fija.
     loteNombre: "",
-    superficie: String(lote.hectareas),
-    productos: [{ id: "1", producto: "Crustacicida + Molusquicida", dosis: "5" }],
+    // En 0 por defecto — la persona carga sus propios números, no un valor
+    // adivinado que después tiene que borrar.
+    superficie: "0",
+    productos: [{ id: "1", producto: "Crustacicida + Molusquicida", dosis: "0" }],
   };
 }
 
@@ -138,15 +153,17 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, loteNombre: valor } : z)));
   }
   function actualizarZonaSuperficie(id: string, valor: string) {
-    setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, superficie: valor } : z)));
+    const limpio = limitarUnDecimal(valor);
+    setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, superficie: limpio } : z)));
   }
   function actualizarProducto(zonaId: string, productoId: string, campo: "producto" | "dosis", valor: string) {
+    const limpio = campo === "dosis" ? limitarUnDecimal(valor) : valor;
     setZonas((zs) =>
       zs.map((z) => {
         if (z.id !== zonaId) return z;
         return {
           ...z,
-          productos: z.productos.map((p) => (p.id === productoId ? { ...p, [campo]: valor } : p)),
+          productos: z.productos.map((p) => (p.id === productoId ? { ...p, [campo]: limpio } : p)),
         };
       })
     );
@@ -256,7 +273,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <View style={styles.container}>
       <View style={styles.subTabs}>
         <Text
           onPress={() => setSubTab("informe")}
@@ -273,7 +290,11 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
       </View>
 
       {subTab === "informe" ? (
-        <ScrollView contentContainerStyle={styles.scrollContenido} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scrollContenido}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+        >
           <View style={styles.card}>
             <Text style={styles.cardTitulo}>Mapa de densidad poblacional</Text>
             <MapaInformeConLeyenda
@@ -427,7 +448,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
         onCancelar={() => setPedidoExport(null)}
         onConfirmar={confirmarExport}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
