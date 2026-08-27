@@ -9,22 +9,32 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
+// dosis/superficie quedan como TEXTO (lo que la persona tecleó tal cual),
+// no como number — si se guardara ya convertido, el campo controlado
+// redondea/pisa el "." apenas se escribe (con `Number("5.")` → 5 → el
+// input vuelve a mostrar "5", así nunca se puede terminar de escribir
+// "5.5") — mismo motivo por el que `SubirKmz` guarda `haPorPunto` como
+// string. Se convierte a número recién al calcular kg (acá abajo).
 export interface ProductoAplicado {
   id: string;
   producto: string;
-  dosis: number; // kg/ha
+  dosis: string; // kg/ha, tal cual lo tecleó la persona
 }
 
 export interface ZonaCebo {
   id: string;
-  loteId: string;
   loteNombre: string;
-  superficie: number; // ha
+  superficie: string; // ha, tal cual lo tecleó la persona
   productos: ProductoAplicado[];
 }
 
-export function kgDeProducto(superficie: number, p: ProductoAplicado): number {
-  return (Number(p.dosis) || 0) * (Number(superficie) || 0);
+function numero(texto: string): number {
+  const n = Number(String(texto).replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function kgDeProducto(superficie: string, p: ProductoAplicado): number {
+  return numero(p.dosis) * numero(superficie);
 }
 
 /** Total de kg a comprar por producto, sumado entre TODOS los lotes/zonas
@@ -104,7 +114,7 @@ export function construirInformeHtml({
   table { width: 100%; border-collapse: collapse; margin-top: 10px; }
   th, td { border: 1px solid #EDE0B8; padding: 7px 9px; font-size: 12px; text-align: left; }
   th { background: #F3F7F2; }
-  .mapasFila { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
+  .mapasFila { display: flex; flex-direction: column; gap: 22px; margin-top: 10px; }
   .mapaBloque { display: flex; gap: 10px; align-items: flex-start; }
   .mapaTitulo { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 </style>

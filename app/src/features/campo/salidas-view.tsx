@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { ChevronDown, Download, Plus, RotateCcw, Upload, X } from "lucide-react-native";
 
 import { calcularZonaAplicacion, UMBRAL_APLICACION_BABOSA, type EstacionAplicacion } from "@/lib/geo/zona-aplicacion";
@@ -21,7 +32,11 @@ import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
+import { MapaDensidad } from "./mapa-densidad";
 import { MapaManchoneo } from "./mapa-manchoneo";
+
+const MAPA_INFORME_ANCHO = 220;
+const MAPA_INFORME_ALTO = 170;
 
 const PRODUCTOS = ["Crustacicida", "Molusquicida", "Crustacicida + Molusquicida", "No aplicar"];
 
@@ -31,30 +46,28 @@ type PedidoExport = "pdf" | "gpx" | "kml" | null;
 interface SalidasViewProps {
   lote: Lote;
   establecimientoNombre?: string;
-  /** Lotes hermanos del mismo establecimiento (con grilla) — para elegir a
-   * qué lote corresponde cada zona de la recomendación de cebo, cuando el
-   * informe junta varios lotes de un mismo cliente. */
-  lotesEstablecimiento?: Lote[];
   campanaViendo: string;
 }
 
 function zonaInicial(lote: Lote): ZonaCebo {
   return {
     id: "1",
-    loteId: lote.id,
-    loteNombre: lote.nombre,
-    superficie: lote.hectareas,
-    productos: [{ id: "1", producto: "Crustacicida + Molusquicida", dosis: 5 }],
+    // En blanco a propósito — la persona escribe lo que quiera acá (el
+    // nombre del lote, una zona dentro del lote, lo que sea), no un lote
+    // elegido de una lista fija.
+    loteNombre: "",
+    superficie: String(lote.hectareas),
+    productos: [{ id: "1", producto: "Crustacicida + Molusquicida", dosis: "5" }],
   };
 }
 
 /** Pestaña "Salidas" — portada de `SalidasView` del prototipo: informe
  * técnico (mapas de densidad, situación de plagas auto-generada + editable,
- * recomendación de cebo lote por lote con exportar PDF), y zona de
- * aplicación/manchoneo (mapa + exportar GPX/KML). Sin arrastrar los
- * vértices del manchón a mano (el prototipo lo permitía; acá por ahora el
- * polígono es siempre el calculado automático). */
-export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento, campanaViendo }: SalidasViewProps) {
+ * recomendación de cebo con exportar PDF), y zona de aplicación/manchoneo
+ * (mapa + exportar GPX/KML). Sin arrastrar los vértices del manchón a mano
+ * (el prototipo lo permitía; acá por ahora el polígono es siempre el
+ * calculado automático). */
+export function SalidasView({ lote, establecimientoNombre, campanaViendo }: SalidasViewProps) {
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
   const [subTab, setSubTab] = useState<SubTab>("informe");
 
@@ -106,18 +119,26 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
     setEditadoManualmente(false);
   }
 
+  // Los mapas de densidad del informe son los mismos que Resultados (mismos
+  // datos, mismo cálculo de celdas) — se arman una sola vez acá y se
+  // reusan tanto en pantalla como al exportar el PDF.
+  const puntosDensidadBicho = useMemo(
+    () => puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.bicho })),
+    [puntosConValores]
+  );
+  const puntosDensidadBabosa = useMemo(
+    () => puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.babosa })),
+    [puntosConValores]
+  );
+  const origenDensidad = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
+
   const [zonas, setZonas] = useState<ZonaCebo[]>(() => [zonaInicial(lote)]);
 
-  function actualizarZonaLote(id: string, loteElegido: Lote) {
-    setZonas((zs) =>
-      zs.map((z) =>
-        z.id === id ? { ...z, loteId: loteElegido.id, loteNombre: loteElegido.nombre, superficie: loteElegido.hectareas } : z
-      )
-    );
+  function actualizarZonaNombre(id: string, valor: string) {
+    setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, loteNombre: valor } : z)));
   }
   function actualizarZonaSuperficie(id: string, valor: string) {
-    const n = Number(valor.replace(",", "."));
-    setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, superficie: Number.isFinite(n) ? n : 0 } : z)));
+    setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, superficie: valor } : z)));
   }
   function actualizarProducto(zonaId: string, productoId: string, campo: "producto" | "dosis", valor: string) {
     setZonas((zs) =>
@@ -125,12 +146,7 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
         if (z.id !== zonaId) return z;
         return {
           ...z,
-          productos: z.productos.map((p) => {
-            if (p.id !== productoId) return p;
-            if (campo === "producto") return { ...p, producto: valor };
-            const n = Number(valor.replace(",", "."));
-            return { ...p, dosis: Number.isFinite(n) ? n : 0 };
-          }),
+          productos: z.productos.map((p) => (p.id === productoId ? { ...p, [campo]: valor } : p)),
         };
       })
     );
@@ -138,9 +154,7 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
   function agregarProducto(zonaId: string) {
     setZonas((zs) =>
       zs.map((z) =>
-        z.id === zonaId
-          ? { ...z, productos: [...z.productos, { id: String(Date.now()), producto: "Crustacicida", dosis: 0 }] }
-          : z
+        z.id === zonaId ? { ...z, productos: [...z.productos, { id: String(Date.now()), producto: "Crustacicida", dosis: "0" }] } : z
       )
     );
   }
@@ -193,15 +207,13 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
     setExportando(pedido);
     try {
       if (pedido === "pdf") {
-        const puntosBicho = puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.bicho }));
-        const puntosBabosa = puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.babosa }));
         const html = construirInformeHtml({
           loteNombre: lote.nombre,
           establecimientoNombre,
           situacion,
           zonas,
-          mapaBichoSvg: construirSvgDensidad(puntosBicho, lote.perimetro, rangosDe("bicho"), NIVEL_COLORES, 260, 220),
-          mapaBabosaSvg: construirSvgDensidad(puntosBabosa, lote.perimetro, rangosDe("babosa"), NIVEL_COLORES, 260, 220),
+          mapaBichoSvg: construirSvgDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"), NIVEL_COLORES, 260, 220),
+          mapaBabosaSvg: construirSvgDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"), NIVEL_COLORES, 260, 220),
           leyendaBichoHtml: construirLeyendaHtml(rangosDe("bicho"), NIVEL_COLORES, "Nº BB/m²"),
           leyendaBabosaHtml: construirLeyendaHtml(rangosDe("babosa"), NIVEL_COLORES, "Nº Babosas/m²"),
         });
@@ -230,7 +242,7 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={styles.subTabs}>
         <Text
           onPress={() => setSubTab("informe")}
@@ -247,7 +259,25 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
       </View>
 
       {subTab === "informe" ? (
-        <ScrollView contentContainerStyle={styles.scrollContenido}>
+        <ScrollView contentContainerStyle={styles.scrollContenido} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
+            <Text style={styles.cardTitulo}>Mapa de densidad poblacional</Text>
+            <MapaInformeConLeyenda
+              titulo="Bichos bolita"
+              puntos={puntosDensidadBicho}
+              perimetro={lote.perimetro}
+              plaga="bicho"
+              origen={origenDensidad}
+            />
+            <MapaInformeConLeyenda
+              titulo="Babosas"
+              puntos={puntosDensidadBabosa}
+              perimetro={lote.perimetro}
+              plaga="babosa"
+              origen={origenDensidad}
+            />
+          </View>
+
           <View style={styles.card}>
             <Text style={styles.cardTitulo}>Situación de plagas de suelo</Text>
             <TextInput
@@ -281,8 +311,7 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
               <ZonaFila
                 key={z.id}
                 zona={z}
-                lotesElegibles={lotesEstablecimiento && lotesEstablecimiento.length > 0 ? lotesEstablecimiento : [lote]}
-                onElegirLote={(loteElegido) => actualizarZonaLote(z.id, loteElegido)}
+                onCambiarNombre={(v) => actualizarZonaNombre(z.id, v)}
                 onCambiarSuperficie={(v) => actualizarZonaSuperficie(z.id, v)}
                 onCambiarProducto={(prodId, campo, v) => actualizarProducto(z.id, prodId, campo, v)}
                 onAgregarProducto={() => agregarProducto(z.id)}
@@ -384,171 +413,47 @@ export function SalidasView({ lote, establecimientoNombre, lotesEstablecimiento,
         onCancelar={() => setPedidoExport(null)}
         onConfirmar={confirmarExport}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
-interface ZonaFilaProps {
-  zona: ZonaCebo;
-  /** Entre qué lotes se puede elegir (los del mismo establecimiento, o
-   * solo el lote actual si no hay más — ver SalidasView). */
-  lotesElegibles: Lote[];
-  onElegirLote: (lote: Lote) => void;
-  onCambiarSuperficie: (valor: string) => void;
-  onCambiarProducto: (productoId: string, campo: "producto" | "dosis", valor: string) => void;
-  onAgregarProducto: () => void;
-  onQuitarProducto: (productoId: string) => void;
-  onQuitar: () => void;
+interface MapaInformeConLeyendaProps {
+  titulo: string;
+  puntos: Array<{ id: string; x: number; y: number; valor: number }>;
+  perimetro: Lote["perimetro"];
+  plaga: "bicho" | "babosa";
+  origen: ReturnType<typeof inferirOrigenDesdePuntos> | null;
 }
 
-/** Una fila = un lote, con uno o más productos aplicados a dosis distintas
- * (por ej. crustacicida en un sector del lote y molusquicida en otro, o
- * simplemente dos productos juntos) — portado y extendido de `ZonaFila`
- * del prototipo (ahí solo había un producto por zona). */
-function ZonaFila({
-  zona,
-  lotesElegibles,
-  onElegirLote,
-  onCambiarSuperficie,
-  onCambiarProducto,
-  onAgregarProducto,
-  onQuitarProducto,
-  onQuitar,
-}: ZonaFilaProps) {
-  const [loteAbierto, setLoteAbierto] = useState(false);
-
+/** El mismo mapa de densidad de Resultados (mismo componente `MapaDensidad`,
+ * mismos datos, con foto satelital de fondo si hay señal) en miniatura —
+ * para que la persona vea en pantalla lo mismo que va a salir en el PDF
+ * (ahí sin foto, ver mapa-svg.ts), sin tener que ir a otra pestaña. */
+function MapaInformeConLeyenda({ titulo, puntos, perimetro, plaga, origen }: MapaInformeConLeyendaProps) {
+  const rangos = rangosDe(plaga);
   return (
-    <View style={styles.zonaCard}>
-      <View style={styles.zonaFilaSuperior}>
-        <View style={styles.zonaLoteWrap}>
-          <Pressable
-            style={styles.zonaLoteBtn}
-            onPress={() => lotesElegibles.length > 1 && setLoteAbierto((v) => !v)}
-            disabled={lotesElegibles.length <= 1}
-          >
-            <Text style={styles.zonaLoteTexto} numberOfLines={1}>
-              {zona.loteNombre}
-            </Text>
-            {lotesElegibles.length > 1 && <ChevronDown size={13} color={colors.textMuted} />}
-          </Pressable>
-          {loteAbierto && (
-            <View style={styles.zonaLoteMenu}>
-              {lotesElegibles.map((l) => (
-                <Pressable
-                  key={l.id}
-                  style={styles.zonaProductoItem}
-                  onPress={() => {
-                    onElegirLote(l);
-                    setLoteAbierto(false);
-                  }}
-                >
-                  <Text style={styles.zonaProductoItemTexto}>{l.nombre}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
+    <View style={styles.mapaInformeBloque}>
+      <Text style={styles.mapaInformeTitulo}>{titulo}</Text>
+      <View style={styles.mapaInformeFila}>
+        <View style={[styles.mapaInformeMarco, { width: MAPA_INFORME_ANCHO, height: MAPA_INFORME_ALTO }]}>
+          <MapaDensidad
+            puntos={puntos}
+            perimetro={perimetro}
+            rangos={rangos}
+            nivelColores={NIVEL_COLORES}
+            ancho={MAPA_INFORME_ANCHO}
+            alto={MAPA_INFORME_ALTO}
+            origen={origen}
+          />
         </View>
-        <Pressable style={styles.zonaQuitarBtn} onPress={onQuitar}>
-          <X size={13} color={colors.danger} />
-        </Pressable>
-      </View>
-
-      {zona.productos.map((p, i) => (
-        <ProductoFila
-          key={p.id}
-          producto={p}
-          superficie={zona.superficie}
-          puedeQuitar={zona.productos.length > 1}
-          // El "+" de agregar otro producto va al lado del desplegable, pero
-          // solo en la última fila — si hubiera uno por fila, se repetiría
-          // sin sentido (todos hacen lo mismo: agregar una fila más).
-          mostrarAgregar={i === zona.productos.length - 1}
-          onAgregarProducto={onAgregarProducto}
-          onCambiar={(campo, v) => onCambiarProducto(p.id, campo, v)}
-          onCambiarSuperficie={onCambiarSuperficie}
-          onQuitar={() => onQuitarProducto(p.id)}
-        />
-      ))}
-    </View>
-  );
-}
-
-interface ProductoFilaProps {
-  producto: ProductoAplicado;
-  superficie: number;
-  puedeQuitar: boolean;
-  mostrarAgregar: boolean;
-  onAgregarProducto: () => void;
-  onCambiar: (campo: "producto" | "dosis", valor: string) => void;
-  onCambiarSuperficie: (valor: string) => void;
-  onQuitar: () => void;
-}
-
-function ProductoFila({
-  producto,
-  superficie,
-  puedeQuitar,
-  mostrarAgregar,
-  onAgregarProducto,
-  onCambiar,
-  onCambiarSuperficie,
-  onQuitar,
-}: ProductoFilaProps) {
-  const [productoAbierto, setProductoAbierto] = useState(false);
-
-  return (
-    <View style={styles.productoFila}>
-      <View style={styles.zonaProductoFilaSuperior}>
-        <View style={styles.zonaProductoWrap}>
-          <Pressable style={styles.zonaProductoBtn} onPress={() => setProductoAbierto((v) => !v)}>
-            <Text style={styles.zonaProductoTexto}>{producto.producto}</Text>
-            <ChevronDown size={13} color={colors.textMuted} />
-          </Pressable>
-          {productoAbierto && (
-            <View style={styles.zonaProductoMenu}>
-              {PRODUCTOS.map((p) => (
-                <Pressable
-                  key={p}
-                  style={styles.zonaProductoItem}
-                  onPress={() => {
-                    onCambiar("producto", p);
-                    setProductoAbierto(false);
-                  }}
-                >
-                  <Text style={styles.zonaProductoItemTexto}>{p}</Text>
-                </Pressable>
-              ))}
+        <View style={styles.leyendaInforme}>
+          {rangos.map((r, i) => (
+            <View key={i} style={styles.leyendaInformeFila}>
+              <View style={[styles.leyendaInformeMuestra, { backgroundColor: NIVEL_COLORES[i] }]} />
+              <Text style={styles.leyendaInformeTexto}>{r.label}</Text>
             </View>
-          )}
+          ))}
         </View>
-        {mostrarAgregar && (
-          <Pressable style={styles.agregarProductoBtn} onPress={onAgregarProducto}>
-            <Plus size={16} color={colors.primaryDark} />
-          </Pressable>
-        )}
-        {puedeQuitar && (
-          <Pressable style={styles.zonaQuitarBtn} onPress={onQuitar}>
-            <X size={12} color={colors.danger} />
-          </Pressable>
-        )}
-      </View>
-
-      <View style={styles.zonaNumRow}>
-        <TextInput
-          style={styles.zonaNumInput}
-          value={String(producto.dosis)}
-          keyboardType="decimal-pad"
-          onChangeText={(v) => onCambiar("dosis", v)}
-        />
-        <Text style={styles.zonaUnidad}>kg/ha ×</Text>
-        <TextInput
-          style={styles.zonaNumInput}
-          value={String(superficie)}
-          keyboardType="decimal-pad"
-          onChangeText={onCambiarSuperficie}
-        />
-        <Text style={styles.zonaUnidad}>ha</Text>
-        <Text style={styles.zonaTotal}>= {kgDeProducto(superficie, producto).toFixed(0)} kg</Text>
       </View>
     </View>
   );
@@ -577,6 +482,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardTitulo: { fontSize: 14, fontWeight: "700", color: colors.text },
+  mapaInformeBloque: { gap: 6 },
+  mapaInformeTitulo: { fontSize: 12.5, fontWeight: "700", color: colors.textMuted },
+  mapaInformeFila: { flexDirection: "row", gap: 10 },
+  mapaInformeMarco: {
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  leyendaInforme: { gap: 3, justifyContent: "center" },
+  leyendaInformeFila: { flexDirection: "row", alignItems: "center", gap: 5 },
+  leyendaInformeMuestra: { width: 10, height: 10, borderRadius: 2, borderWidth: 1, borderColor: colors.border },
+  leyendaInformeTexto: { fontSize: 10.5, color: colors.text },
   situacionInput: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -599,31 +518,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   zonaFilaSuperior: { flexDirection: "row", alignItems: "center", gap: 8 },
-  zonaLoteWrap: { flex: 1, position: "relative" },
-  zonaLoteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  zonaNombreInput: {
+    flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 7,
-  },
-  zonaLoteTexto: { flex: 1, fontSize: 13, fontWeight: "700", color: colors.text },
-  zonaLoteMenu: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    overflow: "hidden",
-    backgroundColor: colors.surface,
-    zIndex: 10,
-    elevation: 10,
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
   },
   zonaQuitarBtn: { padding: 6 },
   productoFila: { gap: 6 },
@@ -734,3 +638,144 @@ const styles = StyleSheet.create({
   },
   botonExportTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark },
 });
+
+interface ZonaFilaProps {
+  zona: ZonaCebo;
+  onCambiarNombre: (valor: string) => void;
+  onCambiarSuperficie: (valor: string) => void;
+  onCambiarProducto: (productoId: string, campo: "producto" | "dosis", valor: string) => void;
+  onAgregarProducto: () => void;
+  onQuitarProducto: (productoId: string) => void;
+  onQuitar: () => void;
+}
+
+/** Una fila = un lote (nombre libre, no una lista fija — se puede armar un
+ * informe que junte varios lotes de un mismo establecimiento con nombres
+ * cualquiera), con uno o más productos aplicados a dosis distintas (por
+ * ej. crustacicida en un sector y molusquicida en otro, o simplemente dos
+ * productos juntos) — portado y extendido de `ZonaFila` del prototipo (ahí
+ * solo había un producto por zona). */
+function ZonaFila({
+  zona,
+  onCambiarNombre,
+  onCambiarSuperficie,
+  onCambiarProducto,
+  onAgregarProducto,
+  onQuitarProducto,
+  onQuitar,
+}: ZonaFilaProps) {
+  return (
+    <View style={styles.zonaCard}>
+      <View style={styles.zonaFilaSuperior}>
+        <TextInput
+          style={styles.zonaNombreInput}
+          value={zona.loteNombre}
+          placeholder="Nombre del lote"
+          placeholderTextColor={colors.textMuted}
+          onChangeText={onCambiarNombre}
+        />
+        <Pressable style={styles.zonaQuitarBtn} onPress={onQuitar}>
+          <X size={13} color={colors.danger} />
+        </Pressable>
+      </View>
+
+      {zona.productos.map((p, i) => (
+        <ProductoFila
+          key={p.id}
+          producto={p}
+          superficie={zona.superficie}
+          puedeQuitar={zona.productos.length > 1}
+          // El "+" de agregar otro producto va al lado del desplegable, pero
+          // solo en la última fila — si hubiera uno por fila, se repetiría
+          // sin sentido (todos hacen lo mismo: agregar una fila más).
+          mostrarAgregar={i === zona.productos.length - 1}
+          onAgregarProducto={onAgregarProducto}
+          onCambiar={(campo, v) => onCambiarProducto(p.id, campo, v)}
+          onCambiarSuperficie={onCambiarSuperficie}
+          onQuitar={() => onQuitarProducto(p.id)}
+        />
+      ))}
+    </View>
+  );
+}
+
+interface ProductoFilaProps {
+  producto: ProductoAplicado;
+  superficie: string;
+  puedeQuitar: boolean;
+  mostrarAgregar: boolean;
+  onAgregarProducto: () => void;
+  onCambiar: (campo: "producto" | "dosis", valor: string) => void;
+  onCambiarSuperficie: (valor: string) => void;
+  onQuitar: () => void;
+}
+
+function ProductoFila({
+  producto,
+  superficie,
+  puedeQuitar,
+  mostrarAgregar,
+  onAgregarProducto,
+  onCambiar,
+  onCambiarSuperficie,
+  onQuitar,
+}: ProductoFilaProps) {
+  const [productoAbierto, setProductoAbierto] = useState(false);
+
+  return (
+    <View style={styles.productoFila}>
+      <View style={styles.zonaProductoFilaSuperior}>
+        <View style={styles.zonaProductoWrap}>
+          <Pressable style={styles.zonaProductoBtn} onPress={() => setProductoAbierto((v) => !v)}>
+            <Text style={styles.zonaProductoTexto}>{producto.producto}</Text>
+            <ChevronDown size={13} color={colors.textMuted} />
+          </Pressable>
+          {productoAbierto && (
+            <View style={styles.zonaProductoMenu}>
+              {PRODUCTOS.map((p) => (
+                <Pressable
+                  key={p}
+                  style={styles.zonaProductoItem}
+                  onPress={() => {
+                    onCambiar("producto", p);
+                    setProductoAbierto(false);
+                  }}
+                >
+                  <Text style={styles.zonaProductoItemTexto}>{p}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+        {mostrarAgregar && (
+          <Pressable style={styles.agregarProductoBtn} onPress={onAgregarProducto}>
+            <Plus size={16} color={colors.primaryDark} />
+          </Pressable>
+        )}
+        {puedeQuitar && (
+          <Pressable style={styles.zonaQuitarBtn} onPress={onQuitar}>
+            <X size={12} color={colors.danger} />
+          </Pressable>
+        )}
+      </View>
+
+      <View style={styles.zonaNumRow}>
+        <TextInput
+          style={styles.zonaNumInput}
+          value={producto.dosis}
+          keyboardType="decimal-pad"
+          onChangeText={(v) => onCambiar("dosis", v)}
+        />
+        <Text style={styles.zonaUnidad}>kg/ha ×</Text>
+        <TextInput
+          style={styles.zonaNumInput}
+          value={superficie}
+          keyboardType="decimal-pad"
+          onChangeText={onCambiarSuperficie}
+        />
+        <Text style={styles.zonaUnidad}>ha</Text>
+        <Text style={styles.zonaTotal}>= {kgDeProducto(superficie, producto).toFixed(0)} kg</Text>
+      </View>
+    </View>
+  );
+}
