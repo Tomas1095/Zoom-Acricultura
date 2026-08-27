@@ -182,13 +182,16 @@ export function construirInformeHtml({
      son "background" en el sentido de CSS — por eso el mapa en sí se veía
      bien pero la leyenda de al lado no. */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-  /* El padding puesto en body (como estaba antes) solo se ve en el borde
-     de arriba/abajo de TODO el documento, no de cada hoja — por eso la
-     hoja 2 (después del salto de página) arrancaba con el encabezado
-     pegado arriba, "fuera de lugar" respecto de la hoja 1. @page margin
-     sí se repite en cada hoja que arma el motor de impresión. */
-  @page { margin: 26px; }
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; }
+  /* @page margin no salió bien en el motor real de expo-print (en el
+     celular el margen terminaba siendo mucho más chico que estos 26px,
+     letra y logo pegados a los bordes) — en vez de depender de esa regla
+     "por hoja" (que cada motor de impresión interpreta distinto), cada
+     hoja es su propio bloque HTML con su propio padding de toda la vida
+     (.hoja), que no depende de que el motor entienda @page. body queda
+     sin padding — cada .hoja pone el suyo. */
+  @page { margin: 0; }
+  body { margin: 0; font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; }
+  .hoja { padding: 26px; }
   .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
   .eyebrow { color: #A9752E; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
   h1 { font-size: 21px; margin: 4px 0 0; }
@@ -235,20 +238,22 @@ export function construirInformeHtml({
 </style>
 </head>
 <body>
-  ${encabezadoHtml}
+  <div class="hoja">
+    ${encabezadoHtml}
 
-  <div class="card cardMapas">
-    <div class="mapaBloque">
-      <div class="mapaEtiqueta">Resultado Monitoreo de Bichos Bolita</div>
-      ${mapaBichoHtml}
-    </div>
-    <div class="mapaBloque">
-      <div class="mapaEtiqueta">Resultado Monitoreo de Babosas</div>
-      ${mapaBabosaHtml}
+    <div class="card cardMapas">
+      <div class="mapaBloque">
+        <div class="mapaEtiqueta">Resultado Monitoreo de Bichos Bolita</div>
+        ${mapaBichoHtml}
+      </div>
+      <div class="mapaBloque">
+        <div class="mapaEtiqueta">Resultado Monitoreo de Babosas</div>
+        ${mapaBabosaHtml}
+      </div>
     </div>
   </div>
 
-  <div class="hojaSegunda">
+  <div class="hoja hojaSegunda">
     ${encabezadoHtml}
 
     <div class="card">
