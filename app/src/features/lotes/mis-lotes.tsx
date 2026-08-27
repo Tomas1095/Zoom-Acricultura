@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import * as db from "@/lib/db/lotes";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
+import { precargarLotes } from "@/lib/offline/cache-lote";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Establecimiento, Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -33,6 +34,11 @@ export function MisLotes() {
       setUsandoCache(false);
       setError(null);
       guardarCacheArbol(usuario.id, arbol);
+      // Con solo entrar a esta pantalla (que pasa siempre, apenas hay
+      // sesión) ya queda todo listo para trabajar offline en cualquier
+      // lote asignado — no hace falta abrir cada uno a mano. Ver
+      // lib/offline/cache-lote.ts.
+      precargarLotes(arbol.lotes);
     } catch (e: any) {
       // Sin señal: esta es la PRIMERA pantalla que ve un Monitoreador al
       // entrar — sin este respaldo, no había forma de siquiera ver la

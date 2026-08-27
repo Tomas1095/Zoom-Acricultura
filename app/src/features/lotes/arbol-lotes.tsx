@@ -11,6 +11,7 @@ import { fetchUsuarios } from "@/lib/db/equipo";
 import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
+import { precargarLotes } from "@/lib/offline/cache-lote";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -70,6 +71,11 @@ export function ArbolLotes() {
       setUsuarios(todosLosUsuarios);
       setUsandoCache(false);
       guardarCacheArbol(usuario.id, arbol);
+      // Con solo entrar a esta pantalla (que pasa siempre, apenas hay
+      // sesión) ya queda todo listo para trabajar offline en cualquier
+      // lote — no hace falta abrir cada uno a mano. Ver
+      // lib/offline/cache-lote.ts.
+      precargarLotes(arbol.lotes);
     } catch (e: any) {
       // Sin señal: esta es la PRIMERA pantalla que ve un Socio/Encargado
       // al entrar — sin este respaldo, no había forma de siquiera ver el

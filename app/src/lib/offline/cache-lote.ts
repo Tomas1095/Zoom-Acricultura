@@ -10,6 +10,7 @@
 // pantalla — puede estar desactualizada, pero ver algo es mejor que nada.
 
 import { getDb } from "./db";
+import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import type { Carga, Lote, Punto } from "@/types/domain";
 
 export interface CacheLote {
@@ -55,4 +56,22 @@ export function leerCacheLote(loteId: string, campana?: string): CacheLote | nul
     puntos: JSON.parse(fila.puntos_json),
     cargas: new Map(JSON.parse(fila.cargas_json)),
   };
+}
+
+/** Precarga la grilla + cargas de TODOS los lotes con grilla que la
+ * persona ve en su árbol — pedido explícito del usuario: con solo
+ * loguearse y entrar a la app (sin tener que abrir cada lote a mano) ya
+ * tiene que quedar todo listo para trabajar cualquiera de ellos sin
+ * señal. Se dispara en paralelo y sin bloquear la pantalla — quien llama
+ * esto (MisLotes/ArbolLotes) no espera a que termine; si un lote puntual
+ * falla no frena a los demás, y si la persona ya entró a algún lote a
+ * mano antes, esto simplemente lo vuelve a guardar más fresco. */
+export function precargarLotes(lotes: Lote[]): void {
+  lotes
+    .filter((l) => l.tieneGrilla)
+    .forEach((l) => {
+      Promise.all([fetchPuntosDeLote(l.id), fetchCargasDeLote(l.id, l.campanaActual)])
+        .then(([puntos, cargas]) => guardarCacheLote(l.id, l.campanaActual, l, puntos, cargas))
+        .catch(() => {});
+    });
 }
