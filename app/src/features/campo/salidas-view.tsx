@@ -41,9 +41,12 @@ import { MapaManchoneo } from "./mapa-manchoneo";
 const MAPA_INFORME_ALTO = 280;
 // Los mapas del PDF son bastante más grandes que los de pantalla — una
 // hoja A4/carta da mucho más lugar que la miniatura del informe, y achicar
-// el mapa ahí solo apretaba título/rosa/leyenda/escala sin necesidad.
-const MAPA_PDF_ANCHO = 500;
-const MAPA_PDF_ALTO = 420;
+// el mapa ahí solo apretaba título/rosa/leyenda/escala sin necesidad. Más
+// apaisado que 4:3 a propósito — lotes reales suelen ser más anchos que
+// altos, así se aprovecha el ancho de la hoja en vez de dejarlo en blanco
+// a los costados cuando el alto es lo que limita el zoom del polígono.
+const MAPA_PDF_ANCHO = 520;
+const MAPA_PDF_ALTO = 320;
 
 const PRODUCTOS = ["Crustacicida", "Molusquicida", "Crustacicida + Molusquicida", "No aplicar"];
 
@@ -259,7 +262,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             NIVEL_COLORES,
             "Nº BB/m²",
             MAPA_PDF_ANCHO,
-            MAPA_PDF_ALTO
+            MAPA_PDF_ALTO,
+            origenDensidad
           ),
           mapaBabosaHtml: construirMapaDensidadHtml(
             puntosDensidadBabosa,
@@ -268,7 +272,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             NIVEL_COLORES,
             "Nº Babosas/m²",
             MAPA_PDF_ANCHO,
-            MAPA_PDF_ALTO
+            MAPA_PDF_ALTO,
+            origenDensidad
           ),
         });
         await exportarInformePdf(html, valores.nombre);
@@ -326,12 +331,14 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
+          {/* Sin título propio en el card: "Mapa de densidad poblacional" ya
+              lo muestra cada mapa adentro suyo (ver MapaDensidad) — ponerlo
+              acá también era repetir el mismo texto dos veces seguidas. */}
           <View style={styles.card} onLayout={onLayoutCardMapas}>
-            <Text style={styles.cardTitulo}>Mapa de densidad poblacional</Text>
             {anchoCardMapas > 40 && (
               <>
                 <MapaInformeConLeyenda
-                  titulo="Bichos bolita"
+                  titulo="Resultado Monitoreo de Bichos Bolita"
                   puntos={puntosDensidadBicho}
                   perimetro={lote.perimetro}
                   plaga="bicho"
@@ -340,7 +347,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                   alto={MAPA_INFORME_ALTO}
                 />
                 <MapaInformeConLeyenda
-                  titulo="Babosas"
+                  titulo="Resultado Monitoreo de Babosas"
                   puntos={puntosDensidadBabosa}
                   perimetro={lote.perimetro}
                   plaga="babosa"

@@ -75,6 +75,28 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
+// Mismos paths/colores que components/zoom-logo.tsx (variante "dark", para
+// fondo claro) — repetido acá como SVG plano porque el PDF es HTML, no
+// puede importar el componente de React Native.
+const LOGO_VERDE = "#344D40";
+const LOGO_NARANJA = "#DB945D";
+const LOGO_HTML = `<div style="display:flex;align-items:center;gap:6px;">
+  <svg width="30" height="30" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="26.5" stroke="${LOGO_VERDE}" stroke-width="11" fill="none" />
+    <line x1="50" y1="23.5" x2="50" y2="6" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <line x1="50" y1="76.5" x2="50" y2="94" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <line x1="23.5" y1="50" x2="6" y2="50" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <line x1="76.5" y1="50" x2="94" y2="50" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <path d="M 61.74 13.86 L 64.44 14.85 L 67.05 16.04 L 69.57 17.43 L 71.98 19.00 L 74.26 20.75 L 76.40 22.67 L 78.39 24.74 L 80.21 26.95 L 81.87 29.30 L 83.34 31.77 L 84.62 34.34 L 85.71 37.00" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 15.02 35.15 L 16.19 32.65 L 17.54 30.24 L 19.06 27.93 L 20.75 25.74 L 22.59 23.68 L 24.57 21.76 L 26.69 19.99 L 28.93 18.37 L 31.29 16.93 L 33.74 15.65 L 36.28 14.56 L 38.89 13.66" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 29.30 81.87 L 27.26 80.45 L 25.32 78.90 L 23.48 77.22 L 21.76 75.43 L 20.16 73.53 L 18.68 71.52 L 17.34 69.43 L 16.14 67.25 L 15.09 65.00 L 14.18 62.68 L 13.43 60.31 L 12.83 57.90" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  </svg>
+  <div style="display:flex;flex-direction:column;align-items:center;">
+    <div style="font-size:15px;font-weight:900;letter-spacing:-0.5px;color:${LOGO_VERDE};line-height:1;">ZOOM</div>
+    <div style="font-size:6.5px;font-weight:700;letter-spacing:0.6px;color:${LOGO_VERDE};margin-top:1px;">AGRICULTURA</div>
+  </div>
+</div>`;
+
 /** HTML del informe, listo para pasarle a expo-print. Orden pedido: mapas
  * de densidad (bichos bolita, después babosas) → situación de plagas →
  * recomendación de aplicación de cebo (lote por lote, con todos los
@@ -128,9 +150,9 @@ export function construirInformeHtml({
 <meta charset="utf-8" />
 <style>
   body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; padding: 28px; }
+  .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
   .eyebrow { color: #A9752E; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
-  h1 { font-size: 21px; margin: 4px 0 2px; }
-  .sub { color: #6B5D2E; font-size: 13px; margin-bottom: 20px; }
+  h1 { font-size: 21px; margin: 4px 0 0; }
   .card { background: #FFFFFF; border: 1px solid #EDE0B8; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
   .cardTitulo { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .mapaBloque { margin-bottom: 16px; }
@@ -149,18 +171,21 @@ export function construirInformeHtml({
 </style>
 </head>
 <body>
-  <div class="eyebrow">INFORME TÉCNICO</div>
-  <h1>${escapeHtml(loteNombre)}</h1>
-  ${establecimientoNombre ? `<div class="sub">${escapeHtml(establecimientoNombre)}</div>` : ""}
+  <div class="encabezado">
+    <div>
+      <div class="eyebrow">INFORME TÉCNICO</div>
+      <h1>${escapeHtml(loteNombre)}${establecimientoNombre ? ` - ${escapeHtml(establecimientoNombre)}` : ""}</h1>
+    </div>
+    ${LOGO_HTML}
+  </div>
 
   <div class="card">
-    <div class="cardTitulo">Mapa de densidad poblacional</div>
     <div class="mapaBloque">
-      <div class="mapaEtiqueta">Bichos bolita</div>
+      <div class="mapaEtiqueta">Resultado Monitoreo de Bichos Bolita</div>
       ${mapaBichoHtml}
     </div>
     <div class="mapaBloque">
-      <div class="mapaEtiqueta">Babosas</div>
+      <div class="mapaEtiqueta">Resultado Monitoreo de Babosas</div>
       ${mapaBabosaHtml}
     </div>
   </div>

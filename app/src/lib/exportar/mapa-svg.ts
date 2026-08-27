@@ -3,21 +3,19 @@
 // Informe, ver features/campo/mapa-densidad.tsx): título arriba, rosa de
 // los vientos arriba a la derecha, leyenda abajo a la izquierda, escala
 // graduada tipo regla abajo a la derecha — acá como HTML+SVG en vez de
-// vistas de React Native
-// (expo-print renderiza HTML normal, no hace falta ninguna librería nueva
-// ni capturar una vista con view-shot). Sin foto satelital de fondo: un
-// PDF no tiene conexión propia al abrirse, así que acá siempre queda sobre
-// fondo claro liso — por eso el texto va oscuro, no blanco con sombra como
-// en pantalla (ahí sí hace falta leerse encima de una foto).
+// vistas de React Native (expo-print renderiza HTML normal, no hace falta
+// ninguna librería nueva ni capturar una vista con view-shot).
+//
+// Con foto satelital de fondo, igual que en pantalla: el PDF se genera EN
+// EL MOMENTO (con `Print.printToFileAsync`, adentro de la app, con el
+// celular conectado), así que si hay señal la imagen de Esri sí carga y
+// queda rasterizada dentro del PDF final — no hace falta conexión para
+// volver a abrirlo después. Si no hay `origen` (o falla la carga), el
+// mapa queda igual que antes, sobre el fondo claro liso.
 
-import {
-  calcularCeldasDensidad,
-  elegirEscalaBarra,
-  graduarEscalaBarra,
-  ROSA_VIENTOS_KITES,
-  type RangoDensidad,
-} from "@/lib/geo/densidad";
-import type { XY } from "@/lib/geo/geometria";
+import { calcularCeldasDensidad, elegirEscalaBarra, graduarEscalaBarra, ROSA_VIENTOS_KITES, type RangoDensidad } from "@/lib/geo/densidad";
+import type { LatLon, XY } from "@/lib/geo/geometria";
+import { construirUrlSatelital } from "@/lib/geo/satelital";
 
 // Margen general del dibujo del lote contra el borde del recuadro — más
 // grande que un simple padding estético a propósito: evita que el
@@ -38,9 +36,11 @@ export interface PuntoDensidadSvg {
   valor: number;
 }
 
-/** Arma el mapa completo (SVG del Voronoi + contorno, con título/norte/
- * leyenda/escala superpuestos como HTML) — un solo bloque listo para pegar
- * en el HTML del informe. */
+/** Arma el mapa completo (SVG del Voronoi + contorno, con título/rosa de
+ * los vientos/leyenda/escala superpuestos como HTML) — un solo bloque listo
+ * para pegar en el HTML del informe. `origen` es opcional: sin él (o sin
+ * señal en el momento de generar el PDF) el mapa queda sobre fondo claro
+ * liso, igual que antes. */
 export function construirMapaDensidadHtml(
   puntos: PuntoDensidadSvg[],
   perimetro: XY[],
@@ -48,7 +48,8 @@ export function construirMapaDensidadHtml(
   nivelColores: readonly string[],
   etiquetaLeyenda: string,
   ancho: number,
-  alto: number
+  alto: number,
+  origen?: LatLon | null
 ): string {
   const todasX = puntos.map((p) => p.x).concat(perimetro.map((v) => v.x));
   const todasY = puntos.map((p) => p.y).concat(perimetro.map((v) => v.y));
@@ -65,6 +66,17 @@ export function construirMapaDensidadHtml(
   const offX = PAD + (dispW - spanX * escala) / 2;
   const offY = PAD + (dispH - spanY * escala) / 2;
   const toPx = (x: number, y: number) => ({ left: offX + (x - minX) * escala, top: offY + (y - minY) * escala });
+
+  const satUrl = origen ? construirUrlSatelital(origen, minX, minY, escala, ancho, alto, offX, offY) : null;
+  const imgTag = satUrl
+    ? `<img src="${satUrl}" style="position:absolute;top:0;left:0;width:${ancho}px;height:${alto}px;object-fit:fill;" />`
+    : "";
+  // Con foto de fondo, texto/líneas en blanco con sombra (se leen mejor
+  // encima de una imagen) — igual que en pantalla; sin foto, los colores
+  // oscuros de siempre.
+  const colorTexto = satUrl ? "#FFFFFF" : "#1B2E1F";
+  const colorPerimetro = satUrl ? "#FFFFFF" : "#1B2E1F";
+  const sombra = satUrl ? "text-shadow:0 1px 2px rgba(0,0,0,0.65);" : "";
 
   let celdas: ReturnType<typeof calcularCeldasDensidad> = [];
   try {
@@ -84,7 +96,7 @@ export function construirMapaDensidadHtml(
   const lados = perimetroPx
     .map((a, i) => {
       const b = perimetroPx[(i + 1) % perimetroPx.length];
-      return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="#1B2E1F" stroke-width="2" />`;
+      return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="${colorPerimetro}" stroke-width="2" />`;
     })
     .join("");
 
@@ -93,14 +105,14 @@ export function construirMapaDensidadHtml(
   const filasLeyenda = rangos
     .map(
       (r, i) =>
-        `<div style="display:flex;align-items:center;gap:4px;font-size:9px;color:#1B2E1F;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;border:0.5px solid rgba(0,0,0,0.3);background:${nivelColores[i]};"></span>${r.label}</div>`
+        `<div style="display:flex;align-items:center;gap:4px;font-size:9px;color:${colorTexto};${sombra}"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;border:0.5px solid rgba(0,0,0,0.3);background-color:${nivelColores[i]};"></span>${r.label}</div>`
     )
     .join("");
 
   const escalaBarra = elegirEscalaBarra(escala);
   const escalaGraduada = graduarEscalaBarra(escalaBarra.metros, escalaBarra.px);
   const segmentosEscala = escalaGraduada.segmentos
-    .map((s) => `<div style="width:${s.anchoPx}px;height:4px;background:${s.color};border:0.5px solid #000000;"></div>`)
+    .map((s) => `<div style="width:${s.anchoPx}px;height:4px;background-color:${s.color};border:0.5px solid #000000;"></div>`)
     .join("");
   const etiquetasEscala = escalaGraduada.etiquetas
     .map(
@@ -117,10 +129,11 @@ export function construirMapaDensidadHtml(
   ).join("");
   const rosaSvg = `<svg width="${TAMANO_ROSA}" height="${TAMANO_ROSA}" viewBox="0 0 36 36" style="position:absolute;top:${ROSA_MARGEN}px;left:${ROSA_MARGEN}px;">${rosaPoligonos}</svg>`;
 
-  return `<div style="position:relative;width:${ancho}px;height:${alto}px;background:#F3F7F2;border:1px solid #EDE0B8;border-radius:10px;overflow:hidden;">
+  return `<div style="position:relative;width:${ancho}px;height:${alto}px;background-color:#F3F7F2;border:1px solid #EDE0B8;border-radius:10px;overflow:hidden;">
+    ${imgTag}
     ${svg}
-    <div style="position:absolute;top:6px;left:${ROSA_CAJA + 10}px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:#1B2E1F;">Mapa de densidad poblacional</div>
-    <div style="position:absolute;top:6px;right:6px;width:${ROSA_CAJA}px;height:${ROSA_CAJA}px;color:#1B2E1F;font-size:7px;font-weight:800;">
+    <div style="position:absolute;top:6px;left:${ROSA_CAJA + 10}px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:${colorTexto};${sombra}">Mapa de densidad poblacional</div>
+    <div style="position:absolute;top:6px;right:6px;width:${ROSA_CAJA}px;height:${ROSA_CAJA}px;color:${colorTexto};font-size:7px;font-weight:800;${sombra}">
       ${rosaSvg}
       <div style="position:absolute;top:0;left:0;right:0;text-align:center;">N</div>
       <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;">S</div>
@@ -128,12 +141,13 @@ export function construirMapaDensidadHtml(
       <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;left:0;">O</div>
     </div>
     <div style="position:absolute;bottom:6px;left:6px;max-width:55%;">
-      <div style="font-size:10px;font-weight:800;color:#1B2E1F;margin-bottom:2px;">${etiquetaLeyenda}</div>
+      <div style="font-size:10px;font-weight:800;color:${colorTexto};margin-bottom:2px;${sombra}">${etiquetaLeyenda}</div>
       <div style="display:flex;flex-direction:column;gap:2px;">${filasLeyenda}</div>
     </div>
     <div style="position:absolute;bottom:20px;right:10px;width:${escalaGraduada.anchoTotalPx}px;">
       <div style="display:flex;">${segmentosEscala}</div>
-      <div style="position:relative;width:${escalaGraduada.anchoTotalPx}px;height:9px;margin-top:2px;font-size:6.5px;font-weight:700;color:#1B2E1F;">${etiquetasEscala}</div>
+      <div style="position:relative;width:${escalaGraduada.anchoTotalPx}px;height:9px;margin-top:2px;font-size:6.5px;font-weight:700;color:${colorTexto};${sombra}">${etiquetasEscala}</div>
     </div>
+    ${satUrl ? `<div style="position:absolute;bottom:2px;right:6px;font-size:6px;color:#FFFFFF;${sombra}">Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community</div>` : ""}
   </div>`;
 }
