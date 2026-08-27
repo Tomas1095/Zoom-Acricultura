@@ -313,13 +313,6 @@ export function ArbolLotes() {
                                           ? ` · ${formatearHectareas(l.hectareas)} ha`
                                           : " · sin grilla (falta subir el KMZ)"}
                                       </Text>
-                                      {resumen && resumen.totalPuntos > 0 && (
-                                        <Text style={styles.loteResumen}>
-                                          {resumen.completados}/{resumen.totalPuntos} completados
-                                          {resumen.completados > 0 &&
-                                            ` · ${resumen.sincronizados}/${resumen.completados} sincronizados`}
-                                        </Text>
-                                      )}
                                     </Pressable>
                                     <View style={styles.accionesFila}>
                                       <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "acceso", lote: l })}>
@@ -344,6 +337,23 @@ export function ArbolLotes() {
                                       )}
                                     </View>
                                   </View>
+
+                                  {resumen && resumen.totalPuntos > 0 && (
+                                    <Text
+                                      style={[
+                                        styles.loteResumen,
+                                        resumen.completados === resumen.totalPuntos &&
+                                        resumen.sincronizados === resumen.completados
+                                          ? styles.loteResumenOk
+                                          : styles.loteResumenAlerta,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {resumen.completados}/{resumen.totalPuntos} completados
+                                      {resumen.completados > 0 &&
+                                        ` · ${resumen.sincronizados}/${resumen.completados} sincronizados`}
+                                    </Text>
+                                  )}
 
                                   {l.tieneGrilla && (
                                     <View style={styles.lotePillsFila}>
@@ -562,7 +572,13 @@ const styles = StyleSheet.create({
   loteInfo: { flex: 1 },
   loteNombre: { fontSize: 13, fontWeight: "700", color: colors.text },
   loteDetalle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
-  loteResumen: { fontSize: 11, color: colors.primaryDark, fontWeight: "600", marginTop: 2 },
+  loteResumen: { fontSize: 11, fontWeight: "700" },
+  // Verde SOLO cuando está todo: completados = total de la grilla Y
+  // sincronizados = completados (nada colgado en la cola local todavía)
+  // — pedido explícito del usuario. Cualquier fracción de por medio
+  // (12/28, o 11/12 sincronizados) es naranja/alerta, no verde.
+  loteResumenOk: { color: colors.primaryDark },
+  loteResumenAlerta: { color: colors.warning },
   lotePillsFila: { flexDirection: "row", gap: 8 },
   lotePill: {
     flexDirection: "row",

@@ -137,7 +137,13 @@ export function MisLotes() {
                 )}
               </View>
               {resumen && resumen.completados > 0 && (
-                <Text style={styles.resumenAvance}>
+                <Text
+                  style={[
+                    styles.resumenAvance,
+                    resumen.sincronizados === resumen.completados ? styles.resumenAvanceOk : styles.resumenAvanceAlerta,
+                  ]}
+                  numberOfLines={1}
+                >
                   {resumen.completados} puntos completados · {resumen.sincronizados}/{resumen.completados}{" "}
                   sincronizados
                 </Text>
@@ -176,5 +182,10 @@ const styles = StyleSheet.create({
   pill: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
   pillTextoOk: { fontSize: 12, color: colors.primaryDark, fontWeight: "600" },
   pillTextoAviso: { fontSize: 12, color: colors.warning, fontWeight: "600" },
-  resumenAvance: { fontSize: 12, color: colors.textMuted, fontWeight: "600", marginTop: 4 },
+  resumenAvance: { fontSize: 12, fontWeight: "700", marginTop: 4 },
+  // Verde solo cuando todo lo que la persona cargó ya sincronizó de
+  // verdad (nada colgado en la cola local); si queda alguna fracción
+  // (ej. 11/12 sincronizados) va en naranja/alerta — pedido explícito.
+  resumenAvanceOk: { color: colors.primaryDark },
+  resumenAvanceAlerta: { color: colors.warning },
 });

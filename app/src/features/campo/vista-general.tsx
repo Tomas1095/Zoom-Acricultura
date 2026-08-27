@@ -9,6 +9,7 @@ import { exportarPuntos } from "@/lib/exportar/puntos";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
+import type { ResumenAvanceLote } from "@/lib/offline/resumen";
 import { useDatosCampo } from "./usar-datos-campo";
 import { useMiRuta } from "./usar-mi-ruta";
 import { MapaCampo, type MapaCampoHandle, type PuntoMapa } from "./mapa-campo";
@@ -17,6 +18,16 @@ import { CerrarCampanaBoton } from "./cerrar-campana-boton";
 import { MiRutaControles } from "./mi-ruta-controles";
 
 const FIT_ALTO = 460;
+
+/** Verde SOLO cuando está todo: para un Socio/Encargado eso es "toda la
+ * grilla completada y todo lo completado ya sincronizado"; para un
+ * Monitoreador (sin un total fijo — ver useDatosCampo) alcanza con que lo
+ * que hizo ya haya sincronizado del todo. Cualquier fracción de por medio
+ * es naranja/alerta — pedido explícito del usuario. */
+function resumenCompleto(resumen: ResumenAvanceLote, esMonitoreador: boolean): boolean {
+  if (resumen.sincronizados !== resumen.completados) return false;
+  return esMonitoreador || resumen.completados === resumen.totalPuntos;
+}
 
 interface VistaGeneralProps {
   lote: Lote;
@@ -125,7 +136,10 @@ export function VistaGeneral({
       )}
 
       {viendoActual && puntos.length > 0 && (esMonitoreador ? resumen.completados > 0 : true) && (
-        <Text style={styles.resumenAvance}>
+        <Text
+          style={[styles.resumenAvance, resumenCompleto(resumen, esMonitoreador) ? styles.resumenAvanceOk : styles.resumenAvanceAlerta]}
+          numberOfLines={1}
+        >
           {esMonitoreador
             ? `${resumen.completados} puntos completados`
             : `${resumen.completados}/${resumen.totalPuntos} completados`}
@@ -237,7 +251,9 @@ export function VistaGeneral({
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
   container: { padding: 16, gap: 12, alignItems: "center" },
-  resumenAvance: { fontSize: 13, fontWeight: "700", color: colors.primaryDark, alignSelf: "flex-start" },
+  resumenAvance: { fontSize: 13, fontWeight: "700", alignSelf: "flex-start" },
+  resumenAvanceOk: { color: colors.primaryDark },
+  resumenAvanceAlerta: { color: colors.warning },
   avisoCache: {
     fontSize: 11.5,
     color: colors.warning,
