@@ -172,6 +172,12 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
 
   const [zonas, setZonas] = useState<ZonaCebo[]>(() => [zonaInicial(lote)]);
 
+  // Nota libre debajo de "Recomendación de aplicación de cebo" — arranca
+  // visible y vacía; la cruz la saca de en medio si no se va a usar (así
+  // no queda un cuadro vacío ni en pantalla ni, sobre todo, en el PDF).
+  const [notaCebo, setNotaCebo] = useState("");
+  const [notaCeboVisible, setNotaCeboVisible] = useState(true);
+
   function actualizarZonaNombre(id: string, valor: string) {
     setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, loteNombre: valor } : z)));
   }
@@ -258,6 +264,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           establecimientoNombre,
           situacion,
           zonas,
+          notaCebo: notaCeboVisible ? notaCebo : "",
           mapaBichoHtml: construirMapaDensidadHtml(
             puntosDensidadBicho,
             lote.perimetro,
@@ -391,6 +398,21 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
 
           <View style={styles.card}>
             <Text style={styles.cardTitulo}>Recomendación de aplicación de cebo</Text>
+            {notaCeboVisible && (
+              <View style={styles.notaFila}>
+                <TextInput
+                  style={styles.notaInput}
+                  value={notaCebo}
+                  onChangeText={setNotaCebo}
+                  placeholder="Anotar o informar algo (opcional)"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                />
+                <Pressable style={styles.notaQuitarBtn} onPress={() => setNotaCeboVisible(false)}>
+                  <X size={13} color={colors.danger} />
+                </Pressable>
+              </View>
+            )}
             {zonas.map((z) => (
               <ZonaFila
                 key={z.id}
@@ -585,6 +607,19 @@ const styles = StyleSheet.create({
   hint: { fontSize: 11.5, color: colors.textMuted, lineHeight: 16, flex: 1 },
   recalcularBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
   recalcularTexto: { fontSize: 11.5, fontWeight: "700", color: colors.primaryDark },
+  notaFila: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  notaInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    color: colors.text,
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+  notaQuitarBtn: { padding: 6 },
   zonaCard: {
     borderWidth: 1,
     borderColor: colors.border,

@@ -69,6 +69,11 @@ interface DatosInforme {
    * el documento. */
   mapaBichoHtml: string;
   mapaBabosaHtml: string;
+  /** Nota libre debajo de "Recomendación de aplicación de cebo" — opcional
+   * de verdad: si viene vacía (la persona nunca escribió nada, o borró el
+   * cuadro con la cruz) no se agrega ningún bloque al PDF, ni siquiera uno
+   * vacío. */
+  notaCebo?: string;
 }
 
 function escapeHtml(s: string): string {
@@ -121,6 +126,7 @@ export function construirInformeHtml({
   zonas,
   mapaBichoHtml,
   mapaBabosaHtml,
+  notaCebo,
 }: DatosInforme): string {
   const zonasHtml = zonas
     .map((z) => {
@@ -130,9 +136,12 @@ export function construirInformeHtml({
           // se ve roto — 0 como placeholder visual, igual que en pantalla.
           const dosis = p.dosis || "0";
           const superficie = p.superficie || "0";
-          return `<div class="productoFila">
-            <span class="productoNombre">${escapeHtml(p.producto)}</span>
-            <span class="productoDetalle">${dosis} kg/ha × ${superficie} ha = <b>${kgDeProducto(p).toFixed(0)} kg</b></span>
+          // Nombre arriba, cantidad justo debajo (no las dos en el mismo
+          // renglón) — a pedido del usuario, para que se lea todo más
+          // junto y no se pierda en el recuadro.
+          return `<div class="productoBloque">
+            <div class="productoNombre">${escapeHtml(p.producto)}</div>
+            <div class="productoDetalle">${dosis} kg/ha × ${superficie} ha = <b>${kgDeProducto(p).toFixed(0)} kg</b></div>
           </div>`;
         })
         .join("");
@@ -145,10 +154,7 @@ export function construirInformeHtml({
 
   const resumen = resumenPorProducto(zonas);
   const resumenHtml = resumen
-    .map(
-      (r) =>
-        `<div class="resumenFila"><span>${escapeHtml(r.producto)}</span><span class="resumenKg">${r.totalKg.toFixed(0)} kg</span></div>`
-    )
+    .map((r) => `<div class="resumenFila">${escapeHtml(r.producto)} ==&gt; <span class="resumenKg">${r.totalKg.toFixed(0)} kg</span></div>`)
     .join("");
 
   // Encabezado repetido en las dos hojas (mapas y situación/recomendación)
@@ -176,30 +182,45 @@ export function construirInformeHtml({
      son "background" en el sentido de CSS — por eso el mapa en sí se veía
      bien pero la leyenda de al lado no. */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; padding: 26px; }
+  /* El padding puesto en body (como estaba antes) solo se ve en el borde
+     de arriba/abajo de TODO el documento, no de cada hoja — por eso la
+     hoja 2 (después del salto de página) arrancaba con el encabezado
+     pegado arriba, "fuera de lugar" respecto de la hoja 1. @page margin
+     sí se repite en cada hoja que arma el motor de impresión. */
+  @page { margin: 26px; }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; }
   .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
   .eyebrow { color: #A9752E; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
-  h1 { font-size: 21px; margin: 4px 0 0; }
+  h1 { font-size: 23px; margin: 4px 0 0; }
   .card { background: #FFFFFF; border: 1px solid #EDE0B8; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
   /* La primera hoja es solo el encabezado + los dos mapas — situación y
      recomendación arrancan en la hoja siguiente, no importa cuánto sobre
      o falte de espacio en la primera. */
   .cardMapas { page-break-after: always; break-after: page; }
-  .cardTitulo { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
+  .cardTitulo { font-size: 15.5px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .mapaBloque { margin-bottom: 28px; }
   .mapaBloque:last-child { margin-bottom: 0; }
   /* Mismo tamaño y color que .cardTitulo (los títulos de "Situación de
      plagas de suelo"/"Recomendación..." en la hoja 2) — a pedido del
      usuario, para que se vea igual de jerárquico. */
-  .mapaEtiqueta { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
+  .mapaEtiqueta { font-size: 15.5px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .situacionBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
-  .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+  .notaBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 12px; }
+  /* Más juntas que antes (menos padding/margin) — el usuario lo pidió así,
+     se perdía un poco en el recuadro con tanto aire. */
+  .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
   .zonaCard:last-of-type { margin-bottom: 0; }
-  .zonaNombre { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
-  .productoFila { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 3px 0; }
+  .zonaNombre { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  /* Nombre del producto arriba, cantidad justo debajo (no en el mismo
+     renglón) — con un espacio más grande entre un producto y el
+     siguiente para no confundirlos. */
+  .productoBloque { padding: 3px 0; }
+  .productoBloque + .productoBloque { margin-top: 6px; }
+  .productoNombre { font-size: 12.5px; font-weight: 700; }
+  .productoDetalle { font-size: 12px; margin-top: 1px; }
   .resumenBox { margin-top: 10px; border-top: 1px solid #EDE0B8; padding-top: 10px; }
   .resumenTitulo { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; }
-  .resumenFila { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
+  .resumenFila { font-size: 12.5px; padding: 2px 0; }
   .resumenKg { font-weight: 700; color: #155C35; }
   .vacio { font-size: 12.5px; color: #6B5D2E; }
 </style>
@@ -227,6 +248,7 @@ export function construirInformeHtml({
 
   <div class="card">
     <div class="cardTitulo">Recomendación de aplicación de cebo</div>
+    ${notaCebo && notaCebo.trim() ? `<div class="notaBox">${escapeHtml(notaCebo)}</div>` : ""}
     ${zonasHtml || `<div class="vacio">Sin lotes cargados.</div>`}
     ${
       resumen.length > 0
