@@ -175,6 +175,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   // Nota libre debajo de "Recomendación de aplicación de cebo" — arranca
   // visible y vacía; la cruz la saca de en medio si no se va a usar (así
   // no queda un cuadro vacío ni en pantalla ni, sobre todo, en el PDF).
+  // Sacarla con la cruz no es definitivo: "Agregar cuadro de texto" (al
+  // lado de "Agregar lote") la vuelve a mostrar, con lo que tenía escrito.
   const [notaCebo, setNotaCebo] = useState("");
   const [notaCeboVisible, setNotaCeboVisible] = useState(true);
 
@@ -424,10 +426,18 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                 onQuitar={() => quitarZona(z.id)}
               />
             ))}
-            <Pressable style={styles.agregarZonaBtn} onPress={agregarZona}>
-              <Plus size={14} color={colors.primaryDark} />
-              <Text style={styles.agregarZonaTexto}>Agregar lote</Text>
-            </Pressable>
+            <View style={styles.agregarBotonesFila}>
+              {!notaCeboVisible && (
+                <Pressable style={[styles.agregarZonaBtn, styles.agregarBotonFlex]} onPress={() => setNotaCeboVisible(true)}>
+                  <Plus size={14} color={colors.primaryDark} />
+                  <Text style={styles.agregarZonaTexto}>Agregar cuadro de texto</Text>
+                </Pressable>
+              )}
+              <Pressable style={[styles.agregarZonaBtn, styles.agregarBotonFlex]} onPress={agregarZona}>
+                <Plus size={14} color={colors.primaryDark} />
+                <Text style={styles.agregarZonaTexto}>Agregar lote</Text>
+              </Pressable>
+            </View>
 
             {resumen.length > 0 && (
               <View style={styles.resumenBox}>
@@ -693,6 +703,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  agregarBotonesFila: { flexDirection: "row", gap: 8 },
+  agregarBotonFlex: { flex: 1 },
   agregarZonaBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -702,8 +714,9 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     borderRadius: 8,
     paddingVertical: 9,
+    paddingHorizontal: 4,
   },
-  agregarZonaTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark },
+  agregarZonaTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark, textAlign: "center" },
   resumenBox: {
     marginTop: 4,
     borderTopWidth: 1,
