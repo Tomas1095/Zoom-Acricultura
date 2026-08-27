@@ -44,9 +44,12 @@ const MAPA_INFORME_ALTO = 280;
 // el mapa ahí solo apretaba título/rosa/leyenda/escala sin necesidad. Más
 // apaisado que 4:3 a propósito — lotes reales suelen ser más anchos que
 // altos, así se aprovecha el ancho de la hoja en vez de dejarlo en blanco
-// a los costados cuando el alto es lo que limita el zoom del polígono.
-const MAPA_PDF_ANCHO = 520;
-const MAPA_PDF_ALTO = 320;
+// a los costados cuando el alto es lo que limita el zoom del polígono. La
+// primera hoja del PDF es solo el encabezado + estos dos mapas (ver
+// page-break-after en informe.ts), así que hay margen para agrandarlos
+// más sin que se pisen con el resto del informe.
+const MAPA_PDF_ANCHO = 540;
+const MAPA_PDF_ALTO = 340;
 
 const PRODUCTOS = ["Crustacicida", "Molusquicida", "Crustacicida + Molusquicida", "No aplicar"];
 

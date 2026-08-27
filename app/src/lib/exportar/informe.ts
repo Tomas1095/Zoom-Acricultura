@@ -6,8 +6,11 @@
 // productos distintos aplicados a la vez (a dosis distintas cada uno), no
 // un producto único como antes.
 
+import { File, Paths } from "expo-file-system";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+
+import { sanitizarNombreArchivo } from "./archivo";
 
 // dosis/superficie quedan como TEXTO (lo que la persona tecleó tal cual),
 // no como number — si se guardara ya convertido, el campo controlado
@@ -80,8 +83,12 @@ function escapeHtml(s: string): string {
 // puede importar el componente de React Native.
 const LOGO_VERDE = "#344D40";
 const LOGO_NARANJA = "#DB945D";
-const LOGO_HTML = `<div style="display:flex;align-items:center;gap:6px;">
-  <svg width="30" height="30" viewBox="0 0 100 100">
+// Mismas proporciones que ZoomLogo en app-header.tsx (iconSize 32,
+// wordSize 21 — AGRICULTURA sale de wordSize*0.24, con un piso de 7),
+// escaladas un poco más grandes: acá es el logo de toda una hoja impresa,
+// no el ícono de una barra de header angosta.
+const LOGO_HTML = `<div style="display:flex;align-items:center;gap:9px;">
+  <svg width="42" height="42" viewBox="0 0 100 100">
     <circle cx="50" cy="50" r="26.5" stroke="${LOGO_VERDE}" stroke-width="11" fill="none" />
     <line x1="50" y1="23.5" x2="50" y2="6" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
     <line x1="50" y1="76.5" x2="50" y2="94" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
@@ -92,8 +99,8 @@ const LOGO_HTML = `<div style="display:flex;align-items:center;gap:6px;">
     <path d="M 29.30 81.87 L 27.26 80.45 L 25.32 78.90 L 23.48 77.22 L 21.76 75.43 L 20.16 73.53 L 18.68 71.52 L 17.34 69.43 L 16.14 67.25 L 15.09 65.00 L 14.18 62.68 L 13.43 60.31 L 12.83 57.90" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
   </svg>
   <div style="display:flex;flex-direction:column;align-items:center;">
-    <div style="font-size:15px;font-weight:900;letter-spacing:-0.5px;color:${LOGO_VERDE};line-height:1;">ZOOM</div>
-    <div style="font-size:6.5px;font-weight:700;letter-spacing:0.6px;color:${LOGO_VERDE};margin-top:1px;">AGRICULTURA</div>
+    <div style="font-size:26px;font-weight:900;letter-spacing:-0.5px;color:${LOGO_VERDE};line-height:1;">ZOOM</div>
+    <div style="font-size:8px;font-weight:700;letter-spacing:0.6px;color:${LOGO_VERDE};margin-top:2px;">AGRICULTURA</div>
   </div>
 </div>`;
 
@@ -149,13 +156,26 @@ export function construirInformeHtml({
 <head>
 <meta charset="utf-8" />
 <style>
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; padding: 28px; }
-  .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  /* Sin esto, WebKit (el motor que usa expo-print en iOS) no imprime los
+     colores de fondo de elementos comunes al generar el PDF — por default
+     los "ahorra" como si fuera a tinta de verdad (economía de impresión).
+     Es lo que hacía que las leyendas de color de los mapas, la barra de
+     escala y hasta el fondo de las cards salieran en blanco. Los rellenos
+     de SVG (los cuadraditos del Voronoi) no se veían afectados porque no
+     son "background" en el sentido de CSS — por eso el mapa en sí se veía
+     bien pero la leyenda de al lado no. */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; padding: 26px; }
+  .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
   .eyebrow { color: #A9752E; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
   h1 { font-size: 21px; margin: 4px 0 0; }
   .card { background: #FFFFFF; border: 1px solid #EDE0B8; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  /* La primera hoja es solo el encabezado + los dos mapas — situación y
+     recomendación arrancan en la hoja siguiente, no importa cuánto sobre
+     o falte de espacio en la primera. */
+  .cardMapas { page-break-after: always; break-after: page; }
   .cardTitulo { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
-  .mapaBloque { margin-bottom: 16px; }
+  .mapaBloque { margin-bottom: 28px; }
   .mapaBloque:last-child { margin-bottom: 0; }
   .mapaEtiqueta { font-size: 12.5px; font-weight: 700; color: #6B5D2E; margin-bottom: 6px; }
   .situacionBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
@@ -179,7 +199,7 @@ export function construirInformeHtml({
     ${LOGO_HTML}
   </div>
 
-  <div class="card">
+  <div class="card cardMapas">
     <div class="mapaBloque">
       <div class="mapaEtiqueta">Resultado Monitoreo de Bichos Bolita</div>
       ${mapaBichoHtml}
@@ -213,10 +233,24 @@ export function construirInformeHtml({
 
 /** Genera el PDF con expo-print y abre la hoja de compartir nativa — el
  * equivalente real de "Guardar como PDF" del diálogo de impresión del
- * navegador que usaba el prototipo (`window.print()`, que no existe acá). */
+ * navegador que usaba el prototipo (`window.print()`, que no existe acá).
+ *
+ * `Print.printToFileAsync` guarda el archivo con un nombre interno propio
+ * (algo como "Print-xxxx.pdf"), sin relación con lo que la persona escribió
+ * en el modal — `dialogTitle` en `Sharing.shareAsync` solo pone el título
+ * de la hoja de compartir, NO renombra el archivo real, así que cualquier
+ * app a la que se comparta (Archivos, WhatsApp, mail) terminaba guardándolo
+ * con el nombre interno. Se copia a un archivo nuevo con el nombre elegido
+ * (mismo patrón que `guardarYCompartirTexto` en archivo.ts) antes de
+ * compartirlo, así el nombre real del archivo compartido es el correcto. */
 export async function exportarInformePdf(html: string, nombreArchivoBase: string): Promise<void> {
   const { uri } = await Print.printToFileAsync({ html });
+  const generado = new File(uri);
+  const destino = new File(Paths.cache, `${sanitizarNombreArchivo(nombreArchivoBase)}.pdf`);
+  if (destino.exists) destino.delete();
+  generado.copy(destino);
+
   const disponible = await Sharing.isAvailableAsync();
   if (!disponible) throw new Error("Compartir no está disponible en este dispositivo.");
-  await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: nombreArchivoBase });
+  await Sharing.shareAsync(destino.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: nombreArchivoBase });
 }
