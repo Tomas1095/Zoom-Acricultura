@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { router, useLocalSearchParams } from "expo-router";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { ChevronLeft } from "lucide-react-native";
@@ -7,6 +7,8 @@ import { ChevronLeft } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes, puedeResolverConflictos } from "@/lib/roles";
 import * as db from "@/lib/db/lotes";
+import { leerCacheArbol } from "@/lib/offline/cache-arbol";
+import { conTimeout, hayConexion } from "@/lib/offline/net";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AppHeader } from "@/components/app-header";
@@ -26,18 +28,49 @@ export default function LoteScreen() {
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
   const [establecimientoNombre, setEstablecimientoNombre] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
 
   const refrescar = useCallback(async () => {
-    const arbol = await db.fetchArbol();
-    const l = arbol.lotes.find((l) => l.id === id) ?? null;
-    setLote(l);
-    setEstablecimientoNombre(arbol.establecimientos.find((e) => e.id === l?.establecimientoId)?.nombre);
-    setCargando(false);
-  }, [id]);
+    if (!usuario) return;
+    try {
+      // Chequeo rápido antes de intentar nada — ver lib/offline/net.ts.
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      const arbol = await conTimeout(db.fetchArbol());
+      const l = arbol.lotes.find((l) => l.id === id) ?? null;
+      setLote(l);
+      setEstablecimientoNombre(arbol.establecimientos.find((e) => e.id === l?.establecimientoId)?.nombre);
+      setError(null);
+    } catch (e: any) {
+      // Sin señal: esta pantalla es el paso obligado para entrar a
+      // CUALQUIER lote, desde Mis Lotes o el árbol — sin este respaldo,
+      // esas dos pantallas ya podían verse offline pero tocar un lote
+      // puntual se rompía justo acá. Reusa la misma foto que ya guardan
+      // esas dos (lib/offline/cache-arbol.ts) — lo que se ve más abajo
+      // (grilla, puntos, cargas) tiene su propio respaldo aparte, ver
+      // lib/offline/cache-lote.ts / useDatosCampo.
+      const cache = await leerCacheArbol(usuario.id);
+      const l = cache?.lotes.find((x) => x.id === id) ?? null;
+      if (l) {
+        setLote(l);
+        setEstablecimientoNombre(cache?.establecimientos.find((e) => e.id === l.establecimientoId)?.nombre);
+        setError(null);
+      } else {
+        setLote(null);
+        setError(e.message ?? String(e));
+      }
+    } finally {
+      setCargando(false);
+    }
+  }, [id, usuario]);
 
-  useEffect(() => {
-    refrescar();
-  }, [refrescar]);
+  // useFocusEffect (no useEffect a secas) para que, al volver de cargar
+  // puntos, el estado del lote (tieneGrilla, campanaActual, etc.) se
+  // actualice solo.
+  useFocusEffect(
+    useCallback(() => {
+      refrescar();
+    }, [refrescar])
+  );
 
   return (
     <View style={styles.pantalla}>
@@ -55,7 +88,9 @@ export default function LoteScreen() {
           </View>
         ) : !lote ? (
           <View style={styles.centrado}>
-            <Text style={styles.aviso}>No se encontró el lote.</Text>
+            <Text style={styles.aviso}>
+              {error ? `No se pudo cargar el lote: ${error}` : "No se encontró el lote."}
+            </Text>
           </View>
         ) : lote.tieneGrilla ? (
           // El Monitoreador solo ve la grilla (vista general), sin

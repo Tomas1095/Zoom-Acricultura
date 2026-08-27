@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ChevronDown, ChevronRight, Info, Navigation, Pencil, Plus, Trash2, Users } from "lucide-react-native";
 
@@ -113,9 +113,15 @@ export function ArbolLotes() {
     setCargando(false);
   }, [usuario]);
 
-  useEffect(() => {
-    refrescar();
-  }, [refrescar]);
+  // useFocusEffect (no useEffect a secas) para que, al volver de entrar a
+  // un lote (donde se cargan/sincronizan puntos), el resumen de esa fila
+  // se actualice solo — antes se quedaba con el número viejo hasta salir
+  // de la app y volver a entrar.
+  useFocusEffect(
+    useCallback(() => {
+      refrescar();
+    }, [refrescar])
+  );
 
   function toggle(set: Set<string>, id: string, setter: (s: Set<string>) => void) {
     const next = new Set(set);
