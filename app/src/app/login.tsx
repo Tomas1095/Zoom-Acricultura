@@ -35,7 +35,7 @@ const TITULOS: Record<Modo, string> = {
  * sí está calcado del prototipo (mismos colores, mismo ícono de fondo
  * tenue).
  *
- * Recuperar contraseña es por CÓDIGO (6 dígitos por mail), no por link —
+ * Recuperar contraseña es por CÓDIGO (por mail), no por link —
  * a propósito: un link de recuperación necesitaría deep linking (abrir la
  * app desde el mail), y en Expo Go la URL cambia cada vez que arrancás
  * `expo start` (más todavía con `--tunnel`) — no hay forma de que Supabase
@@ -97,7 +97,8 @@ export default function LoginScreen() {
 
   /** Paso 1 de "olvidé mi contraseña": pide el mail y dispara el código —
    * el mismo mail de "restablecer contraseña" de Supabase, que además del
-   * link (que acá no usamos) trae un código de 6 dígitos. */
+   * link (que acá no usamos) trae un código — la cantidad de dígitos la
+   * decide Supabase, la app no le pone un largo fijo. */
   async function enviarCodigoRecuperacion() {
     if (!mail.trim()) {
       Alert.alert("Falta el mail", "Escribí el mail con el que te registraste.");
@@ -128,7 +129,7 @@ export default function LoginScreen() {
     });
     if (otpError) {
       setCargando(false);
-      Alert.alert("Código inválido", "Revisá el código de 6 dígitos que te llegó por mail — vence a los pocos minutos.");
+      Alert.alert("Código inválido", "Revisá el código que te llegó por mail — vence a los pocos minutos.");
       return;
     }
     const { error: updateError } = await supabase.auth.updateUser({ password: nuevaClave });
@@ -236,7 +237,7 @@ export default function LoginScreen() {
                 <>
                   <TextInput
                     style={styles.input}
-                    placeholder="Código de 6 dígitos"
+                    placeholder="Código que te llegó por mail"
                     placeholderTextColor={colors.textMuted}
                     keyboardType="number-pad"
                     value={codigoRecuperacion}
