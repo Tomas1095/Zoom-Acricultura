@@ -50,7 +50,10 @@ export function VistaGeneral({
   const { usuario } = useAuth();
   const campanaEfectiva = campanaViendo ?? lote.campanaActual;
   const viendoActual = campanaEfectiva === lote.campanaActual;
-  const { cargando, puntos, cargas, gps, puntoCercano, enRango, origen } = useDatosCampo(lote.id, campanaEfectiva);
+  const { cargando, puntos, cargas, resumen, gps, puntoCercano, enRango, origen } = useDatosCampo(
+    lote.id,
+    campanaEfectiva
+  );
   const { width } = useWindowDimensions();
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
@@ -110,6 +113,13 @@ export function VistaGeneral({
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {viendoActual && puntos.length > 0 && (
+        <Text style={styles.resumenAvance}>
+          {resumen.completados}/{resumen.totalPuntos} completados
+          {resumen.completados > 0 && ` · ${resumen.sincronizados} sincronizados`}
+        </Text>
+      )}
+
       <View style={styles.accionesFila}>
         {puedeExportarGrilla && puntos.length > 0 && (
           <View style={styles.exportarGrillaFila}>
@@ -214,6 +224,7 @@ export function VistaGeneral({
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
   container: { padding: 16, gap: 12, alignItems: "center" },
+  resumenAvance: { fontSize: 13, fontWeight: "700", color: colors.primaryDark, alignSelf: "flex-start" },
   accionesFila: {
     flexDirection: "row",
     flexWrap: "wrap",

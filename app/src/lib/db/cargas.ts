@@ -132,3 +132,117 @@ export async function quitarFotoDeCarga(puntoId: string, campana: string, path: 
   const { error } = await supabase.from("cargas").update({ fotos }).eq("punto_id", puntoId).eq("campana", campana);
   if (error) throw error;
 }
+
+/** Un punto que dos personas cargaron sin señal, cuyo cambio más nuevo
+ * quedó en espera en vez de pisar al que ya estaba confirmado — ver
+ * `guardarCargaDetectandoConflicto` y supabase/migrations/0004_conflictos_de_carga.sql.
+ * Incluye línea/punto_num del punto (vía el join) para mostrar el cartel
+ * sin una consulta aparte. */
+export interface CargaEnConflicto {
+  id: string;
+  cargaActivaId: string;
+  puntoId: string;
+  campana: string;
+  bicho: number;
+  babosa: number;
+  huevoBabosas: boolean;
+  gusanoArroz: boolean;
+  isocaCortadora: boolean;
+  gusanoBlanco: boolean;
+  observaciones: string;
+  cargadoPorId: string | null;
+  creadoEn: string;
+  linea: number;
+  puntoNum: number;
+}
+
+function filaAConflicto(f: any): CargaEnConflicto {
+  return {
+    id: f.id,
+    cargaActivaId: f.carga_activa_id,
+    puntoId: f.punto_id,
+    campana: f.campana,
+    bicho: f.bicho,
+    babosa: f.babosa,
+    huevoBabosas: f.huevo_babosas,
+    gusanoArroz: f.gusano_arroz,
+    isocaCortadora: f.isoca_cortadora,
+    gusanoBlanco: f.gusano_blanco,
+    observaciones: f.observaciones,
+    cargadoPorId: f.cargado_por_id,
+    creadoEn: f.creado_en,
+    linea: f.puntos.linea,
+    puntoNum: f.puntos.punto_num,
+  };
+}
+
+async function guardarConflictoDeCarga(
+  cargaActivaId: string,
+  puntoId: string,
+  campana: string,
+  campos: CamposCarga,
+  cargadoPorId: string
+): Promise<void> {
+  const { error } = await supabase.from("cargas_en_conflicto").insert({
+    carga_activa_id: cargaActivaId,
+    punto_id: puntoId,
+    campana,
+    bicho: campos.bicho,
+    babosa: campos.babosa,
+    huevo_babosas: campos.huevoBabosas,
+    gusano_arroz: campos.gusanoArroz,
+    isoca_cortadora: campos.isocaCortadora,
+    gusano_blanco: campos.gusanoBlanco,
+    observaciones: campos.observaciones,
+    cargado_por_id: cargadoPorId,
+  });
+  if (error) throw error;
+}
+
+/** Conflictos sin resolver de todo el lote — para el cartel que ven Socio
+ * Fundador/Gerente al entrar (ver ConflictosBanner). */
+export async function fetchConflictosDeLote(loteId: string): Promise<CargaEnConflicto[]> {
+  const { data, error } = await supabase
+    .from("cargas_en_conflicto")
+    .select("*, puntos!inner(lote_id, linea, punto_num)")
+    .eq("puntos.lote_id", loteId)
+    .order("creado_en");
+  if (error) throw error;
+  return (data ?? []).map(filaAConflicto);
+}
+
+/** El Socio Gerente/Fundador decide: `quedarseConNueva` reemplaza la carga
+ * activa por la versión en conflicto, o si es `false` la descarta y deja
+ * la que ya estaba — la función en el server (`resolver_conflicto_carga`)
+ * lo hace atómico y vuelve a chequear el permiso ahí, no solo acá. */
+export async function resolverConflictoCarga(conflictoId: string, quedarseConNueva: boolean): Promise<void> {
+  const { error } = await supabase.rpc("resolver_conflicto_carga", {
+    p_conflicto_id: conflictoId,
+    p_quedarse_con_nueva: quedarseConNueva,
+  });
+  if (error) throw error;
+}
+
+/** Guarda un cambio de la cola de sincronización, pero sin pisar en
+ * silencio una carga que otra persona ya confirmó — si el punto ya está
+ * confirmado por OTRO usuario, el cambio nuevo queda en
+ * `cargas_en_conflicto` en vez de sobreescribir (ver migración 0004). Solo
+ * hace falta este chequeo acá, al sincronizar la cola offline: es el único
+ * momento en que puede haber dos versiones de un mismo punto compitiendo —
+ * dos celulares que cargaron el mismo punto sin señal y sincronizan
+ * después. El guardado en vivo (con señal, sin cola de por medio) sigue
+ * usando `guardarYConfirmarCarga` directo. */
+export async function guardarCargaDetectandoConflicto(
+  puntoId: string,
+  campana: string,
+  campos: CamposCarga,
+  cargadoPorId: string
+): Promise<{ conflicto: boolean }> {
+  const existente = await fetchCarga(puntoId, campana);
+  if (existente?.confirmado && existente.cargadoPorId && existente.cargadoPorId !== cargadoPorId) {
+    await guardarConflictoDeCarga(existente.id, puntoId, campana, campos, cargadoPorId);
+    return { conflicto: true };
+  }
+  await guardarYConfirmarCarga(puntoId, campana, campos, cargadoPorId);
+  return { conflicto: false };
+}

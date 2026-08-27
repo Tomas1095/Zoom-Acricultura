@@ -66,10 +66,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     setSincronizando(true);
     try {
       const estabaEnBackground = appStateRef.current !== "active";
-      const { sincronizados } = await sincronizarPendientes();
+      const { sincronizados, conflictos } = await sincronizarPendientes();
       await refrescarContador();
       if (sincronizados > 0 && estabaEnBackground) {
-        await avisarSincronizacion(sincronizados);
+        await avisarSincronizacion(sincronizados, conflictos);
       }
     } finally {
       sincronizandoRef.current = false;
@@ -111,13 +111,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
 }
 
-async function avisarSincronizacion(cantidad: number): Promise<void> {
+async function avisarSincronizacion(cantidad: number, conflictos: number): Promise<void> {
   try {
+    let body = cantidad === 1 ? "Se sincronizó 1 cambio pendiente." : `Se sincronizaron ${cantidad} cambios pendientes.`;
+    if (conflictos > 0) {
+      body +=
+        conflictos === 1
+          ? " Un punto quedó duplicado, esperando que un Socio lo resuelva."
+          : ` ${conflictos} puntos quedaron duplicados, esperando que un Socio los resuelva.`;
+    }
     await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Zoom Agricultura",
-        body: cantidad === 1 ? "Se sincronizó 1 cambio pendiente." : `Se sincronizaron ${cantidad} cambios pendientes.`,
-      },
+      content: { title: "Zoom Agricultura", body },
       trigger: null, // ya mismo
     });
   } catch {

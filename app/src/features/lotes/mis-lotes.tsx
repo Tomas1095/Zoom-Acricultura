@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, MapPin } from "lucide-react-native";
 
 import * as db from "@/lib/db/lotes";
 import { formatearHectareas } from "@/lib/format";
+import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Establecimiento, Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 
@@ -15,17 +16,33 @@ export function MisLotes() {
   const [cargando, setCargando] = useState(true);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
+  const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
 
   const refrescar = useCallback(async () => {
     const arbol = await db.fetchArbol();
     setLotes(arbol.lotes);
     setEstablecimientos(arbol.establecimientos);
     setCargando(false);
+
+    // Aparte y sin bloquear la lista — así se ve el "X/Y completados · Z
+    // sincronizados" de cada lote apenas se calcula, sin esperar a todos.
+    const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
+    conGrilla.forEach((l) => {
+      fetchResumenLote(l.id, l.campanaActual)
+        .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
+        .catch(() => {}); // si falla, esa card se queda sin el resumen, no rompe el resto
+    });
   }, []);
 
-  useEffect(() => {
-    refrescar();
-  }, [refrescar]);
+  // useFocusEffect (no useEffect a secas) para que, al volver de cargar
+  // puntos en un lote, el resumen de esa card se actualice solo — sin
+  // esto quedaba con el conteo viejo hasta salir de la app y volver a
+  // entrar.
+  useFocusEffect(
+    useCallback(() => {
+      refrescar();
+    }, [refrescar])
+  );
 
   if (cargando) {
     return (
@@ -43,6 +60,7 @@ export function MisLotes() {
       ) : (
         lotes.map((l) => {
           const establecimiento = establecimientos.find((e) => e.id === l.establecimientoId);
+          const resumen = resumenes[l.id];
           return (
             <Pressable key={l.id} style={styles.card} onPress={() => router.push(`/(app)/lote/${l.id}`)}>
               <Text style={styles.establecimiento}>{establecimiento?.nombre ?? ""}</Text>
@@ -61,6 +79,12 @@ export function MisLotes() {
                   </>
                 )}
               </View>
+              {resumen && resumen.totalPuntos > 0 && (
+                <Text style={styles.resumenAvance}>
+                  {resumen.completados}/{resumen.totalPuntos} completados
+                  {resumen.completados > 0 && ` · ${resumen.sincronizados} sincronizados`}
+                </Text>
+              )}
             </Pressable>
           );
         })
@@ -87,4 +111,5 @@ const styles = StyleSheet.create({
   pill: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
   pillTextoOk: { fontSize: 12, color: colors.primaryDark, fontWeight: "600" },
   pillTextoAviso: { fontSize: 12, color: colors.warning, fontWeight: "600" },
+  resumenAvance: { fontSize: 12, color: colors.textMuted, fontWeight: "600", marginTop: 4 },
 });

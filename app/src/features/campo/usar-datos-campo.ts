@@ -4,6 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { fetchLote } from "@/lib/db/lotes";
 import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
+import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Carga, Lote, Punto } from "@/types/domain";
 import { useGps } from "./usar-gps";
 
@@ -26,12 +27,14 @@ export function useDatosCampo(loteId: string, campana?: string) {
       const l = await fetchLote(loteId);
       setLote(l);
       if (l) {
-        const [ps, cs] = await Promise.all([
-          fetchPuntosDeLote(loteId),
-          fetchCargasDeLote(loteId, campana ?? l.campanaActual),
-        ]);
+        const campanaEfectiva = campana ?? l.campanaActual;
+        const [ps, cs] = await Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)]);
+        // Fusiona lo que esta persona ya guardó sin señal (todavía en la
+        // cola local) para que se vea completo al toque, sin esperar a que
+        // la sincronización real llegue a confirmarlo — ver
+        // lib/offline/resumen.ts.
         setPuntos(ps);
-        setCargas(cs);
+        setCargas(fusionarPendientesEnCargas(cs, ps, campanaEfectiva));
       }
     } catch (e: any) {
       setError(e.message ?? String(e));
@@ -68,5 +71,7 @@ export function useDatosCampo(loteId: string, campana?: string) {
 
   const enRango = !!puntoCercano && puntoCercano.distancia <= TOLERANCE_M;
 
-  return { cargando, error, lote, puntos, cargas, refrescar, gps, puntoCercano, enRango, origen };
+  const resumen = useMemo<ResumenAvanceLote>(() => calcularResumenAvance(puntos.length, cargas), [puntos, cargas]);
+
+  return { cargando, error, lote, puntos, cargas, resumen, refrescar, gps, puntoCercano, enRango, origen };
 }

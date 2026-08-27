@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { ChevronLeft } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
-import { puedeAdministrarLotes } from "@/lib/roles";
+import { puedeAdministrarLotes, puedeResolverConflictos } from "@/lib/roles";
 import * as db from "@/lib/db/lotes";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -13,6 +13,7 @@ import { AppHeader } from "@/components/app-header";
 import { SubirKmz } from "@/features/lotes/subir-kmz";
 import { VistaGeneral } from "@/features/campo/vista-general";
 import { LoteTabs } from "@/features/campo/lote-tabs";
+import { ConflictosBanner } from "@/features/campo/conflictos-banner";
 
 /** Pantalla del lote — mantiene el mismo header de marca que "Mis lotes"
  * (ver AppHeader), con el nombre del lote agregado debajo de la línea
@@ -61,7 +62,14 @@ export default function LoteScreen() {
           // pestañas — mismo criterio que el prototipo: "Resultados"/
           // "Salidas" no son para ese rol (ver CONTEXTO.md).
           usuario && puedeAdministrarLotes(usuario.rol) ? (
-            <LoteTabs lote={lote} establecimientoNombre={establecimientoNombre} onLoteActualizado={refrescar} />
+            <>
+              {puedeResolverConflictos(usuario.rol) && (
+                <View style={styles.bannerFila}>
+                  <ConflictosBanner loteId={lote.id} />
+                </View>
+              )}
+              <LoteTabs lote={lote} establecimientoNombre={establecimientoNombre} onLoteActualizado={refrescar} />
+            </>
           ) : (
             <VistaGeneral lote={lote} establecimientoNombre={establecimientoNombre} />
           )
@@ -89,6 +97,7 @@ const styles = StyleSheet.create({
   backRow: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 16, paddingVertical: 10 },
   backTexto: { color: colors.textMuted, fontSize: 13, fontWeight: "600" },
   contenido: { flex: 1 },
+  bannerFila: { paddingHorizontal: 16, paddingTop: 12 },
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
   sinGrilla: { flexGrow: 1, padding: 20, gap: 4 },
   cultivo: { fontSize: 14, color: colors.textMuted },

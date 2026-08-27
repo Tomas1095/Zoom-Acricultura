@@ -5,13 +5,19 @@
 // red nunca se hubiese cortado, y no hay dos caminos de código distintos
 // que puedan divergir.
 
-import { guardarYConfirmarCarga, agregarFotoACarga } from "@/lib/db/cargas";
+import { guardarCargaDetectandoConflicto, agregarFotoACarga } from "@/lib/db/cargas";
 import { subirFoto } from "@/lib/storage/fotos";
 import { listarCambiosPendientes, eliminarCambioPendiente, marcarIntentoFallido } from "./cola";
 
 export interface ResultadoSincronizacion {
   sincronizados: number;
   fallidos: number;
+  /** De los sincronizados, cuántos NO pisaron el punto porque otra persona
+   * ya lo había confirmado — quedaron esperando en `cargas_en_conflicto`
+   * (ver ConflictosBanner). Igual cuentan como "sincronizados": el dato de
+   * esta persona ya está a salvo en el server, solo falta que un Socio
+   * decida cuál de las dos versiones se queda. */
+  conflictos: number;
 }
 
 /** Recorre la cola una vez y prueba subir cada cambio pendiente. Se borra
@@ -23,12 +29,14 @@ export async function sincronizarPendientes(): Promise<ResultadoSincronizacion> 
   const pendientes = listarCambiosPendientes();
   let sincronizados = 0;
   let fallidos = 0;
+  let conflictos = 0;
 
   for (const item of pendientes) {
     try {
       const p = item.payload;
       if (p.tipo === "carga") {
-        await guardarYConfirmarCarga(p.puntoId, p.campana, p.campos, p.cargadoPorId);
+        const { conflicto } = await guardarCargaDetectandoConflicto(p.puntoId, p.campana, p.campos, p.cargadoPorId);
+        if (conflicto) conflictos++;
       } else {
         const path = await subirFoto(p.loteId, p.puntoId, p.uriLocal);
         await agregarFotoACarga(p.puntoId, p.campana, path, p.cargadoPorId);
@@ -41,5 +49,5 @@ export async function sincronizarPendientes(): Promise<ResultadoSincronizacion> 
     }
   }
 
-  return { sincronizados, fallidos };
+  return { sincronizados, fallidos, conflictos };
 }

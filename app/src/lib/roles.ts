@@ -36,3 +36,11 @@ export function puedeGestionarEquipo(rol: Rol): boolean {
 export function puedeCerrarCampana(rol: Rol): boolean {
   return rol === "socio_fundador" || rol === "socio_gerente";
 }
+
+/** Resolver conflictos de carga (dos personas cargaron el mismo punto sin
+ * señal) es cosa de los socios, no de Encargado — pedido explícito del
+ * usuario. Mismo conjunto de roles que puedeCerrarCampana, nombre aparte
+ * por lo mismo que ahí: son permisos distintos que hoy coinciden. */
+export function puedeResolverConflictos(rol: Rol): boolean {
+  return rol === "socio_fundador" || rol === "socio_gerente";
+}
