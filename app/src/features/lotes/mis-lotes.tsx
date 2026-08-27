@@ -87,7 +87,8 @@ export function MisLotes() {
               </View>
               {resumen && resumen.completados > 0 && (
                 <Text style={styles.resumenAvance}>
-                  {resumen.completados} puntos completados · {resumen.sincronizados} sincronizados
+                  {resumen.completados} puntos completados · {resumen.sincronizados}/{resumen.completados}{" "}
+                  sincronizados
                 </Text>
               )}
             </Pressable>

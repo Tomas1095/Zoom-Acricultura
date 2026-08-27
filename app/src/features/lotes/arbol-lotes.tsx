@@ -10,6 +10,7 @@ import { fetchCargasDeLote, fetchCentroDeLote, fetchPuntosDeLote } from "@/lib/d
 import { fetchUsuarios } from "@/lib/db/equipo";
 import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { formatearHectareas } from "@/lib/format";
+import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesoModal } from "./acceso-modal";
@@ -48,6 +49,12 @@ export function ArbolLotes() {
   const [infoAbierta, setInfoAbierta] = useState<Set<string>>(new Set());
   const [infoPorLote, setInfoPorLote] = useState<Record<string, InfoLote | "cargando">>({});
   const [buscandoComoLlegar, setBuscandoComoLlegar] = useState<string | null>(null);
+  // Resumen de avance por lote, visible directo en el árbol — pedido
+  // explícito del usuario: quiere verlo sin tener que entrar a cada lote
+  // (a diferencia del panel "Info", que sí requiere tocarlo para abrirse).
+  // Acá SIEMPRE es el total del lote (sin usuarioId), a diferencia de
+  // MisLotes que lo filtra por el Monitoreador — ver lib/offline/resumen.ts.
+  const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
 
   const refrescar = useCallback(async () => {
     try {
@@ -56,6 +63,15 @@ export function ArbolLotes() {
       setEstablecimientos(arbol.establecimientos);
       setLotes(arbol.lotes);
       setUsuarios(todosLosUsuarios);
+
+      // Aparte y sin bloquear el árbol — cada pill de resumen aparece
+      // apenas se calcula, sin esperar a todos los lotes.
+      const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
+      conGrilla.forEach((l) => {
+        fetchResumenLote(l.id, l.campanaActual)
+          .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
+          .catch(() => {});
+      });
     } catch (e: any) {
       Alert.alert("No se pudo cargar", e.message ?? String(e));
     } finally {
@@ -246,6 +262,7 @@ export function ArbolLotes() {
                             {lotesDelEst.map((l) => {
                               const infoEstaAbierta = infoAbierta.has(l.id);
                               const infoValor = infoPorLote[l.id];
+                              const resumen = resumenes[l.id];
                               return (
                                 <View key={l.id} style={styles.loteRow}>
                                   <View style={styles.loteFilaSuperior}>
@@ -257,6 +274,13 @@ export function ArbolLotes() {
                                           ? ` · ${formatearHectareas(l.hectareas)} ha`
                                           : " · sin grilla (falta subir el KMZ)"}
                                       </Text>
+                                      {resumen && resumen.totalPuntos > 0 && (
+                                        <Text style={styles.loteResumen}>
+                                          {resumen.completados}/{resumen.totalPuntos} completados
+                                          {resumen.completados > 0 &&
+                                            ` · ${resumen.sincronizados}/${resumen.completados} sincronizados`}
+                                        </Text>
+                                      )}
                                     </Pressable>
                                     <View style={styles.accionesFila}>
                                       <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "acceso", lote: l })}>
@@ -491,6 +515,7 @@ const styles = StyleSheet.create({
   loteInfo: { flex: 1 },
   loteNombre: { fontSize: 13, fontWeight: "700", color: colors.text },
   loteDetalle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  loteResumen: { fontSize: 11, color: colors.primaryDark, fontWeight: "600", marginTop: 2 },
   lotePillsFila: { flexDirection: "row", gap: 8 },
   lotePill: {
     flexDirection: "row",

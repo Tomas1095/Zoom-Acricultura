@@ -20,7 +20,7 @@ export default function ModoTrabajoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { usuario } = useAuth();
   const { width, height } = useWindowDimensions();
-  const { cargando, lote, puntos, cargas, gps, puntoCercano, enRango } = useDatosCampo(id);
+  const { cargando, error, usandoCache, lote, puntos, cargas, gps, puntoCercano, enRango } = useDatosCampo(id);
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
   // Recorrido personal, de solo lectura acá — se marca/edita solo desde
@@ -47,10 +47,26 @@ export default function ModoTrabajoScreen() {
     [puntos, cargas]
   );
 
-  if (cargando || !lote) {
+  if (cargando) {
     return (
       <View style={styles.centrado}>
         <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+  // Sin señal y sin ninguna foto guardada de este lote todavía (nunca se
+  // entró acá con cobertura) — no hay nada que mostrar, a diferencia del
+  // caso con cache (usandoCache), que sigue de largo con lo último que
+  // haya. Ver useDatosCampo/lib/offline/cache-lote.ts.
+  if (!lote) {
+    return (
+      <View style={styles.centrado}>
+        <Pressable style={styles.volver} onPress={() => router.back()}>
+          <ChevronLeft size={22} color={colors.text} />
+        </Pressable>
+        <Text style={styles.aviso}>
+          {error ? `No se pudo cargar el lote: ${error}` : "No se encontró el lote."}
+        </Text>
       </View>
     );
   }
@@ -82,6 +98,11 @@ export default function ModoTrabajoScreen() {
       </Pressable>
 
       <View style={styles.pillTop}>
+        {usandoCache && (
+          <View style={styles.pillSinSenal}>
+            <Text style={styles.pillSinSenalTexto}>📡 Sin señal — datos guardados</Text>
+          </View>
+        )}
         <GpsEstadoPill estado={gps.estado} />
         {miRuta.length > 0 && (
           <View style={styles.pillMiRuta}>
@@ -135,6 +156,7 @@ export default function ModoTrabajoScreen() {
 
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+  aviso: { color: colors.textMuted, fontSize: 13, textAlign: "center", paddingHorizontal: 30 },
   container: { flex: 1, backgroundColor: colors.background },
   volver: {
     position: "absolute",
@@ -158,6 +180,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   pillMiRutaTexto: { color: colors.surface, fontWeight: "700", fontSize: 10.5 },
+  pillSinSenal: {
+    backgroundColor: colors.warning,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  pillSinSenalTexto: { color: colors.surface, fontWeight: "700", fontSize: 10.5 },
   rockerZoom: {
     position: "absolute",
     top: "50%",

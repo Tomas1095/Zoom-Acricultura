@@ -23,6 +23,7 @@ import { fetchCarga, guardarYConfirmarCarga, reabrirCarga, agregarFotoACarga, qu
 import { fetchUsuarios } from "@/lib/db/equipo";
 import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
 import { agregarCambioPendiente } from "@/lib/offline/cola";
+import { leerCacheLote } from "@/lib/offline/cache-lote";
 import { useSync } from "@/lib/sync-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Carga, Lote, Punto, Usuario } from "@/types/domain";
@@ -70,6 +71,7 @@ export default function PuntoScreen() {
   const { avisarCambioEncolado } = useSync();
 
   const [cargando, setCargando] = useState(true);
+  const [usandoCache, setUsandoCache] = useState(false);
   const [lote, setLote] = useState<Lote | null>(null);
   const [punto, setPunto] = useState<Punto | null>(null);
   const [carga, setCarga] = useState<Carga | null>(null);
@@ -148,34 +150,57 @@ export default function PuntoScreen() {
     }, 300);
   }
 
+  function aplicarPuntoYCarga(p: Punto | null, c: Carga | null, usuarios: Usuario[]) {
+    setPunto(p);
+    setCarga(c);
+    setForm(
+      c
+        ? {
+            bicho: c.bicho,
+            babosa: c.babosa,
+            huevoBabosas: c.huevoBabosas,
+            gusanoArroz: c.gusanoArroz,
+            isocaCortadora: c.isocaCortadora,
+            gusanoBlanco: c.gusanoBlanco,
+            observaciones: c.observaciones,
+          }
+        : FORM_VACIO
+    );
+    setMostrarObservaciones(!!c?.observaciones);
+    setUsuarioQueCargo(c?.cargadoPorId ? usuarios.find((u) => u.id === c.cargadoPorId) ?? null : null);
+  }
+
   const refrescar = useCallback(async () => {
     try {
       const [l, puntos, usuarios] = await Promise.all([fetchLote(loteId), fetchPuntosDeLote(loteId), fetchUsuarios()]);
       setLote(l);
       const [linea, puntoNum] = etiqueta.split(".").map(Number);
       const p = puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
-      setPunto(p);
       if (l && p) {
         const c = await fetchCarga(p.id, l.campanaActual);
-        setCarga(c);
-        setForm(
-          c
-            ? {
-                bicho: c.bicho,
-                babosa: c.babosa,
-                huevoBabosas: c.huevoBabosas,
-                gusanoArroz: c.gusanoArroz,
-                isocaCortadora: c.isocaCortadora,
-                gusanoBlanco: c.gusanoBlanco,
-                observaciones: c.observaciones,
-              }
-            : FORM_VACIO
-        );
-        setMostrarObservaciones(!!c?.observaciones);
-        setUsuarioQueCargo(c?.cargadoPorId ? usuarios.find((u) => u.id === c.cargadoPorId) ?? null : null);
+        aplicarPuntoYCarga(p, c, usuarios);
+      } else {
+        aplicarPuntoYCarga(p, null, usuarios);
       }
+      setUsandoCache(false);
     } catch (e: any) {
-      Alert.alert("No se pudo cargar el punto", e.message ?? String(e));
+      // Sin señal: en vez de dejar la pantalla trabada con un error (el
+      // caso más común de esto es justo el que más importa — alguien que
+      // llega al punto ya sin cobertura), usamos la última foto guardada
+      // de este lote si existe (ver lib/offline/cache-lote.ts, la escribe
+      // Vista General/Modo trabajo en cada visita con señal). Si nunca se
+      // visitó este lote con señal, no hay nada que mostrar y ahí sí no
+      // queda otra que avisar que falló.
+      const cache = leerCacheLote(loteId);
+      if (cache) {
+        const [linea, puntoNum] = etiqueta.split(".").map(Number);
+        const p = cache.puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
+        setLote(cache.lote);
+        aplicarPuntoYCarga(p, p ? (cache.cargas.get(p.id) ?? null) : null, []);
+        setUsandoCache(true);
+      } else {
+        Alert.alert("No se pudo cargar el punto", e.message ?? String(e));
+      }
     } finally {
       setCargando(false);
     }
@@ -354,6 +379,13 @@ export default function PuntoScreen() {
         <Text style={styles.titulo}>Punto {etiqueta}</Text>
       </View>
 
+      {usandoCache && (
+        <Text style={styles.avisoCache}>
+          📡 Sin señal — mostrando la última versión guardada en este celular. Lo que cargues acá se guarda igual
+          y se sube solo cuando vuelva la señal.
+        </Text>
+      )}
+
       {usuarioQueCargo && (
         <View style={[styles.tagUsuario, { borderColor: usuarioQueCargo.color }]}>
           <Text style={[styles.tagUsuarioTexto, { color: usuarioQueCargo.color }]}>
@@ -519,6 +551,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   tagUsuarioTexto: { fontSize: 11, fontWeight: "700" },
+  avisoCache: {
+    fontSize: 11.5,
+    color: colors.warning,
+    backgroundColor: colors.warningBg,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
   bannerBloqueado: {
     flexDirection: "row",
     alignItems: "center",

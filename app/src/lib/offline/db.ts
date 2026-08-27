@@ -26,5 +26,21 @@ export function getDb(): SQLiteDatabase {
       ultimo_error TEXT
     );
   `);
+  // "Última foto" de lo que se pudo traer en vivo de cada lote — no es la
+  // cola (esa es para ESCRIBIR sin señal), esto es para poder VER algo sin
+  // señal: sin esto, entrar a la app ya en el campo sin cobertura (el caso
+  // más común, no una excepción) dejaba todo en blanco porque la grilla y
+  // las cargas siempre se pedían en vivo. Ver lib/offline/cache-lote.ts.
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS cache_lotes (
+      lote_id TEXT NOT NULL,
+      campana TEXT NOT NULL,
+      lote_json TEXT NOT NULL,
+      puntos_json TEXT NOT NULL,
+      cargas_json TEXT NOT NULL,
+      actualizado_en TEXT NOT NULL,
+      PRIMARY KEY (lote_id, campana)
+    );
+  `);
   return db;
 }

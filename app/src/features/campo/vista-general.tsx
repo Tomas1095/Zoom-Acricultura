@@ -54,7 +54,7 @@ export function VistaGeneral({
   // Fundador/Encargado ven el total del lote — pedido explícito del
   // usuario, ver lib/offline/resumen.ts.
   const esMonitoreador = usuario?.rol === "monitoreador";
-  const { cargando, puntos, cargas, resumen, gps, puntoCercano, enRango, origen } = useDatosCampo(
+  const { cargando, usandoCache, puntos, cargas, resumen, gps, puntoCercano, enRango, origen } = useDatosCampo(
     lote.id,
     campanaEfectiva,
     esMonitoreador ? usuario?.id : undefined
@@ -118,12 +118,18 @@ export function VistaGeneral({
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {usandoCache && (
+        <Text style={styles.avisoCache}>
+          📡 Sin señal — mostrando la última versión guardada en este celular, puede no estar al día.
+        </Text>
+      )}
+
       {viendoActual && puntos.length > 0 && (esMonitoreador ? resumen.completados > 0 : true) && (
         <Text style={styles.resumenAvance}>
           {esMonitoreador
             ? `${resumen.completados} puntos completados`
             : `${resumen.completados}/${resumen.totalPuntos} completados`}
-          {resumen.completados > 0 && ` · ${resumen.sincronizados} sincronizados`}
+          {resumen.completados > 0 && ` · ${resumen.sincronizados}/${resumen.completados} sincronizados`}
         </Text>
       )}
 
@@ -232,6 +238,16 @@ const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
   container: { padding: 16, gap: 12, alignItems: "center" },
   resumenAvance: { fontSize: 13, fontWeight: "700", color: colors.primaryDark, alignSelf: "flex-start" },
+  avisoCache: {
+    fontSize: 11.5,
+    color: colors.warning,
+    backgroundColor: colors.warningBg,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontWeight: "600",
+  },
   accionesFila: {
     flexDirection: "row",
     flexWrap: "wrap",

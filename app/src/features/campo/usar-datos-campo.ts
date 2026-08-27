@@ -4,6 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { fetchLote } from "@/lib/db/lotes";
 import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
+import { guardarCacheLote, leerCacheLote } from "@/lib/offline/cache-lote";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Carga, Lote, Punto } from "@/types/domain";
 import { useGps } from "./usar-gps";
@@ -26,6 +27,11 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
   const [puntos, setPuntos] = useState<Punto[]>([]);
   const [cargas, setCargas] = useState<Map<string, Carga>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  // true cuando lo que se está mostrando es la última foto guardada en el
+  // celular (ver lib/offline/cache-lote.ts), no lo que hay de verdad en el
+  // server ahora mismo — porque el fetch en vivo falló, típicamente por
+  // estar sin señal en el campo.
+  const [usandoCache, setUsandoCache] = useState(false);
 
   const refrescar = useCallback(async () => {
     try {
@@ -34,15 +40,33 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
       if (l) {
         const campanaEfectiva = campana ?? l.campanaActual;
         const [ps, cs] = await Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)]);
+        guardarCacheLote(loteId, campanaEfectiva, l, ps, cs);
         // Fusiona lo que esta persona ya guardó sin señal (todavía en la
         // cola local) para que se vea completo al toque, sin esperar a que
         // la sincronización real llegue a confirmarlo — ver
         // lib/offline/resumen.ts.
         setPuntos(ps);
         setCargas(fusionarPendientesEnCargas(cs, ps, campanaEfectiva));
+        setUsandoCache(false);
+        setError(null);
       }
     } catch (e: any) {
-      setError(e.message ?? String(e));
+      // Sin señal (o el server no respondió): en vez de dejar la pantalla
+      // en blanco o con un error, mostramos la última foto que se guardó
+      // de este lote — puede estar desactualizada, pero alguien que llega
+      // al campo sin cobertura necesita poder ver la grilla igual para
+      // poder trabajar (lo que cargue queda en la cola local, ver
+      // lib/offline/cola.ts, y se sube solo cuando vuelva la señal).
+      const cache = leerCacheLote(loteId, campana);
+      if (cache) {
+        setLote(cache.lote);
+        setPuntos(cache.puntos);
+        setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual));
+        setUsandoCache(true);
+        setError(null);
+      } else {
+        setError(e.message ?? String(e));
+      }
     } finally {
       setCargando(false);
     }
@@ -81,5 +105,5 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
     [puntos, cargas, resumenDeUsuarioId]
   );
 
-  return { cargando, error, lote, puntos, cargas, resumen, refrescar, gps, puntoCercano, enRango, origen };
+  return { cargando, error, usandoCache, lote, puntos, cargas, resumen, refrescar, gps, puntoCercano, enRango, origen };
 }
