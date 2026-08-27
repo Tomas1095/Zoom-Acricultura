@@ -20,12 +20,28 @@ import { supabase } from "@/lib/supabase";
 import { ZoomLogo } from "@/components/zoom-logo";
 import { colors } from "@/theme/colors";
 
-type Modo = "ingresar" | "unirse";
+type Modo = "ingresar" | "unirse" | "recuperar-pedir" | "recuperar-confirmar";
 
-/** Login real (email + contraseña vía Supabase Auth) y alta con código de
- * invitación — reemplaza el selector de usuarios de prueba del prototipo.
- * El header (logo, "MONITOREO DE PLAGAS", título) sí está calcado del
- * prototipo (mismos colores, mismo ícono de fondo tenue). */
+const TITULOS: Record<Modo, string> = {
+  ingresar: "Iniciar sesión",
+  unirse: "Unirme al equipo",
+  "recuperar-pedir": "Recuperar contraseña",
+  "recuperar-confirmar": "Elegir nueva contraseña",
+};
+
+/** Login real (email + contraseña vía Supabase Auth), alta con código de
+ * invitación, y recuperar contraseña — reemplaza el selector de usuarios
+ * de prueba del prototipo. El header (logo, "MONITOREO DE PLAGAS", título)
+ * sí está calcado del prototipo (mismos colores, mismo ícono de fondo
+ * tenue).
+ *
+ * Recuperar contraseña es por CÓDIGO (6 dígitos por mail), no por link —
+ * a propósito: un link de recuperación necesitaría deep linking (abrir la
+ * app desde el mail), y en Expo Go la URL cambia cada vez que arrancás
+ * `expo start` (más todavía con `--tunnel`) — no hay forma de que Supabase
+ * sepa de antemano a qué URL mandar a la persona. El código evita todo
+ * eso: la persona lo escribe a mano en la app, como un segundo factor,
+ * sin depender de ningún link ni esquema de URL. */
 export default function LoginScreen() {
   const { session, usuario, refrescarUsuario } = useAuth();
   const insets = useSafeAreaInsets();
@@ -34,9 +50,12 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
   const [codigo, setCodigo] = useState("");
+  const [codigoRecuperacion, setCodigoRecuperacion] = useState("");
+  const [nuevaClave, setNuevaClave] = useState("");
   const [cargando, setCargando] = useState(false);
 
-  // Ya hay sesión + perfil resuelto (p. ej. volviste de canjear el código) → afuera.
+  // Ya hay sesión + perfil resuelto (p. ej. volviste de canjear el código,
+  // o recién cambiaste tu contraseña) → afuera.
   if (session && usuario) return <Redirect href="/(app)" />;
 
   async function ingresar() {
@@ -76,6 +95,80 @@ export default function LoginScreen() {
     setCargando(false);
   }
 
+  /** Paso 1 de "olvidé mi contraseña": pide el mail y dispara el código —
+   * el mismo mail de "restablecer contraseña" de Supabase, que además del
+   * link (que acá no usamos) trae un código de 6 dígitos. */
+  async function enviarCodigoRecuperacion() {
+    if (!mail.trim()) {
+      Alert.alert("Falta el mail", "Escribí el mail con el que te registraste.");
+      return;
+    }
+    setCargando(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(mail.trim().toLowerCase());
+    setCargando(false);
+    if (error) {
+      Alert.alert("No se pudo enviar el código", error.message);
+      return;
+    }
+    setModo("recuperar-confirmar");
+  }
+
+  /** Paso 2: canjea el código (deja una sesión de recuperación activa) y
+   * de una vez pisa la contraseña vieja por la nueva. */
+  async function confirmarNuevaClave() {
+    if (!codigoRecuperacion.trim() || !nuevaClave) {
+      Alert.alert("Faltan datos", "Completá el código que te llegó por mail y la contraseña nueva.");
+      return;
+    }
+    setCargando(true);
+    const { error: otpError } = await supabase.auth.verifyOtp({
+      email: mail.trim().toLowerCase(),
+      token: codigoRecuperacion.trim(),
+      type: "recovery",
+    });
+    if (otpError) {
+      setCargando(false);
+      Alert.alert("Código inválido", "Revisá el código de 6 dígitos que te llegó por mail — vence a los pocos minutos.");
+      return;
+    }
+    const { error: updateError } = await supabase.auth.updateUser({ password: nuevaClave });
+    setCargando(false);
+    if (updateError) {
+      Alert.alert("No se pudo cambiar la contraseña", updateError.message);
+      return;
+    }
+    // Ya queda logueada con la sesión que abrió verifyOtp — el chequeo de
+    // arriba (session && usuario) la manda derecho adentro apenas
+    // useAuth resuelva el perfil.
+    await refrescarUsuario();
+  }
+
+  function volverAIngresar() {
+    setModo("ingresar");
+    setPassword("");
+    setCodigo("");
+    setCodigoRecuperacion("");
+    setNuevaClave("");
+  }
+
+  const accion =
+    modo === "ingresar"
+      ? ingresar
+      : modo === "unirse"
+        ? unirseConCodigo
+        : modo === "recuperar-pedir"
+          ? enviarCodigoRecuperacion
+          : confirmarNuevaClave;
+
+  const textoBoton =
+    modo === "ingresar"
+      ? "Ingresar"
+      : modo === "unirse"
+        ? "Unirme"
+        : modo === "recuperar-pedir"
+          ? "Enviarme un código"
+          : "Cambiar contraseña";
+
   return (
     <View style={styles.pantalla}>
       <StatusBar style="light" />
@@ -87,7 +180,7 @@ export default function LoginScreen() {
               <ZoomLogo variant="light" iconSize={44} wordSize={32} />
             </View>
             <Text style={styles.eyebrow}>MONITOREO DE PLAGAS</Text>
-            <Text style={styles.titulo}>{modo === "ingresar" ? "Iniciar sesión" : "Unirme al equipo"}</Text>
+            <Text style={styles.titulo}>{TITULOS[modo]}</Text>
           </View>
 
           <View style={styles.body}>
@@ -101,23 +194,33 @@ export default function LoginScreen() {
                   onChangeText={setNombre}
                 />
               )}
-              <TextInput
-                style={styles.input}
-                placeholder="Mail"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={mail}
-                onChangeText={setMail}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                placeholderTextColor={colors.textMuted}
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
+
+              {modo !== "recuperar-confirmar" && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Mail"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={mail}
+                  onChangeText={setMail}
+                />
+              )}
+              {modo === "recuperar-confirmar" && (
+                <Text style={styles.mailConfirmado}>Código enviado a {mail.trim()}</Text>
+              )}
+
+              {(modo === "ingresar" || modo === "unirse") && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Contraseña"
+                  placeholderTextColor={colors.textMuted}
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              )}
+
               {modo === "unirse" && (
                 <TextInput
                   style={styles.input}
@@ -129,23 +232,53 @@ export default function LoginScreen() {
                 />
               )}
 
+              {modo === "recuperar-confirmar" && (
+                <>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Código de 6 dígitos"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="number-pad"
+                    value={codigoRecuperacion}
+                    onChangeText={setCodigoRecuperacion}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Contraseña nueva"
+                    placeholderTextColor={colors.textMuted}
+                    secureTextEntry
+                    value={nuevaClave}
+                    onChangeText={setNuevaClave}
+                  />
+                </>
+              )}
+
               <Pressable
                 style={[styles.botonConfirmar, cargando && styles.deshabilitado]}
                 disabled={cargando}
-                onPress={modo === "ingresar" ? ingresar : unirseConCodigo}
+                onPress={accion}
               >
-                <Text style={styles.botonConfirmarTexto}>
-                  {cargando ? "Un momento…" : modo === "ingresar" ? "Ingresar" : "Unirme"}
-                </Text>
+                <Text style={styles.botonConfirmarTexto}>{cargando ? "Un momento…" : textoBoton}</Text>
               </Pressable>
             </View>
 
-            {modo === "ingresar" ? (
-              <Pressable style={styles.botonUnirse} onPress={() => setModo("unirse")}>
-                <Text style={styles.botonUnirseTexto}>¿Sos nuevo? Unirte con un código de invitación</Text>
+            {modo === "ingresar" && (
+              <>
+                <Pressable style={styles.botonUnirse} onPress={() => setModo("unirse")}>
+                  <Text style={styles.botonUnirseTexto}>¿Sos nuevo? Unirte con un código de invitación</Text>
+                </Pressable>
+                <Pressable style={styles.volverLink} onPress={() => setModo("recuperar-pedir")}>
+                  <Text style={styles.volverLinkTexto}>¿Olvidaste tu contraseña?</Text>
+                </Pressable>
+              </>
+            )}
+            {modo === "recuperar-confirmar" && (
+              <Pressable style={styles.volverLink} onPress={() => setModo("recuperar-pedir")}>
+                <Text style={styles.volverLinkTexto}>¿No te llegó? Pedir otro código</Text>
               </Pressable>
-            ) : (
-              <Pressable style={styles.volverLink} onPress={() => setModo("ingresar")}>
+            )}
+            {modo !== "ingresar" && (
+              <Pressable style={styles.volverLink} onPress={volverAIngresar}>
                 <Text style={styles.volverLinkTexto}>← Volver</Text>
               </Pressable>
             )}
@@ -195,6 +328,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
   },
+  mailConfirmado: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
   botonConfirmar: {
     backgroundColor: colors.primaryConfirm,
     borderRadius: 10,
