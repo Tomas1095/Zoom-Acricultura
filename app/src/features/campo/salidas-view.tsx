@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { ChevronDown, Download, Plus, RotateCcw, Upload, X } from "lucide-react-native";
 
 import { calcularZonaAplicacion, UMBRAL_APLICACION_BABOSA, type EstacionAplicacion } from "@/lib/geo/zona-aplicacion";
@@ -24,8 +34,16 @@ import { useDatosCampo } from "./usar-datos-campo";
 import { MapaDensidad } from "./mapa-densidad";
 import { MapaManchoneo } from "./mapa-manchoneo";
 
-const MAPA_INFORME_ANCHO = 220;
-const MAPA_INFORME_ALTO = 170;
+// Alto fijo — adentro de un ScrollView no tiene sentido "crecer" en alto
+// (no hay límite de pantalla que respetar), pero el ancho se mide en vivo
+// contra el card real (ver onLayoutMapasCard) para usar todo el espacio
+// disponible, no un tamaño achicado a mano que después se pisa todo adentro.
+const MAPA_INFORME_ALTO = 280;
+// Los mapas del PDF son bastante más grandes que los de pantalla — una
+// hoja A4/carta da mucho más lugar que la miniatura del informe, y achicar
+// el mapa ahí solo apretaba título/rosa/leyenda/escala sin necesidad.
+const MAPA_PDF_ANCHO = 500;
+const MAPA_PDF_ALTO = 420;
 
 const PRODUCTOS = ["Crustacicida", "Molusquicida", "Crustacicida + Molusquicida", "No aplicar"];
 
@@ -240,8 +258,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             rangosDe("bicho"),
             NIVEL_COLORES,
             "Nº BB/m²",
-            260,
-            220
+            MAPA_PDF_ANCHO,
+            MAPA_PDF_ALTO
           ),
           mapaBabosaHtml: construirMapaDensidadHtml(
             puntosDensidadBabosa,
@@ -249,8 +267,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             rangosDe("babosa"),
             NIVEL_COLORES,
             "Nº Babosas/m²",
-            260,
-            220
+            MAPA_PDF_ANCHO,
+            MAPA_PDF_ALTO
           ),
         });
         await exportarInformePdf(html, valores.nombre);
@@ -268,6 +286,14 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   }
 
   const resumen = useMemo(() => resumenPorProducto(zonas), [zonas]);
+
+  // Ancho real del card de mapas, medido en vivo — así el mapa usa todo el
+  // espacio disponible en vez de un tamaño achicado a mano (que apretaba
+  // título/rosa/leyenda/escala todos contra todos).
+  const [anchoCardMapas, setAnchoCardMapas] = useState(0);
+  function onLayoutCardMapas(e: LayoutChangeEvent) {
+    setAnchoCardMapas(e.nativeEvent.layout.width - 28); // menos el padding del card (14 de cada lado)
+  }
 
   if (cargando) {
     return (
@@ -300,22 +326,30 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
-          <View style={styles.card}>
+          <View style={styles.card} onLayout={onLayoutCardMapas}>
             <Text style={styles.cardTitulo}>Mapa de densidad poblacional</Text>
-            <MapaInformeConLeyenda
-              titulo="Bichos bolita"
-              puntos={puntosDensidadBicho}
-              perimetro={lote.perimetro}
-              plaga="bicho"
-              origen={origenDensidad}
-            />
-            <MapaInformeConLeyenda
-              titulo="Babosas"
-              puntos={puntosDensidadBabosa}
-              perimetro={lote.perimetro}
-              plaga="babosa"
-              origen={origenDensidad}
-            />
+            {anchoCardMapas > 40 && (
+              <>
+                <MapaInformeConLeyenda
+                  titulo="Bichos bolita"
+                  puntos={puntosDensidadBicho}
+                  perimetro={lote.perimetro}
+                  plaga="bicho"
+                  origen={origenDensidad}
+                  ancho={anchoCardMapas}
+                  alto={MAPA_INFORME_ALTO}
+                />
+                <MapaInformeConLeyenda
+                  titulo="Babosas"
+                  puntos={puntosDensidadBabosa}
+                  perimetro={lote.perimetro}
+                  plaga="babosa"
+                  origen={origenDensidad}
+                  ancho={anchoCardMapas}
+                  alto={MAPA_INFORME_ALTO}
+                />
+              </>
+            )}
           </View>
 
           <View style={styles.card}>
@@ -462,28 +496,32 @@ interface MapaInformeConLeyendaProps {
   perimetro: Lote["perimetro"];
   plaga: "bicho" | "babosa";
   origen: ReturnType<typeof inferirOrigenDesdePuntos> | null;
+  ancho: number;
+  alto: number;
 }
 
 /** El mismo mapa de densidad de Resultados (mismo componente `MapaDensidad`,
  * mismos datos, con foto satelital de fondo si hay señal, y la leyenda ya
- * adentro del propio rectángulo) en miniatura — para que la persona vea en
- * pantalla lo mismo que va a salir en el PDF (ahí sin foto, ver
- * mapa-svg.ts), sin tener que ir a otra pestaña. */
-function MapaInformeConLeyenda({ titulo, puntos, perimetro, plaga, origen }: MapaInformeConLeyendaProps) {
+ * adentro del propio rectángulo) — para que la persona vea en pantalla lo
+ * mismo que va a salir en el PDF (ahí más grande y sin foto, ver
+ * mapa-svg.ts), sin tener que ir a otra pestaña. `ancho` viene medido en
+ * vivo del card real (ver onLayoutCardMapas más arriba), no achicado a
+ * mano — así usa todo el lugar disponible en vez de apretar todo adentro. */
+function MapaInformeConLeyenda({ titulo, puntos, perimetro, plaga, origen, ancho, alto }: MapaInformeConLeyendaProps) {
   const rangos = rangosDe(plaga);
   const etiqueta = plaga === "bicho" ? "Nº BB/m²" : "Nº Babosas/m²";
   return (
     <View style={styles.mapaInformeBloque}>
       <Text style={styles.mapaInformeTitulo}>{titulo}</Text>
-      <View style={[styles.mapaInformeMarco, { width: MAPA_INFORME_ANCHO, height: MAPA_INFORME_ALTO }]}>
+      <View style={[styles.mapaInformeMarco, { width: ancho, height: alto }]}>
         <MapaDensidad
           puntos={puntos}
           perimetro={perimetro}
           rangos={rangos}
           nivelColores={NIVEL_COLORES}
           etiquetaLeyenda={etiqueta}
-          ancho={MAPA_INFORME_ANCHO}
-          alto={MAPA_INFORME_ALTO}
+          ancho={ancho}
+          alto={alto}
           origen={origen}
         />
       </View>
