@@ -69,10 +69,9 @@ function zonaInicial(lote: Lote): ZonaCebo {
     // nombre del lote, una zona dentro del lote, lo que sea), no un lote
     // elegido de una lista fija.
     loteNombre: "",
-    // En 0 por defecto — la persona carga sus propios números, no un valor
-    // adivinado que después tiene que borrar.
-    superficie: "0",
-    productos: [{ id: "1", producto: "Crustacicida + Molusquicida", dosis: "0" }],
+    // Dosis/superficie arrancan vacíos, no en 0 — la persona carga sus
+    // propios números desde cero, sin nada que borrar antes.
+    productos: [{ id: "1", producto: "Crustacicida + Molusquicida", dosis: "", superficie: "" }],
   };
 }
 
@@ -152,12 +151,16 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   function actualizarZonaNombre(id: string, valor: string) {
     setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, loteNombre: valor } : z)));
   }
-  function actualizarZonaSuperficie(id: string, valor: string) {
-    const limpio = limitarUnDecimal(valor);
-    setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, superficie: limpio } : z)));
-  }
-  function actualizarProducto(zonaId: string, productoId: string, campo: "producto" | "dosis", valor: string) {
-    const limpio = campo === "dosis" ? limitarUnDecimal(valor) : valor;
+  // "producto" | "dosis" | "superficie" — la superficie va por producto,
+  // no una sola compartida entre todos los productos del lote (dos
+  // productos del mismo lote pueden cubrir superficies distintas).
+  function actualizarProducto(
+    zonaId: string,
+    productoId: string,
+    campo: "producto" | "dosis" | "superficie",
+    valor: string
+  ) {
+    const limpio = campo === "dosis" || campo === "superficie" ? limitarUnDecimal(valor) : valor;
     setZonas((zs) =>
       zs.map((z) => {
         if (z.id !== zonaId) return z;
@@ -171,7 +174,9 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   function agregarProducto(zonaId: string) {
     setZonas((zs) =>
       zs.map((z) =>
-        z.id === zonaId ? { ...z, productos: [...z.productos, { id: String(Date.now()), producto: "Crustacicida", dosis: "0" }] } : z
+        z.id === zonaId
+          ? { ...z, productos: [...z.productos, { id: String(Date.now()), producto: "Crustacicida", dosis: "", superficie: "" }] }
+          : z
       )
     );
   }
@@ -347,7 +352,6 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                 key={z.id}
                 zona={z}
                 onCambiarNombre={(v) => actualizarZonaNombre(z.id, v)}
-                onCambiarSuperficie={(v) => actualizarZonaSuperficie(z.id, v)}
                 onCambiarProducto={(prodId, campo, v) => actualizarProducto(z.id, prodId, campo, v)}
                 onAgregarProducto={() => agregarProducto(z.id)}
                 onQuitarProducto={(prodId) => quitarProducto(z.id, prodId)}
@@ -665,8 +669,7 @@ const styles = StyleSheet.create({
 interface ZonaFilaProps {
   zona: ZonaCebo;
   onCambiarNombre: (valor: string) => void;
-  onCambiarSuperficie: (valor: string) => void;
-  onCambiarProducto: (productoId: string, campo: "producto" | "dosis", valor: string) => void;
+  onCambiarProducto: (productoId: string, campo: "producto" | "dosis" | "superficie", valor: string) => void;
   onAgregarProducto: () => void;
   onQuitarProducto: (productoId: string) => void;
   onQuitar: () => void;
@@ -674,19 +677,12 @@ interface ZonaFilaProps {
 
 /** Una fila = un lote (nombre libre, no una lista fija — se puede armar un
  * informe que junte varios lotes de un mismo establecimiento con nombres
- * cualquiera), con uno o más productos aplicados a dosis distintas (por
- * ej. crustacicida en un sector y molusquicida en otro, o simplemente dos
- * productos juntos) — portado y extendido de `ZonaFila` del prototipo (ahí
- * solo había un producto por zona). */
-function ZonaFila({
-  zona,
-  onCambiarNombre,
-  onCambiarSuperficie,
-  onCambiarProducto,
-  onAgregarProducto,
-  onQuitarProducto,
-  onQuitar,
-}: ZonaFilaProps) {
+ * cualquiera), con uno o más productos aplicados — cada uno con su propia
+ * dosis Y su propia superficie (dos productos del mismo lote pueden cubrir
+ * superficies distintas, no necesariamente el lote entero cada uno) —
+ * portado y extendido de `ZonaFila` del prototipo (ahí solo había un
+ * producto por zona, con una única superficie). */
+function ZonaFila({ zona, onCambiarNombre, onCambiarProducto, onAgregarProducto, onQuitarProducto, onQuitar }: ZonaFilaProps) {
   return (
     <View style={styles.zonaCard}>
       <View style={styles.zonaFilaSuperior}>
@@ -706,7 +702,6 @@ function ZonaFila({
         <ProductoFila
           key={p.id}
           producto={p}
-          superficie={zona.superficie}
           puedeQuitar={zona.productos.length > 1}
           // El "+" de agregar otro producto va al lado del desplegable, pero
           // solo en la última fila — si hubiera uno por fila, se repetiría
@@ -714,7 +709,6 @@ function ZonaFila({
           mostrarAgregar={i === zona.productos.length - 1}
           onAgregarProducto={onAgregarProducto}
           onCambiar={(campo, v) => onCambiarProducto(p.id, campo, v)}
-          onCambiarSuperficie={onCambiarSuperficie}
           onQuitar={() => onQuitarProducto(p.id)}
         />
       ))}
@@ -724,25 +718,14 @@ function ZonaFila({
 
 interface ProductoFilaProps {
   producto: ProductoAplicado;
-  superficie: string;
   puedeQuitar: boolean;
   mostrarAgregar: boolean;
   onAgregarProducto: () => void;
-  onCambiar: (campo: "producto" | "dosis", valor: string) => void;
-  onCambiarSuperficie: (valor: string) => void;
+  onCambiar: (campo: "producto" | "dosis" | "superficie", valor: string) => void;
   onQuitar: () => void;
 }
 
-function ProductoFila({
-  producto,
-  superficie,
-  puedeQuitar,
-  mostrarAgregar,
-  onAgregarProducto,
-  onCambiar,
-  onCambiarSuperficie,
-  onQuitar,
-}: ProductoFilaProps) {
+function ProductoFila({ producto, puedeQuitar, mostrarAgregar, onAgregarProducto, onCambiar, onQuitar }: ProductoFilaProps) {
   const [productoAbierto, setProductoAbierto] = useState(false);
 
   return (
@@ -786,18 +769,22 @@ function ProductoFila({
         <TextInput
           style={styles.zonaNumInput}
           value={producto.dosis}
+          placeholder="0"
+          placeholderTextColor={colors.textMuted}
           keyboardType="decimal-pad"
           onChangeText={(v) => onCambiar("dosis", v)}
         />
         <Text style={styles.zonaUnidad}>kg/ha ×</Text>
         <TextInput
           style={styles.zonaNumInput}
-          value={superficie}
+          value={producto.superficie}
+          placeholder="0"
+          placeholderTextColor={colors.textMuted}
           keyboardType="decimal-pad"
-          onChangeText={onCambiarSuperficie}
+          onChangeText={(v) => onCambiar("superficie", v)}
         />
         <Text style={styles.zonaUnidad}>ha</Text>
-        <Text style={styles.zonaTotal}>= {kgDeProducto(superficie, producto).toFixed(0)} kg</Text>
+        <Text style={styles.zonaTotal}>= {kgDeProducto(producto).toFixed(0)} kg</Text>
       </View>
     </View>
   );

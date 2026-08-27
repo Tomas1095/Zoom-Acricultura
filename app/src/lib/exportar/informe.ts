@@ -15,16 +15,20 @@ import * as Sharing from "expo-sharing";
 // input vuelve a mostrar "5", así nunca se puede terminar de escribir
 // "5.5") — mismo motivo por el que `SubirKmz` guarda `haPorPunto` como
 // string. Se convierte a número recién al calcular kg (acá abajo).
+// La superficie va POR PRODUCTO, no una sola compartida por todo el lote —
+// dos productos del mismo lote pueden cubrir superficies distintas (por
+// ej. crustacicida en 20ha y molusquicida en las otras 15ha de un lote de
+// 35ha), no necesariamente el lote entero cada uno.
 export interface ProductoAplicado {
   id: string;
   producto: string;
   dosis: string; // kg/ha, tal cual lo tecleó la persona
+  superficie: string; // ha, tal cual lo tecleó la persona
 }
 
 export interface ZonaCebo {
   id: string;
   loteNombre: string;
-  superficie: string; // ha, tal cual lo tecleó la persona
   productos: ProductoAplicado[];
 }
 
@@ -33,8 +37,8 @@ function numero(texto: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function kgDeProducto(superficie: string, p: ProductoAplicado): number {
-  return numero(p.dosis) * numero(superficie);
+export function kgDeProducto(p: ProductoAplicado): number {
+  return numero(p.dosis) * numero(p.superficie);
 }
 
 /** Total de kg a comprar por producto, sumado entre TODOS los lotes/zonas
@@ -46,7 +50,7 @@ export function resumenPorProducto(zonas: ZonaCebo[]): Array<{ producto: string;
   for (const z of zonas) {
     for (const p of z.productos) {
       if (p.producto === "No aplicar") continue;
-      totales.set(p.producto, (totales.get(p.producto) ?? 0) + kgDeProducto(z.superficie, p));
+      totales.set(p.producto, (totales.get(p.producto) ?? 0) + kgDeProducto(p));
     }
   }
   return Array.from(totales.entries()).map(([producto, totalKg]) => ({ producto, totalKg }));
@@ -87,7 +91,7 @@ export function construirInformeHtml({
     .flatMap((z) =>
       z.productos.map(
         (p) =>
-          `<tr><td>${escapeHtml(z.loteNombre || "Lote")}</td><td>${escapeHtml(p.producto)}</td><td>${p.dosis} kg/ha</td><td>${z.superficie} ha</td><td>${kgDeProducto(z.superficie, p).toFixed(0)} kg</td></tr>`
+          `<tr><td>${escapeHtml(z.loteNombre || "Lote")}</td><td>${escapeHtml(p.producto)}</td><td>${p.dosis} kg/ha</td><td>${p.superficie} ha</td><td>${kgDeProducto(p).toFixed(0)} kg</td></tr>`
       )
     )
     .join("");
