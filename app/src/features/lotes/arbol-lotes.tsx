@@ -10,6 +10,7 @@ import { fetchCargasDeLote, fetchCentroDeLote, fetchPuntosDeLote } from "@/lib/d
 import { fetchUsuarios } from "@/lib/db/equipo";
 import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { formatearHectareas } from "@/lib/format";
+import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -55,29 +56,54 @@ export function ArbolLotes() {
   // Acá SIEMPRE es el total del lote (sin usuarioId), a diferencia de
   // MisLotes que lo filtra por el Monitoreador — ver lib/offline/resumen.ts.
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
+  const [usandoCache, setUsandoCache] = useState(false);
 
   const refrescar = useCallback(async () => {
+    if (!usuario) return;
+    let arbol: db.Arbol;
     try {
-      const [arbol, todosLosUsuarios] = await Promise.all([db.fetchArbol(), fetchUsuarios()]);
+      const [arbolLive, todosLosUsuarios] = await Promise.all([db.fetchArbol(), fetchUsuarios()]);
+      arbol = arbolLive;
       setClientes(arbol.clientes);
       setEstablecimientos(arbol.establecimientos);
       setLotes(arbol.lotes);
       setUsuarios(todosLosUsuarios);
-
-      // Aparte y sin bloquear el árbol — cada pill de resumen aparece
-      // apenas se calcula, sin esperar a todos los lotes.
-      const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
-      conGrilla.forEach((l) => {
-        fetchResumenLote(l.id, l.campanaActual)
-          .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
-          .catch(() => {});
-      });
+      setUsandoCache(false);
+      guardarCacheArbol(usuario.id, arbol);
     } catch (e: any) {
-      Alert.alert("No se pudo cargar", e.message ?? String(e));
-    } finally {
-      setCargando(false);
+      // Sin señal: esta es la PRIMERA pantalla que ve un Socio/Encargado
+      // al entrar — sin este respaldo, no había forma de siquiera ver el
+      // árbol para poder entrar a un lote y seguir trabajando offline (eso
+      // sí ya andaba, ver lib/offline/cache-lote.ts). "Quién hizo qué" y
+      // los avatares de usuarios sí se pierden sin señal (no son
+      // necesarios para navegar ni cargar puntos) — ver
+      // lib/offline/cache-arbol.ts.
+      const cache = await leerCacheArbol(usuario.id);
+      if (cache) {
+        arbol = cache;
+        setClientes(cache.clientes);
+        setEstablecimientos(cache.establecimientos);
+        setLotes(cache.lotes);
+        setUsandoCache(true);
+      } else {
+        Alert.alert("No se pudo cargar", e.message ?? String(e));
+        setCargando(false);
+        return;
+      }
     }
-  }, []);
+
+    // Aparte y sin bloquear el árbol — cada pill de resumen aparece
+    // apenas se calcula, sin esperar a todos los lotes. Sin señal esto
+    // también va a fallar solo (fetchResumenLote pega contra el server) —
+    // cada fila se queda sin el resumen, no rompe el resto.
+    const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
+    conGrilla.forEach((l) => {
+      fetchResumenLote(l.id, l.campanaActual)
+        .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
+        .catch(() => {});
+    });
+    setCargando(false);
+  }, [usuario]);
 
   useEffect(() => {
     refrescar();
@@ -162,6 +188,11 @@ export function ArbolLotes() {
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container}>
+        {usandoCache && (
+          <Text style={styles.avisoCache}>
+            📡 Sin señal — mostrando el último árbol guardado en este celular, puede no estar al día.
+          </Text>
+        )}
         {clientes.length === 0 && (
           <Text style={styles.vacio}>Todavía no hay clientes cargados. Empezá agregando uno.</Text>
         )}
@@ -470,6 +501,14 @@ const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
   container: { padding: 16, gap: 12 },
   vacio: { color: colors.textMuted, textAlign: "center", marginTop: 24 },
+  avisoCache: {
+    fontSize: 11.5,
+    color: colors.warning,
+    backgroundColor: colors.warningBg,
+    borderRadius: 8,
+    padding: 10,
+    fontWeight: "600",
+  },
   vacioChico: { color: colors.textMuted, fontSize: 12, paddingVertical: 6 },
   agregarClienteBtn: {
     flexDirection: "row",

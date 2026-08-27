@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase";
 import { filaAUsuario } from "./db/mappers";
+import { guardarUsuarioCache, leerUsuarioCache } from "./offline/cache-usuario";
 import type { Usuario } from "@/types/domain";
 
 interface AuthState {
@@ -24,17 +25,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
 
   async function cargarUsuario(authUserId: string) {
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("*")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-    if (error) {
-      console.warn("No se pudo cargar el perfil de usuario:", error.message);
-      setUsuario(null);
-      return;
+    try {
+      const { data, error } = await supabase
+        .from("usuarios")
+        .select("*")
+        .eq("auth_user_id", authUserId)
+        .maybeSingle();
+      if (error) throw error;
+      const u = data ? filaAUsuario(data) : null;
+      setUsuario(u);
+      if (u) guardarUsuarioCache(u);
+    } catch (e: any) {
+      // Sin señal: la sesión de auth ya se restauró sola desde el
+      // dispositivo (ver lib/supabase.ts, persistSession), pero este
+      // perfil es una consulta aparte al server. Sin este respaldo,
+      // reabrir la app ya sin señal (por ej. después de cerrarla del todo
+      // en el campo) mandaba a la persona de vuelta al login — un login
+      // que tampoco puede completarse sin señal. Ver
+      // lib/offline/cache-usuario.ts.
+      const cache = await leerUsuarioCache(authUserId);
+      setUsuario(cache);
+      if (!cache) console.warn("No se pudo cargar el perfil de usuario:", e.message ?? String(e));
     }
-    setUsuario(data ? filaAUsuario(data) : null);
   }
 
   useEffect(() => {
