@@ -18,6 +18,7 @@ import { NIVEL_COLORES, rangosDe } from "@/lib/geo/densidad";
 import { resumenPlaga, resumenPresencias, textoSituacion } from "@/lib/informe/situacion";
 import {
   construirInformeHtml,
+  construirInformeHtmlNuevo,
   exportarInformePdf,
   kgDeProducto,
   resumenPorProducto,
@@ -108,6 +109,11 @@ function zonaInicial(lote: Lote): ZonaCebo {
 export function SalidasView({ lote, establecimientoNombre, campanaViendo }: SalidasViewProps) {
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
   const [subTab, setSubTab] = useState<SubTab>("informe");
+  // Elige qué diseño de PDF usa "Exportar PDF" — el mismo formulario
+  // (mapas, situación, recomendación) sirve para las dos, solo cambia el
+  // HTML que se arma al exportar. Puramente para que la persona pruebe las
+  // dos versiones y decida cuál prefiere; no hay diferencia en los datos.
+  const [disenoInforme, setDisenoInforme] = useState<"tradicional" | "nuevo">("tradicional");
 
   const puntosConValores = useMemo(
     () =>
@@ -261,7 +267,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     setExportando(pedido);
     try {
       if (pedido === "pdf") {
-        const html = construirInformeHtml({
+        const datosInforme = {
           loteNombre: lote.nombre,
           establecimientoNombre,
           situacion,
@@ -287,7 +293,11 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             MAPA_PDF_ALTO,
             origenDensidad
           ),
-        });
+        };
+        // Mismos datos para las dos versiones — solo cambia qué armador de
+        // HTML se usa, según lo que la persona haya elegido arriba.
+        const html =
+          disenoInforme === "nuevo" ? construirInformeHtmlNuevo(datosInforme) : construirInformeHtml(datosInforme);
         await exportarInformePdf(html, valores.nombre);
       } else {
         const origen = inferirOrigenDesdePuntos(puntos);
@@ -343,6 +353,28 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
+          {/* Elige qué diseño de PDF arma "Exportar PDF" más abajo — el
+              formulario (mapas, situación, recomendación) es el mismo para
+              las dos, solo para probar y elegir cuál gusta más. */}
+          <View style={styles.disenoToggle}>
+            <Pressable
+              style={[styles.disenoBoton, disenoInforme === "tradicional" && styles.disenoBotonActivo]}
+              onPress={() => setDisenoInforme("tradicional")}
+            >
+              <Text style={[styles.disenoBotonTexto, disenoInforme === "tradicional" && styles.disenoBotonTextoActivo]}>
+                Informe tradicional
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.disenoBoton, disenoInforme === "nuevo" && styles.disenoBotonActivo]}
+              onPress={() => setDisenoInforme("nuevo")}
+            >
+              <Text style={[styles.disenoBotonTexto, disenoInforme === "nuevo" && styles.disenoBotonTextoActivo]}>
+                Informe nuevo
+              </Text>
+            </Pressable>
+          </View>
+
           {/* Sin título propio en el card: "Mapa de densidad poblacional" ya
               lo muestra cada mapa adentro suyo (ver MapaDensidad) — ponerlo
               acá también era repetir el mismo texto dos veces seguidas. */}
@@ -585,6 +617,19 @@ const styles = StyleSheet.create({
   subTabTexto: { fontSize: 13.5, fontWeight: "700", color: colors.textMuted, paddingBottom: 8 },
   subTabTextoActivo: { color: colors.primary, borderBottomWidth: 2, borderBottomColor: colors.primary },
   scrollContenido: { padding: 16, gap: 12 },
+  disenoToggle: {
+    flexDirection: "row",
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 3,
+    gap: 3,
+  },
+  disenoBoton: { flex: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
+  disenoBotonActivo: { backgroundColor: colors.primaryConfirm },
+  disenoBotonTexto: { fontSize: 12.5, fontWeight: "700", color: colors.textMuted },
+  disenoBotonTextoActivo: { color: colors.surface },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 12,

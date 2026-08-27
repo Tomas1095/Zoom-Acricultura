@@ -279,6 +279,170 @@ export function construirInformeHtml({
 </html>`;
 }
 
+// Mini logo para el diseño "nuevo" — mismos paths/colores que LOGO_HTML,
+// pero mucho más chico y sin la columna alineada al centro (acá va al
+// lado del encabezado, no como pieza protagonista aparte).
+const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:6px;">
+  <svg width="22" height="22" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="26.5" stroke="${LOGO_VERDE}" stroke-width="11" fill="none" />
+    <line x1="50" y1="23.5" x2="50" y2="6" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <line x1="50" y1="76.5" x2="50" y2="94" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <line x1="23.5" y1="50" x2="6" y2="50" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <line x1="76.5" y1="50" x2="94" y2="50" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
+    <path d="M 61.74 13.86 L 64.44 14.85 L 67.05 16.04 L 69.57 17.43 L 71.98 19.00 L 74.26 20.75 L 76.40 22.67 L 78.39 24.74 L 80.21 26.95 L 81.87 29.30 L 83.34 31.77 L 84.62 34.34 L 85.71 37.00" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 15.02 35.15 L 16.19 32.65 L 17.54 30.24 L 19.06 27.93 L 20.75 25.74 L 22.59 23.68 L 24.57 21.76 L 26.69 19.99 L 28.93 18.37 L 31.29 16.93 L 33.74 15.65 L 36.28 14.56 L 38.89 13.66" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 29.30 81.87 L 27.26 80.45 L 25.32 78.90 L 23.48 77.22 L 21.76 75.43 L 20.16 73.53 L 18.68 71.52 L 17.34 69.43 L 16.14 67.25 L 15.09 65.00 L 14.18 62.68 L 13.43 60.31 L 12.83 57.90" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  </svg>
+  <div style="line-height:1;">
+    <div style="font-size:13px;font-weight:900;letter-spacing:-0.3px;color:${LOGO_VERDE};">ZOOM</div>
+    <div style="font-size:5.5px;font-weight:700;letter-spacing:0.5px;color:${LOGO_VERDE};margin-top:1px;">AGRICULTURA</div>
+  </div>
+</div>`;
+
+const NUEVO_VERDE = "#1B2E1F";
+const NUEVO_VERDE_ACENTO = "#155C35";
+const NUEVO_DORADO = "#A9752E";
+const NUEVO_MUTED = "#7A6F52";
+const NUEVO_LINEA = "#E4DEC9";
+const NUEVO_BANDA_BG = "#F4F8F4";
+
+function nuevoSeccionLabel(texto: string): string {
+  return `<div style="display:flex;align-items:center;gap:9px;margin:26px 0 14px;">
+    <div style="width:7px;height:7px;background:${NUEVO_DORADO};transform:rotate(45deg);flex-shrink:0;"></div>
+    <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:${NUEVO_VERDE};text-transform:uppercase;white-space:nowrap;">${texto}</div>
+    <div style="flex:1;height:1px;background:${NUEVO_LINEA};"></div>
+  </div>`;
+}
+
+function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | undefined, compacto: boolean): string {
+  return `<div style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:${compacto ? 12 : 16}px;border-bottom:2px solid ${NUEVO_VERDE};">
+    <div>
+      <div style="font-size:9.5px;font-weight:800;letter-spacing:0.14em;color:${NUEVO_DORADO};text-transform:uppercase;">Informe técnico</div>
+      <div style="font-size:${compacto ? 17 : 22}px;font-weight:800;color:${NUEVO_VERDE};margin-top:3px;letter-spacing:-0.2px;">${escapeHtml(loteNombre)}${establecimientoNombre ? `<span style="font-weight:500;color:${NUEVO_MUTED};"> — ${escapeHtml(establecimientoNombre)}</span>` : ""}</div>
+    </div>
+    ${LOGO_MINI_HTML}
+  </div>`;
+}
+
+function nuevoPie(numero: number): string {
+  return `<div style="position:absolute;bottom:20px;left:26px;right:26px;display:flex;justify-content:space-between;border-top:1px solid ${NUEVO_LINEA};padding-top:8px;font-size:8.5px;color:${NUEVO_MUTED};letter-spacing:0.03em;">
+    <span>ZOOM AGRICULTURA · Monitoreo e informe técnico de plagas de suelo</span>
+    <span>Página ${numero}</span>
+  </div>`;
+}
+
+/** Segunda versión del informe — mismo contenido y datos que
+ * `construirInformeHtml`, look "editorial" distinto: fondo blanco en vez
+ * de crema, sin cards con borde por todos lados (barras de acento + líneas
+ * finas en vez de recuadros), logo chico integrado al encabezado, banda
+ * resaltada para el resumen final. Pensada para que la persona pruebe
+ * exportar las dos versiones y elija cuál prefiere — no reemplaza a
+ * `construirInformeHtml`, conviven las dos. */
+export function construirInformeHtmlNuevo({
+  loteNombre,
+  establecimientoNombre,
+  situacion,
+  zonas,
+  mapaBichoHtml,
+  mapaBabosaHtml,
+  notaCebo,
+}: DatosInforme): string {
+  const resumen = resumenPorProducto(zonas);
+
+  const filasProductos = zonas
+    .map((z) => {
+      const productos = z.productos
+        .map(
+          (p, i) => `
+      <div class="nProductoFila" style="${i > 0 ? `border-top:1px solid ${NUEVO_LINEA};` : ""}">
+        <div>
+          <div style="font-size:12.5px;font-weight:700;color:${NUEVO_VERDE};">${escapeHtml(p.producto)}</div>
+          <div style="font-size:10.5px;color:${NUEVO_MUTED};margin-top:1px;">${p.dosis || "0"} kg/ha &nbsp;×&nbsp; ${p.superficie || "0"} ha</div>
+        </div>
+        <div style="font-size:15px;font-weight:800;color:${NUEVO_VERDE_ACENTO};white-space:nowrap;">${kgDeProducto(p).toFixed(0)} kg</div>
+      </div>`
+        )
+        .join("");
+      return `<div class="nLoteBloque">
+        <div style="font-size:9.5px;font-weight:800;letter-spacing:0.08em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:2px;">${escapeHtml(z.loteNombre || "Lote")}</div>
+        ${productos}
+      </div>`;
+    })
+    .join("");
+
+  const filasResumen = resumen
+    .map(
+      (r) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;">
+      <div style="font-size:12px;color:${NUEVO_VERDE};">${escapeHtml(r.producto)}</div>
+      <div style="font-size:17px;font-weight:800;color:${NUEVO_VERDE_ACENTO};">${r.totalKg.toFixed(0)} <span style="font-size:11px;font-weight:700;">kg</span></div>
+    </div>`
+    )
+    .join("");
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+  @page { margin: 0; }
+  body { margin: 0; font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: ${NUEVO_VERDE}; background: #FFFFFF; }
+  .nHoja { padding: 26px; position: relative; box-sizing: border-box; }
+  /* Mismo criterio de paginación que construirInformeHtml: la hoja 1 es
+     solo mapas (salto forzado después), la hoja 2 entera no se puede
+     partir a la mitad — ver el comentario largo más arriba, en
+     construirInformeHtml, misma causa/mismo fix acá. */
+  .nHojaMapas { page-break-after: always; break-after: page; }
+  .nHojaSegunda { break-inside: avoid; page-break-inside: avoid; }
+  .nMapaBloque { margin-bottom: 20px; break-inside: avoid; page-break-inside: avoid; }
+  .nMapaBloque:last-child { margin-bottom: 0; }
+  .nMapaMarco { border: 1px solid ${NUEVO_LINEA}; border-radius: 4px; overflow: hidden; }
+  .nLoteBloque { margin-bottom: 16px; break-inside: avoid; page-break-inside: avoid; }
+  .nProductoFila { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; }
+  .nVacio { font-size: 12.5px; color: ${NUEVO_MUTED}; }
+</style>
+</head>
+<body>
+
+  <div class="nHoja nHojaMapas">
+    ${nuevoEncabezado(loteNombre, establecimientoNombre, false)}
+
+    ${nuevoSeccionLabel("Resultado monitoreo — Bichos bolita")}
+    <div class="nMapaBloque"><div class="nMapaMarco">${mapaBichoHtml}</div></div>
+
+    ${nuevoSeccionLabel("Resultado monitoreo — Babosas")}
+    <div class="nMapaBloque"><div class="nMapaMarco">${mapaBabosaHtml}</div></div>
+
+    ${nuevoPie(1)}
+  </div>
+
+  <div class="nHoja nHojaSegunda">
+    ${nuevoEncabezado(loteNombre, establecimientoNombre, true)}
+
+    ${nuevoSeccionLabel("Situación de plagas de suelo")}
+    <div style="border-left:3px solid ${NUEVO_DORADO};padding:2px 0 2px 16px;font-size:12.5px;line-height:1.7;color:${NUEVO_VERDE};white-space:pre-wrap;">${escapeHtml(situacion)}</div>
+
+    ${nuevoSeccionLabel("Recomendación de aplicación de cebo")}
+    ${notaCebo && notaCebo.trim() ? `<div style="font-size:11.5px;font-style:italic;color:${NUEVO_MUTED};line-height:1.6;margin-bottom:14px;">${escapeHtml(notaCebo)}</div>` : ""}
+    ${filasProductos || `<div class="nVacio">Sin lotes cargados.</div>`}
+
+    ${
+      resumen.length > 0
+        ? `<div style="background:${NUEVO_BANDA_BG};border-radius:6px;padding:16px 18px;margin-top:6px;">
+      <div style="font-size:9.5px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:4px;">Total a comprar</div>
+      ${filasResumen}
+    </div>`
+        : ""
+    }
+
+    ${nuevoPie(2)}
+  </div>
+
+</body>
+</html>`;
+}
+
 /** Genera el PDF con expo-print y abre la hoja de compartir nativa — el
  * equivalente real de "Guardar como PDF" del diálogo de impresión del
  * navegador que usaba el prototipo (`window.print()`, que no existe acá).
