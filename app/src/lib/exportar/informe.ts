@@ -191,26 +191,26 @@ export function construirInformeHtml({
   body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; }
   .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
   .eyebrow { color: #A9752E; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
-  h1 { font-size: 23px; margin: 4px 0 0; }
+  h1 { font-size: 21px; margin: 4px 0 0; }
   .card { background: #FFFFFF; border: 1px solid #EDE0B8; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
   /* La primera hoja es solo el encabezado + los dos mapas — situación y
      recomendación arrancan en la hoja siguiente, no importa cuánto sobre
      o falte de espacio en la primera. */
   .cardMapas { page-break-after: always; break-after: page; }
-  .cardTitulo { font-size: 15.5px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
+  .cardTitulo { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .mapaBloque { margin-bottom: 28px; }
   .mapaBloque:last-child { margin-bottom: 0; }
   /* Mismo tamaño y color que .cardTitulo (los títulos de "Situación de
      plagas de suelo"/"Recomendación..." en la hoja 2) — a pedido del
      usuario, para que se vea igual de jerárquico. */
-  .mapaEtiqueta { font-size: 15.5px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
+  .mapaEtiqueta { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .situacionBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
   .notaBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 12px; }
   /* Más juntas que antes (menos padding/margin) — el usuario lo pidió así,
      se perdía un poco en el recuadro con tanto aire. */
   .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
   .zonaCard:last-of-type { margin-bottom: 0; }
-  .zonaNombre { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .zonaNombre { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
   /* Nombre del producto arriba, cantidad justo debajo (no en el mismo
      renglón) — con un espacio más grande entre un producto y el
      siguiente para no confundirlos. */
