@@ -10,7 +10,6 @@ import { MapaDensidad, type PuntoDensidad } from "./mapa-densidad";
 import { TablaDatosPuntos } from "./tabla-datos-puntos";
 
 const PAD_RECUADRO = 14;
-const GAP_RECUADRO = 12;
 
 type SubTab = "mapas" | "datos";
 
@@ -23,9 +22,10 @@ type SubTab = "mapas" | "datos";
  * vive en LoteTabs (arriba de Grilla/Resultados/Salidas, compartido entre
  * las dos) y llega acá como prop.
  *
- * El mapa y la leyenda comparten un mismo marco fino (mismo verde claro de
- * fondo que el resto de la app, ver `colors.background`) — por eso
- * `MapaDensidad` no trae su propio fondo/borde, lo pone este componente.
+ * Título, leyenda, norte y escala van todos ADENTRO del rectángulo del
+ * mapa (los pinta `MapaDensidad`, superpuestos a la foto) — como un mapa
+ * armado de verdad, no como texto aparte alrededor. Por eso el marco de
+ * acá solo le da tamaño, no le agrega nada más.
  *
  * "Mapas" tiene que entrar en una pantalla fija, sin scroll (no tiene
  * sentido scrollear un mapa acá) — por eso el marco usa `flex: 1` y el mapa
@@ -34,7 +34,6 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
   const [subTab, setSubTab] = useState<SubTab>("mapas");
   const [plaga, setPlaga] = useState<Plaga>("bicho");
   const [cajaSize, setCajaSize] = useState({ ancho: 0, alto: 0 });
-  const [altoLeyenda, setAltoLeyenda] = useState(0);
 
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
 
@@ -56,7 +55,7 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
   const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
 
   const anchoMapa = cajaSize.ancho - PAD_RECUADRO * 2;
-  const altoMapa = cajaSize.alto - PAD_RECUADRO * 2 - GAP_RECUADRO - altoLeyenda;
+  const altoMapa = cajaSize.alto - PAD_RECUADRO * 2;
   const mapaListo = anchoMapa > 40 && altoMapa > 80;
 
   function onLayoutRecuadro(e: LayoutChangeEvent) {
@@ -110,8 +109,6 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
             </Text>
           </View>
 
-          <Text style={styles.titulo}>Mapa de densidad poblacional</Text>
-
           <View style={styles.marco} onLayout={onLayoutRecuadro}>
             {mapaListo && (
               <MapaDensidad
@@ -119,21 +116,12 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
                 perimetro={lote.perimetro}
                 rangos={rangos}
                 nivelColores={NIVEL_COLORES}
+                etiquetaLeyenda={etiqueta}
                 ancho={anchoMapa}
                 alto={altoMapa}
                 origen={origen}
               />
             )}
-
-            <View style={styles.leyenda} onLayout={(e) => setAltoLeyenda(e.nativeEvent.layout.height)}>
-              <Text style={styles.leyendaTitulo}>{etiqueta}</Text>
-              {rangos.map((r, i) => (
-                <View key={i} style={styles.leyendaFila}>
-                  <View style={[styles.leyendaMuestra, { backgroundColor: NIVEL_COLORES[i] }]} />
-                  <Text style={styles.leyendaTexto}>{r.label}</Text>
-                </View>
-              ))}
-            </View>
           </View>
 
           <Text style={styles.pie} numberOfLines={2}>
@@ -177,23 +165,17 @@ const styles = StyleSheet.create({
     borderColor: colors.primaryConfirm,
     color: colors.surface,
   },
-  titulo: { fontSize: 16, fontWeight: "800", color: colors.text, textAlign: "center" },
   marco: {
     flex: 1,
     width: "100%",
     maxWidth: 400,
     alignItems: "center",
-    gap: GAP_RECUADRO,
+    justifyContent: "center",
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 16,
     padding: PAD_RECUADRO,
   },
-  leyenda: { width: "100%", gap: 3 },
-  leyendaTitulo: { fontSize: 11, fontWeight: "700", color: colors.textMuted, marginBottom: 2 },
-  leyendaFila: { flexDirection: "row", alignItems: "center", gap: 6 },
-  leyendaMuestra: { width: 12, height: 12, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
-  leyendaTexto: { fontSize: 12, color: colors.text },
   pie: { fontSize: 11, color: colors.textMuted, textAlign: "center" },
 });

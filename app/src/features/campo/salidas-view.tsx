@@ -426,34 +426,27 @@ interface MapaInformeConLeyendaProps {
 }
 
 /** El mismo mapa de densidad de Resultados (mismo componente `MapaDensidad`,
- * mismos datos, con foto satelital de fondo si hay señal) en miniatura —
- * para que la persona vea en pantalla lo mismo que va a salir en el PDF
- * (ahí sin foto, ver mapa-svg.ts), sin tener que ir a otra pestaña. */
+ * mismos datos, con foto satelital de fondo si hay señal, y la leyenda ya
+ * adentro del propio rectángulo) en miniatura — para que la persona vea en
+ * pantalla lo mismo que va a salir en el PDF (ahí sin foto, ver
+ * mapa-svg.ts), sin tener que ir a otra pestaña. */
 function MapaInformeConLeyenda({ titulo, puntos, perimetro, plaga, origen }: MapaInformeConLeyendaProps) {
   const rangos = rangosDe(plaga);
+  const etiqueta = plaga === "bicho" ? "Nº BB/m²" : "Nº Babosas/m²";
   return (
     <View style={styles.mapaInformeBloque}>
       <Text style={styles.mapaInformeTitulo}>{titulo}</Text>
-      <View style={styles.mapaInformeFila}>
-        <View style={[styles.mapaInformeMarco, { width: MAPA_INFORME_ANCHO, height: MAPA_INFORME_ALTO }]}>
-          <MapaDensidad
-            puntos={puntos}
-            perimetro={perimetro}
-            rangos={rangos}
-            nivelColores={NIVEL_COLORES}
-            ancho={MAPA_INFORME_ANCHO}
-            alto={MAPA_INFORME_ALTO}
-            origen={origen}
-          />
-        </View>
-        <View style={styles.leyendaInforme}>
-          {rangos.map((r, i) => (
-            <View key={i} style={styles.leyendaInformeFila}>
-              <View style={[styles.leyendaInformeMuestra, { backgroundColor: NIVEL_COLORES[i] }]} />
-              <Text style={styles.leyendaInformeTexto}>{r.label}</Text>
-            </View>
-          ))}
-        </View>
+      <View style={[styles.mapaInformeMarco, { width: MAPA_INFORME_ANCHO, height: MAPA_INFORME_ALTO }]}>
+        <MapaDensidad
+          puntos={puntos}
+          perimetro={perimetro}
+          rangos={rangos}
+          nivelColores={NIVEL_COLORES}
+          etiquetaLeyenda={etiqueta}
+          ancho={MAPA_INFORME_ANCHO}
+          alto={MAPA_INFORME_ALTO}
+          origen={origen}
+        />
       </View>
     </View>
   );
@@ -484,7 +477,6 @@ const styles = StyleSheet.create({
   cardTitulo: { fontSize: 14, fontWeight: "700", color: colors.text },
   mapaInformeBloque: { gap: 6 },
   mapaInformeTitulo: { fontSize: 12.5, fontWeight: "700", color: colors.textMuted },
-  mapaInformeFila: { flexDirection: "row", gap: 10 },
   mapaInformeMarco: {
     backgroundColor: colors.background,
     borderRadius: 10,
@@ -492,10 +484,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
-  leyendaInforme: { gap: 3, justifyContent: "center" },
-  leyendaInformeFila: { flexDirection: "row", alignItems: "center", gap: 5 },
-  leyendaInformeMuestra: { width: 10, height: 10, borderRadius: 2, borderWidth: 1, borderColor: colors.border },
-  leyendaInformeTexto: { fontSize: 10.5, color: colors.text },
   situacionInput: {
     borderWidth: 1,
     borderColor: colors.border,

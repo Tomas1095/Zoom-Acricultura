@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { Image, View } from "react-native";
-import Svg, { Line, Polygon, Text as TextoSvg } from "react-native-svg";
+import { Image, Text, View } from "react-native";
+import Svg, { Line, Polygon } from "react-native-svg";
+import { Navigation } from "lucide-react-native";
 
 import { calcularCeldasDensidad, elegirEscalaBarra, type RangoDensidad } from "@/lib/geo/densidad";
 import type { LatLon, XY } from "@/lib/geo/geometria";
@@ -9,6 +10,10 @@ import { colors } from "@/theme/colors";
 
 const PAD = 18;
 const ESCALA_MAX = 3.2;
+// Segmentos alternados de la barra de escala tipo regla — blanco y negro
+// fijos (no según el tema/foto) porque es la convención cartográfica
+// estándar, se lee igual de bien sobre cualquier foto.
+const SEGMENTOS_ESCALA = 4;
 
 export interface PuntoDensidad {
   id: string;
@@ -22,6 +27,8 @@ interface MapaDensidadProps {
   perimetro: XY[];
   rangos: RangoDensidad[];
   nivelColores: readonly string[];
+  /** Encabezado de la leyenda ("Nº BB/m²" / "Nº Babosas/m²"). */
+  etiquetaLeyenda: string;
   ancho: number;
   alto: number;
   /** Para pedir la imagen satelital de fondo (necesita el origen real del
@@ -40,10 +47,22 @@ interface MapaDensidadProps {
  * específico de transforms de rotación grandes de Reanimated, que acá no
  * existen).
  *
- * Sin fondo/borde propio a propósito — el marco lo pone quien lo use (ver
- * ResultadosView), así el mapa y la leyenda comparten un mismo recuadro en
- * vez de quedar cada uno en su caja. */
-export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, alto, origen }: MapaDensidadProps) {
+ * Título, norte, leyenda, escala y atribución van TODOS adentro del
+ * rectángulo del mapa (superpuestos a la foto) — como pidió el usuario,
+ * mostrando un mapa real armado así (título arriba, norte arriba a la
+ * derecha, leyenda abajo a la izquierda, escala abajo a la derecha). Por
+ * eso ya no trae fondo/borde propio: el mapa en sí ES el recuadro
+ * completo, ResultadosView/SalidasView solo le dan el tamaño. */
+export function MapaDensidad({
+  puntos,
+  perimetro,
+  rangos,
+  nivelColores,
+  etiquetaLeyenda,
+  ancho,
+  alto,
+  origen,
+}: MapaDensidadProps) {
   const [satelitalOk, setSatelitalOk] = useState(true);
 
   const { toPx, escala, minX, minY } = useMemo(() => {
@@ -74,17 +93,19 @@ export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, a
 
   const perimetroPx = perimetro.map((v) => toPx(v.x, v.y));
   const escalaBarra = elegirEscalaBarra(escala);
-  const barraX = ancho - escalaBarra.px - 18;
-  const barraY = alto - 16;
-  // Con la foto satelital de fondo el perímetro/escala se leen mejor en
-  // blanco (como en el prototipo) — sobre el fondo claro liso, mejor
-  // mantener los colores oscuros de siempre.
+  // Con la foto satelital de fondo, todo el texto/líneas superpuestas se
+  // leen mejor en blanco con sombra (como en el prototipo/mapa real) —
+  // sobre el fondo claro liso (sin foto), mejor mantener los colores
+  // oscuros de siempre.
   const mostrandoSatelital = !!satUrl && satelitalOk;
   const colorPerimetro = mostrandoSatelital ? "#FFFFFF" : colors.primaryDark;
-  const colorEscala = mostrandoSatelital ? "#FFFFFF" : colors.text;
+  const colorTexto = mostrandoSatelital ? "#FFFFFF" : colors.text;
+  const sombraTexto = mostrandoSatelital
+    ? { textShadowColor: "rgba(0,0,0,0.65)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }
+    : {};
 
   return (
-    <View style={{ width: ancho, height: alto }}>
+    <View style={{ width: ancho, height: alto, overflow: "hidden" }}>
       {satUrl && satelitalOk && (
         <Image
           source={{ uri: satUrl }}
@@ -118,29 +139,88 @@ export function MapaDensidad({ puntos, perimetro, rangos, nivelColores, ancho, a
             />
           );
         })}
-
-        {/* escala gráfica proporcional real, igual que el prototipo */}
-        <Line
-          x1={barraX}
-          y1={barraY}
-          x2={barraX + escalaBarra.px}
-          y2={barraY}
-          stroke={colorEscala}
-          strokeWidth={2}
-        />
-        <Line x1={barraX} y1={barraY - 4} x2={barraX} y2={barraY + 4} stroke={colorEscala} strokeWidth={2} />
-        <Line
-          x1={barraX + escalaBarra.px}
-          y1={barraY - 4}
-          x2={barraX + escalaBarra.px}
-          y2={barraY + 4}
-          stroke={colorEscala}
-          strokeWidth={2}
-        />
-        <TextoSvg x={barraX + escalaBarra.px / 2} y={barraY - 8} fontSize={10} fill={colorEscala} textAnchor="middle">
-          {escalaBarra.metros} m
-        </TextoSvg>
       </Svg>
+
+      {/* Título — arriba, centrado */}
+      <Text style={[estTitulo, { color: colorTexto }, sombraTexto]} numberOfLines={1}>
+        Mapa de densidad poblacional
+      </Text>
+
+      {/* Norte — arriba a la derecha */}
+      <View style={estNorte} pointerEvents="none">
+        <Navigation size={14} color={colorTexto} />
+        <Text style={[estNorteTexto, { color: colorTexto }, sombraTexto]}>N</Text>
+      </View>
+
+      {/* Leyenda — abajo a la izquierda, adentro del rectángulo */}
+      <View style={estLeyenda} pointerEvents="none">
+        <Text style={[estLeyendaTitulo, { color: colorTexto }, sombraTexto]}>{etiquetaLeyenda}</Text>
+        {rangos.map((r, i) => (
+          <View key={i} style={estLeyendaFila}>
+            <View style={[estLeyendaMuestra, { backgroundColor: nivelColores[i] }]} />
+            <Text style={[estLeyendaTexto, { color: colorTexto }, sombraTexto]}>{r.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Escala — abajo a la derecha, tipo regla (segmentos blanco/negro
+          alternados), adentro del rectángulo */}
+      <View style={[estEscalaWrap, { right: 10 }]} pointerEvents="none">
+        <View style={estEscalaBarraFila}>
+          {Array.from({ length: SEGMENTOS_ESCALA }).map((_, i) => (
+            <View
+              key={i}
+              style={{
+                width: escalaBarra.px / SEGMENTOS_ESCALA,
+                height: 6,
+                backgroundColor: i % 2 === 0 ? "#000000" : "#FFFFFF",
+                borderWidth: 0.5,
+                borderColor: "#000000",
+              }}
+            />
+          ))}
+        </View>
+        <View style={estEscalaEtiquetas}>
+          <Text style={[estEscalaTexto, { color: colorTexto }, sombraTexto]}>0</Text>
+          <Text style={[estEscalaTexto, { color: colorTexto }, sombraTexto]}>{escalaBarra.metros} m</Text>
+        </View>
+      </View>
+
+      {/* Atribución — obligatoria al usar imágenes de Esri */}
+      {mostrandoSatelital && (
+        <Text style={[estAtribucion, sombraTexto]} numberOfLines={1}>
+          Esri, Maxar, Earthstar Geographics
+        </Text>
+      )}
     </View>
   );
 }
+
+const estTitulo = {
+  position: "absolute" as const,
+  top: 8,
+  left: 8,
+  right: 8,
+  fontSize: 13,
+  fontWeight: "800" as const,
+  fontStyle: "italic" as const,
+  textAlign: "center" as const,
+};
+const estNorte = { position: "absolute" as const, top: 8, right: 8, alignItems: "center" as const };
+const estNorteTexto = { fontSize: 9, fontWeight: "800" as const };
+const estLeyenda = { position: "absolute" as const, bottom: 8, left: 8, gap: 2, maxWidth: "55%" as const };
+const estLeyendaTitulo = { fontSize: 10, fontWeight: "800" as const, marginBottom: 2 };
+const estLeyendaFila = { flexDirection: "row" as const, alignItems: "center" as const, gap: 4 };
+const estLeyendaMuestra = { width: 9, height: 9, borderRadius: 2, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.3)" };
+const estLeyendaTexto = { fontSize: 9 };
+const estEscalaWrap = { position: "absolute" as const, bottom: 22, alignItems: "center" as const };
+const estEscalaBarraFila = { flexDirection: "row" as const };
+const estEscalaEtiquetas = { flexDirection: "row" as const, justifyContent: "space-between" as const, width: "100%" as const, marginTop: 2 };
+const estEscalaTexto = { fontSize: 8.5, fontWeight: "700" as const };
+const estAtribucion = {
+  position: "absolute" as const,
+  bottom: 2,
+  right: 8,
+  fontSize: 7,
+  color: "#FFFFFF",
+};
