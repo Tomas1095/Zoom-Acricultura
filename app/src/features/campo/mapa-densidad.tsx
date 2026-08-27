@@ -13,7 +13,11 @@ import type { LatLon, XY } from "@/lib/geo/geometria";
 import { construirUrlSatelital } from "@/lib/geo/satelital";
 import { colors } from "@/theme/colors";
 
-const PAD = 18;
+// Margen general del dibujo del lote contra el borde del recuadro. Más
+// grande que un simple padding estético a propósito: es lo que evita que
+// el polígono llegue hasta las esquinas donde viven la leyenda, la rosa de
+// los vientos y la escala (achica el lote un poco, pero deja de pisarlas).
+const PAD = 34;
 const ESCALA_MAX = 3.2;
 // Tamaño (en px) del cuadrado donde entra la rosa de los vientos —
 // el viewBox de ROSA_VIENTOS_KITES es 36×36, ver lib/geo/densidad.ts. Chico
@@ -73,23 +77,37 @@ export function MapaDensidad({
 }: MapaDensidadProps) {
   const [satelitalOk, setSatelitalOk] = useState(true);
 
-  const { toPx, escala, minX, minY } = useMemo(() => {
+  const { toPx, escala, minX, minY, offX, offY } = useMemo(() => {
     const todasX = puntos.map((p) => p.x).concat(perimetro.map((v) => v.x));
     const todasY = puntos.map((p) => p.y).concat(perimetro.map((v) => v.y));
     const minX = todasX.length > 0 ? Math.min(...todasX) : 0;
     const minY = todasY.length > 0 ? Math.min(...todasY) : 0;
     const spanX = Math.max(1, (todasX.length > 0 ? Math.max(...todasX) : 0) - minX);
     const spanY = Math.max(1, (todasY.length > 0 ? Math.max(...todasY) : 0) - minY);
-    const escala = Math.min((ancho - PAD * 2) / spanX, (alto - PAD * 2) / spanY, ESCALA_MAX);
+    const dispW = ancho - PAD * 2;
+    const dispH = alto - PAD * 2;
+    const escala = Math.min(dispW / spanX, dispH / spanY, ESCALA_MAX);
+    // Centrado real: si el lote no llena todo el espacio disponible (porque
+    // un eje quedó limitado por el otro, o por ESCALA_MAX), sobra el
+    // espacio parejo de los dos lados en vez de quedar pegado arriba a la
+    // izquierda — así el "achicado" pedido se nota, pero el lote sigue
+    // bien centrado en el recuadro.
+    const offX = PAD + (dispW - spanX * escala) / 2;
+    const offY = PAD + (dispH - spanY * escala) / 2;
     return {
       escala,
       minX,
       minY,
-      toPx: (x: number, y: number) => ({ left: PAD + (x - minX) * escala, top: PAD + (y - minY) * escala }),
+      offX,
+      offY,
+      toPx: (x: number, y: number) => ({ left: offX + (x - minX) * escala, top: offY + (y - minY) * escala }),
     };
   }, [puntos, perimetro, ancho, alto]);
 
-  const satUrl = origen ? construirUrlSatelital(origen, minX, minY, escala, ancho, alto, PAD, PAD) : null;
+  // offX/offY, no PAD — con el lote centrado (ver arriba) el offset real
+  // contra el que hay que alinear la foto ya no es el padding fijo, sino el
+  // desplazamiento efectivo del polígono dentro del recuadro.
+  const satUrl = origen ? construirUrlSatelital(origen, minX, minY, escala, ancho, alto, offX, offY) : null;
 
   const celdas = useMemo(() => {
     try {
@@ -205,17 +223,17 @@ export function MapaDensidad({
           {escalaGraduada.segmentos.map((s, i) => (
             <View
               key={i}
-              style={{ width: s.anchoPx, height: 6, backgroundColor: s.color, borderWidth: 0.5, borderColor: "#000000" }}
+              style={{ width: s.anchoPx, height: 4, backgroundColor: s.color, borderWidth: 0.5, borderColor: "#000000" }}
             />
           ))}
         </View>
-        <View style={{ width: escalaGraduada.anchoTotalPx, height: 10 }}>
+        <View style={{ width: escalaGraduada.anchoTotalPx, height: 9 }}>
           {escalaGraduada.etiquetas.map((e, i) => (
             <Text
               key={i}
               style={[
                 estEscalaTexto,
-                { color: colorTexto, position: "absolute", left: e.posicionPx, transform: [{ translateX: -8 }] },
+                { color: colorTexto, position: "absolute", left: e.posicionPx, transform: [{ translateX: -7 }] },
                 sombraTexto,
               ]}
             >
@@ -243,7 +261,10 @@ const ROSA_CAJA = TAMANO_ROSA + ROSA_MARGEN * 2;
 const estTitulo = {
   position: "absolute" as const,
   top: 8,
-  left: 8,
+  // Mismo margen a los dos lados (no solo a la derecha, donde vive la
+  // rosa de los vientos) — así el texto queda centrado contra el ancho
+  // real del mapa, no corrido hacia la izquierda.
+  left: ROSA_CAJA + 10,
   right: ROSA_CAJA + 10,
   fontSize: 13,
   fontWeight: "800" as const,
@@ -263,7 +284,7 @@ const estLeyendaMuestra = { width: 9, height: 9, borderRadius: 2, borderWidth: 0
 const estLeyendaTexto = { fontSize: 9 };
 const estEscalaWrap = { position: "absolute" as const, bottom: 22, alignItems: "flex-start" as const };
 const estEscalaBarraFila = { flexDirection: "row" as const };
-const estEscalaTexto = { fontSize: 7.5, fontWeight: "700" as const };
+const estEscalaTexto = { fontSize: 6.5, fontWeight: "700" as const };
 const estAtribucion = {
   position: "absolute" as const,
   bottom: 2,

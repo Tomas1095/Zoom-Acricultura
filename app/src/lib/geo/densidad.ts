@@ -197,14 +197,15 @@ export function calcularCeldasDensidad(
 const ESCALAS_CANDIDATAS_M = [25, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
 
 /** Elige cuántos metros representar en la barra de escala gráfica, de forma
- * que en pantalla mida entre 40 y 130px — portado del prototipo. */
+ * que en pantalla mida entre 30 y 95px (achicada a pedido del usuario —
+ * antes apuntaba a 85px de centro, quedaba grande al lado de la leyenda). */
 export function elegirEscalaBarra(pxPorMetro: number): { metros: number; px: number } {
   let mejor = ESCALAS_CANDIDATAS_M[0];
   let mejorDif = Infinity;
   for (const m of ESCALAS_CANDIDATAS_M) {
     const px = m * pxPorMetro;
-    if (px < 40 || px > 130) continue;
-    const dif = Math.abs(px - 85);
+    if (px < 30 || px > 95) continue;
+    const dif = Math.abs(px - 60);
     if (dif < mejorDif) {
       mejorDif = dif;
       mejor = m;

@@ -28,8 +28,11 @@ type SubTab = "mapas" | "datos";
  * acá solo le da tamaño, no le agrega nada más.
  *
  * "Mapas" tiene que entrar en una pantalla fija, sin scroll (no tiene
- * sentido scrollear un mapa acá) — por eso el marco usa `flex: 1` y el mapa
- * se mide con `onLayout`. "Datos" sí scrollea — es una tabla, no un mapa. */
+ * sentido scrollear un mapa acá) — el mapa se mide con `onLayout`. El marco
+ * es apaisado (ancho por alto fijo, no `flex: 1` llenando toda la pantalla)
+ * a propósito — mismo formato que el mapa de la pestaña Informe, para que
+ * el diseño se mantenga igual entre las dos solapas. "Datos" sí scrollea —
+ * es una tabla, no un mapa. */
 export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaViendo: string }) {
   const [subTab, setSubTab] = useState<SubTab>("mapas");
   const [plaga, setPlaga] = useState<Plaga>("bicho");
@@ -147,7 +150,7 @@ const styles = StyleSheet.create({
   subTabTextoActivo: { color: colors.primary, borderBottomWidth: 2, borderBottomColor: colors.primary },
   datosScroll: { flex: 1, width: "100%" },
   datosContenido: { paddingTop: 4 },
-  mapasContenido: { flex: 1, width: "100%", gap: 10, alignItems: "center" },
+  mapasContenido: { flex: 1, width: "100%", gap: 10, alignItems: "center", justifyContent: "center" },
   plagaToggle: { flexDirection: "row", gap: 8 },
   plagaBoton: {
     borderWidth: 1,
@@ -165,10 +168,13 @@ const styles = StyleSheet.create({
     borderColor: colors.primaryConfirm,
     color: colors.surface,
   },
+  // Apaisado (ancho fijo por alto fijo, no flex:1 llenando la pantalla) —
+  // mismo formato "tipo mapa impreso" que usa el mapa del Informe, para que
+  // el diseño se mantenga igual entre las dos solapas.
   marco: {
-    flex: 1,
     width: "100%",
     maxWidth: 400,
+    height: 300,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.background,

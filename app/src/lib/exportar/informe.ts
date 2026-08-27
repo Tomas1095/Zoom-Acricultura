@@ -78,7 +78,13 @@ function escapeHtml(s: string): string {
 /** HTML del informe, listo para pasarle a expo-print. Orden pedido: mapas
  * de densidad (bichos bolita, después babosas) → situación de plagas →
  * recomendación de aplicación de cebo (lote por lote, con todos los
- * productos de cada uno) → resumen de compra por producto. */
+ * productos de cada uno) → resumen de compra por producto.
+ *
+ * El diseño acá es una copia fiel del look de la pestaña "Informe" de la
+ * app (mismos colores de theme/colors.ts, mismas cards blancas con borde
+ * redondeado, mismo estilo de fila de producto "dosis × superficie =
+ * total") — no una tabla HTML genérica aparte, para que lo que la persona
+ * ve en pantalla y lo que termina en el PDF se parezcan de verdad. */
 export function construirInformeHtml({
   loteNombre,
   establecimientoNombre,
@@ -87,18 +93,33 @@ export function construirInformeHtml({
   mapaBichoHtml,
   mapaBabosaHtml,
 }: DatosInforme): string {
-  const filasZonas = zonas
-    .flatMap((z) =>
-      z.productos.map(
-        (p) =>
-          `<tr><td>${escapeHtml(z.loteNombre || "Lote")}</td><td>${escapeHtml(p.producto)}</td><td>${p.dosis} kg/ha</td><td>${p.superficie} ha</td><td>${kgDeProducto(p).toFixed(0)} kg</td></tr>`
-      )
-    )
+  const zonasHtml = zonas
+    .map((z) => {
+      const productosHtml = z.productos
+        .map((p) => {
+          // Si todavía no cargó dosis/superficie, "kg/ha × ha" sin números
+          // se ve roto — 0 como placeholder visual, igual que en pantalla.
+          const dosis = p.dosis || "0";
+          const superficie = p.superficie || "0";
+          return `<div class="productoFila">
+            <span class="productoNombre">${escapeHtml(p.producto)}</span>
+            <span class="productoDetalle">${dosis} kg/ha × ${superficie} ha = <b>${kgDeProducto(p).toFixed(0)} kg</b></span>
+          </div>`;
+        })
+        .join("");
+      return `<div class="zonaCard">
+        <div class="zonaNombre">${escapeHtml(z.loteNombre || "Lote")}</div>
+        ${productosHtml}
+      </div>`;
+    })
     .join("");
 
   const resumen = resumenPorProducto(zonas);
-  const filasResumen = resumen
-    .map((r) => `<tr><td>${escapeHtml(r.producto)}</td><td>${r.totalKg.toFixed(0)} kg</td></tr>`)
+  const resumenHtml = resumen
+    .map(
+      (r) =>
+        `<div class="resumenFila"><span>${escapeHtml(r.producto)}</span><span class="resumenKg">${r.totalKg.toFixed(0)} kg</span></div>`
+    )
     .join("");
 
   return `<!DOCTYPE html>
@@ -106,17 +127,25 @@ export function construirInformeHtml({
 <head>
 <meta charset="utf-8" />
 <style>
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; padding: 28px; }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1B2E1F; background: #F3F7F2; padding: 28px; }
   .eyebrow { color: #A9752E; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
   h1 { font-size: 21px; margin: 4px 0 2px; }
   .sub { color: #6B5D2E; font-size: 13px; margin-bottom: 20px; }
-  h2 { font-size: 14px; border-bottom: 1px solid #EDE0B8; padding-bottom: 6px; margin-top: 26px; }
-  p { white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { border: 1px solid #EDE0B8; padding: 7px 9px; font-size: 12px; text-align: left; }
-  th { background: #F3F7F2; }
-  .mapasFila { display: flex; flex-direction: column; gap: 16px; margin-top: 10px; }
-  .mapaEtiqueta { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .card { background: #FFFFFF; border: 1px solid #EDE0B8; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .cardTitulo { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
+  .mapaBloque { margin-bottom: 16px; }
+  .mapaBloque:last-child { margin-bottom: 0; }
+  .mapaEtiqueta { font-size: 12.5px; font-weight: 700; color: #6B5D2E; margin-bottom: 6px; }
+  .situacionBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+  .zonaCard:last-of-type { margin-bottom: 0; }
+  .zonaNombre { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+  .productoFila { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 3px 0; }
+  .resumenBox { margin-top: 10px; border-top: 1px solid #EDE0B8; padding-top: 10px; }
+  .resumenTitulo { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; }
+  .resumenFila { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
+  .resumenKg { font-weight: 700; color: #155C35; }
+  .vacio { font-size: 12.5px; color: #6B5D2E; }
 </style>
 </head>
 <body>
@@ -124,32 +153,35 @@ export function construirInformeHtml({
   <h1>${escapeHtml(loteNombre)}</h1>
   ${establecimientoNombre ? `<div class="sub">${escapeHtml(establecimientoNombre)}</div>` : ""}
 
-  <h2>Mapa de densidad poblacional</h2>
-  <div class="mapasFila">
-    <div>
+  <div class="card">
+    <div class="cardTitulo">Mapa de densidad poblacional</div>
+    <div class="mapaBloque">
       <div class="mapaEtiqueta">Bichos bolita</div>
       ${mapaBichoHtml}
     </div>
-    <div>
+    <div class="mapaBloque">
       <div class="mapaEtiqueta">Babosas</div>
       ${mapaBabosaHtml}
     </div>
   </div>
 
-  <h2>Situación de plagas de suelo</h2>
-  <p>${escapeHtml(situacion)}</p>
+  <div class="card">
+    <div class="cardTitulo">Situación de plagas de suelo</div>
+    <div class="situacionBox">${escapeHtml(situacion)}</div>
+  </div>
 
-  <h2>Recomendación de aplicación de cebo</h2>
-  <table>
-    <thead><tr><th>Lote</th><th>Producto</th><th>Dosis</th><th>Superficie</th><th>Total</th></tr></thead>
-    <tbody>${filasZonas || `<tr><td colspan="5">Sin lotes cargados.</td></tr>`}</tbody>
-  </table>
-
-  <h2>Resumen — total a comprar por producto</h2>
-  <table>
-    <thead><tr><th>Producto</th><th>Total</th></tr></thead>
-    <tbody>${filasResumen || `<tr><td colspan="2">Sin productos cargados.</td></tr>`}</tbody>
-  </table>
+  <div class="card">
+    <div class="cardTitulo">Recomendación de aplicación de cebo</div>
+    ${zonasHtml || `<div class="vacio">Sin lotes cargados.</div>`}
+    ${
+      resumen.length > 0
+        ? `<div class="resumenBox">
+      <div class="resumenTitulo">Total a comprar</div>
+      ${resumenHtml}
+    </div>`
+        : ""
+    }
+  </div>
 </body>
 </html>`;
 }

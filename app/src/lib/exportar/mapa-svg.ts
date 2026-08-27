@@ -19,7 +19,11 @@ import {
 } from "@/lib/geo/densidad";
 import type { XY } from "@/lib/geo/geometria";
 
-const PAD = 16;
+// Margen general del dibujo del lote contra el borde del recuadro — más
+// grande que un simple padding estético a propósito: evita que el
+// polígono llegue hasta las esquinas donde viven la leyenda, la rosa de
+// los vientos y la escala (mismo criterio que features/campo/mapa-densidad.tsx).
+const PAD = 34;
 const ESCALA_MAX = 3.2;
 // Tamaño (en px) del cuadrado donde entra la rosa de los vientos — mismo
 // viewBox de 36×36 que usa MapaDensidad en pantalla (ver lib/geo/densidad.ts).
@@ -52,8 +56,15 @@ export function construirMapaDensidadHtml(
   const minY = todasY.length > 0 ? Math.min(...todasY) : 0;
   const spanX = Math.max(1, (todasX.length > 0 ? Math.max(...todasX) : 0) - minX);
   const spanY = Math.max(1, (todasY.length > 0 ? Math.max(...todasY) : 0) - minY);
-  const escala = Math.min((ancho - PAD * 2) / spanX, (alto - PAD * 2) / spanY, ESCALA_MAX);
-  const toPx = (x: number, y: number) => ({ left: PAD + (x - minX) * escala, top: PAD + (y - minY) * escala });
+  const dispW = ancho - PAD * 2;
+  const dispH = alto - PAD * 2;
+  const escala = Math.min(dispW / spanX, dispH / spanY, ESCALA_MAX);
+  // Centrado real (mismo criterio que en pantalla): si un eje sobra
+  // espacio, se reparte parejo de los dos lados en vez de pegar el lote
+  // arriba a la izquierda.
+  const offX = PAD + (dispW - spanX * escala) / 2;
+  const offY = PAD + (dispH - spanY * escala) / 2;
+  const toPx = (x: number, y: number) => ({ left: offX + (x - minX) * escala, top: offY + (y - minY) * escala });
 
   let celdas: ReturnType<typeof calcularCeldasDensidad> = [];
   try {
@@ -89,7 +100,7 @@ export function construirMapaDensidadHtml(
   const escalaBarra = elegirEscalaBarra(escala);
   const escalaGraduada = graduarEscalaBarra(escalaBarra.metros, escalaBarra.px);
   const segmentosEscala = escalaGraduada.segmentos
-    .map((s) => `<div style="width:${s.anchoPx}px;height:6px;background:${s.color};border:0.5px solid #000000;"></div>`)
+    .map((s) => `<div style="width:${s.anchoPx}px;height:4px;background:${s.color};border:0.5px solid #000000;"></div>`)
     .join("");
   const etiquetasEscala = escalaGraduada.etiquetas
     .map(
@@ -108,7 +119,7 @@ export function construirMapaDensidadHtml(
 
   return `<div style="position:relative;width:${ancho}px;height:${alto}px;background:#F3F7F2;border:1px solid #EDE0B8;border-radius:10px;overflow:hidden;">
     ${svg}
-    <div style="position:absolute;top:6px;left:6px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:#1B2E1F;">Mapa de densidad poblacional</div>
+    <div style="position:absolute;top:6px;left:${ROSA_CAJA + 10}px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:#1B2E1F;">Mapa de densidad poblacional</div>
     <div style="position:absolute;top:6px;right:6px;width:${ROSA_CAJA}px;height:${ROSA_CAJA}px;color:#1B2E1F;font-size:7px;font-weight:800;">
       ${rosaSvg}
       <div style="position:absolute;top:0;left:0;right:0;text-align:center;">N</div>
@@ -122,7 +133,7 @@ export function construirMapaDensidadHtml(
     </div>
     <div style="position:absolute;bottom:20px;right:10px;width:${escalaGraduada.anchoTotalPx}px;">
       <div style="display:flex;">${segmentosEscala}</div>
-      <div style="position:relative;width:${escalaGraduada.anchoTotalPx}px;height:10px;margin-top:2px;font-size:7.5px;font-weight:700;color:#1B2E1F;">${etiquetasEscala}</div>
+      <div style="position:relative;width:${escalaGraduada.anchoTotalPx}px;height:9px;margin-top:2px;font-size:6.5px;font-weight:700;color:#1B2E1F;">${etiquetasEscala}</div>
     </div>
   </div>`;
 }
