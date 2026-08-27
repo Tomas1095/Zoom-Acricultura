@@ -14,8 +14,13 @@ const TOLERANCE_M = 10; // mismo radio que el prototipo — ver PointSheet/enRan
  * el lote, sus puntos, el estado de carga de cada uno (campaña vigente, o
  * `campana` si se pasa — ver el selector de historial en ResultadosView), y
  * el GPS ya convertido al plano local del lote — portado de las piezas de
- * `App()`/`UbicacionView` del prototipo que calculaban `puntoCercano`. */
-export function useDatosCampo(loteId: string, campana?: string) {
+ * `App()`/`UbicacionView` del prototipo que calculaban `puntoCercano`.
+ *
+ * `resumenDeUsuarioId`: si se pasa, el `resumen` devuelto cuenta solo los
+ * puntos cargados por esa persona (vista de un Monitoreador — "lo que hice
+ * yo"); sin él, cuenta el lote entero (vista de Socio Gerente/Fundador/
+ * Encargado — ver lib/offline/resumen.ts). */
+export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuarioId?: string) {
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
   const [puntos, setPuntos] = useState<Punto[]>([]);
@@ -71,7 +76,10 @@ export function useDatosCampo(loteId: string, campana?: string) {
 
   const enRango = !!puntoCercano && puntoCercano.distancia <= TOLERANCE_M;
 
-  const resumen = useMemo<ResumenAvanceLote>(() => calcularResumenAvance(puntos.length, cargas), [puntos, cargas]);
+  const resumen = useMemo<ResumenAvanceLote>(
+    () => calcularResumenAvance(puntos.length, cargas, resumenDeUsuarioId),
+    [puntos, cargas, resumenDeUsuarioId]
+  );
 
   return { cargando, error, lote, puntos, cargas, resumen, refrescar, gps, puntoCercano, enRango, origen };
 }

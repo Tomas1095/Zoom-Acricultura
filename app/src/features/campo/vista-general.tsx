@@ -50,9 +50,14 @@ export function VistaGeneral({
   const { usuario } = useAuth();
   const campanaEfectiva = campanaViendo ?? lote.campanaActual;
   const viendoActual = campanaEfectiva === lote.campanaActual;
+  // El Monitoreador ve SU propio avance ("lo que hice yo"); Socio Gerente/
+  // Fundador/Encargado ven el total del lote — pedido explícito del
+  // usuario, ver lib/offline/resumen.ts.
+  const esMonitoreador = usuario?.rol === "monitoreador";
   const { cargando, puntos, cargas, resumen, gps, puntoCercano, enRango, origen } = useDatosCampo(
     lote.id,
-    campanaEfectiva
+    campanaEfectiva,
+    esMonitoreador ? usuario?.id : undefined
   );
   const { width } = useWindowDimensions();
   const mapaRef = useRef<MapaCampoHandle>(null);
@@ -113,9 +118,11 @@ export function VistaGeneral({
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {viendoActual && puntos.length > 0 && (
+      {viendoActual && puntos.length > 0 && (esMonitoreador ? resumen.completados > 0 : true) && (
         <Text style={styles.resumenAvance}>
-          {resumen.completados}/{resumen.totalPuntos} completados
+          {esMonitoreador
+            ? `${resumen.completados} puntos completados`
+            : `${resumen.completados}/${resumen.totalPuntos} completados`}
           {resumen.completados > 0 && ` · ${resumen.sincronizados} sincronizados`}
         </Text>
       )}

@@ -3,6 +3,7 @@ import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, MapPin } from "lucide-react-native";
 
+import { useAuth } from "@/lib/auth-context";
 import * as db from "@/lib/db/lotes";
 import { formatearHectareas } from "@/lib/format";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
@@ -13,6 +14,7 @@ import { colors } from "@/theme/colors";
  * MisLotesView del prototipo. Nada de crear/editar/borrar acá: eso es solo
  * de administradores (ver ArbolLotes). */
 export function MisLotes() {
+  const { usuario } = useAuth();
   const [cargando, setCargando] = useState(true);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
@@ -24,15 +26,19 @@ export function MisLotes() {
     setEstablecimientos(arbol.establecimientos);
     setCargando(false);
 
-    // Aparte y sin bloquear la lista — así se ve el "X/Y completados · Z
-    // sincronizados" de cada lote apenas se calcula, sin esperar a todos.
+    // Aparte y sin bloquear la lista — así se ve "N puntos completados ·
+    // M sincronizados" de cada lote apenas se calcula, sin esperar a
+    // todos. Filtrado por el usuario actual: acá cada Monitoreador quiere
+    // ver LO SUYO, no el total del lote (ver lib/offline/resumen.ts) —
+    // esta pantalla es solo la de Monitoreador, nunca la ve un Socio.
+    if (!usuario) return;
     const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
     conGrilla.forEach((l) => {
-      fetchResumenLote(l.id, l.campanaActual)
+      fetchResumenLote(l.id, l.campanaActual, usuario.id)
         .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
         .catch(() => {}); // si falla, esa card se queda sin el resumen, no rompe el resto
     });
-  }, []);
+  }, [usuario]);
 
   // useFocusEffect (no useEffect a secas) para que, al volver de cargar
   // puntos en un lote, el resumen de esa card se actualice solo — sin
@@ -79,10 +85,9 @@ export function MisLotes() {
                   </>
                 )}
               </View>
-              {resumen && resumen.totalPuntos > 0 && (
+              {resumen && resumen.completados > 0 && (
                 <Text style={styles.resumenAvance}>
-                  {resumen.completados}/{resumen.totalPuntos} completados
-                  {resumen.completados > 0 && ` · ${resumen.sincronizados} sincronizados`}
+                  {resumen.completados} puntos completados · {resumen.sincronizados} sincronizados
                 </Text>
               )}
             </Pressable>
