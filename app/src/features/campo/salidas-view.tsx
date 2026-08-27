@@ -48,8 +48,8 @@ const MAPA_INFORME_ALTO = 280;
 // primera hoja del PDF es solo el encabezado + estos dos mapas (ver
 // page-break-after en informe.ts), así que hay margen para agrandarlos
 // más sin que se pisen con el resto del informe.
-const MAPA_PDF_ANCHO = 540;
-const MAPA_PDF_ALTO = 340;
+const MAPA_PDF_ANCHO = 580;
+const MAPA_PDF_ALTO = 380;
 
 const PRODUCTOS = ["Crustacicida", "Molusquicida", "Crustacicida + Molusquicida", "No aplicar"];
 

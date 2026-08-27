@@ -132,19 +132,19 @@ export function construirMapaDensidadHtml(
   return `<div style="position:relative;width:${ancho}px;height:${alto}px;background-color:#F3F7F2;border:1px solid #EDE0B8;border-radius:10px;overflow:hidden;">
     ${imgTag}
     ${svg}
-    <div style="position:absolute;top:6px;left:${ROSA_CAJA + 10}px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:${colorTexto};${sombra}">Mapa de densidad poblacional</div>
-    <div style="position:absolute;top:6px;right:6px;width:${ROSA_CAJA}px;height:${ROSA_CAJA}px;color:${colorTexto};font-size:7px;font-weight:800;${sombra}">
+    <div style="position:absolute;top:14px;left:${ROSA_CAJA + 10}px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:${colorTexto};${sombra}">Mapa de densidad poblacional</div>
+    <div style="position:absolute;top:18px;right:18px;width:${ROSA_CAJA}px;height:${ROSA_CAJA}px;color:${colorTexto};font-size:7px;font-weight:800;${sombra}">
       ${rosaSvg}
       <div style="position:absolute;top:0;left:0;right:0;text-align:center;">N</div>
       <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;">S</div>
       <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;right:0;">E</div>
       <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;left:0;">O</div>
     </div>
-    <div style="position:absolute;bottom:6px;left:6px;max-width:55%;">
+    <div style="position:absolute;bottom:18px;left:18px;max-width:55%;">
       <div style="font-size:10px;font-weight:800;color:${colorTexto};margin-bottom:2px;${sombra}">${etiquetaLeyenda}</div>
       <div style="display:flex;flex-direction:column;gap:2px;">${filasLeyenda}</div>
     </div>
-    <div style="position:absolute;bottom:20px;right:10px;width:${escalaGraduada.anchoTotalPx}px;">
+    <div style="position:absolute;bottom:32px;right:22px;width:${escalaGraduada.anchoTotalPx}px;">
       <div style="display:flex;">${segmentosEscala}</div>
       <div style="position:relative;width:${escalaGraduada.anchoTotalPx}px;height:9px;margin-top:2px;font-size:6.5px;font-weight:700;color:${colorTexto};${sombra}">${etiquetasEscala}</div>
     </div>

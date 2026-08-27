@@ -151,6 +151,17 @@ export function construirInformeHtml({
     )
     .join("");
 
+  // Encabezado repetido en las dos hojas (mapas y situación/recomendación)
+  // — a pedido del usuario, para que la segunda hoja también quede
+  // identificada si se imprime o comparte suelta.
+  const encabezadoHtml = `<div class="encabezado">
+    <div>
+      <div class="eyebrow">INFORME TÉCNICO</div>
+      <h1>${escapeHtml(loteNombre)}${establecimientoNombre ? ` - ${escapeHtml(establecimientoNombre)}` : ""}</h1>
+    </div>
+    ${LOGO_HTML}
+  </div>`;
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -177,7 +188,10 @@ export function construirInformeHtml({
   .cardTitulo { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .mapaBloque { margin-bottom: 28px; }
   .mapaBloque:last-child { margin-bottom: 0; }
-  .mapaEtiqueta { font-size: 12.5px; font-weight: 700; color: #6B5D2E; margin-bottom: 6px; }
+  /* Mismo tamaño y color que .cardTitulo (los títulos de "Situación de
+     plagas de suelo"/"Recomendación..." en la hoja 2) — a pedido del
+     usuario, para que se vea igual de jerárquico. */
+  .mapaEtiqueta { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .situacionBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
   .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
   .zonaCard:last-of-type { margin-bottom: 0; }
@@ -191,13 +205,7 @@ export function construirInformeHtml({
 </style>
 </head>
 <body>
-  <div class="encabezado">
-    <div>
-      <div class="eyebrow">INFORME TÉCNICO</div>
-      <h1>${escapeHtml(loteNombre)}${establecimientoNombre ? ` - ${escapeHtml(establecimientoNombre)}` : ""}</h1>
-    </div>
-    ${LOGO_HTML}
-  </div>
+  ${encabezadoHtml}
 
   <div class="card cardMapas">
     <div class="mapaBloque">
@@ -209,6 +217,8 @@ export function construirInformeHtml({
       ${mapaBabosaHtml}
     </div>
   </div>
+
+  ${encabezadoHtml}
 
   <div class="card">
     <div class="cardTitulo">Situación de plagas de suelo</div>
