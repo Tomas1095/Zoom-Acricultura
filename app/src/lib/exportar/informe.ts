@@ -192,11 +192,20 @@ export function construirInformeHtml({
   .encabezado { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
   .eyebrow { color: #A9752E; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
   h1 { font-size: 21px; margin: 4px 0 0; }
-  .card { background: #FFFFFF; border: 1px solid #EDE0B8; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .card { background: #FFFFFF; border: 1px solid #EDE0B8; border-radius: 12px; padding: 16px; margin-bottom: 14px; break-inside: avoid; page-break-inside: avoid; }
   /* La primera hoja es solo el encabezado + los dos mapas — situación y
      recomendación arrancan en la hoja siguiente, no importa cuánto sobre
      o falte de espacio en la primera. */
   .cardMapas { page-break-after: always; break-after: page; }
+  /* Con "Recomendación..." más largo (nota + varios productos + resumen)
+     el motor de impresión a veces parte el bloque justo después de la
+     hoja 1 — el card de "Situación..." arrancaba a renderear (se veía
+     nada más que el borde de arriba) y todo el contenido real se corría
+     a una hoja 3, dejando la hoja 2 vacía. Forzando a que la hoja 2
+     entera se trate como un solo bloque que no se puede partir, el motor
+     la manda completa a la hoja 2 en vez de partirla — entra sin
+     problema, sobra bastante espacio incluso con nota + 2 productos. */
+  .hojaSegunda { break-inside: avoid; page-break-inside: avoid; }
   .cardTitulo { font-size: 14px; font-weight: 700; color: #1B2E1F; margin-bottom: 10px; }
   .mapaBloque { margin-bottom: 28px; }
   .mapaBloque:last-child { margin-bottom: 0; }
@@ -208,7 +217,7 @@ export function construirInformeHtml({
   .notaBox { border: 1px solid #EDE0B8; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 12px; }
   /* Más juntas que antes (menos padding/margin) — el usuario lo pidió así,
      se perdía un poco en el recuadro con tanto aire. */
-  .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
+  .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid; }
   .zonaCard:last-of-type { margin-bottom: 0; }
   .zonaNombre { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
   /* Nombre del producto arriba, cantidad justo debajo (no en el mismo
@@ -239,25 +248,27 @@ export function construirInformeHtml({
     </div>
   </div>
 
-  ${encabezadoHtml}
+  <div class="hojaSegunda">
+    ${encabezadoHtml}
 
-  <div class="card">
-    <div class="cardTitulo">Situación de plagas de suelo</div>
-    <div class="situacionBox">${escapeHtml(situacion)}</div>
-  </div>
+    <div class="card">
+      <div class="cardTitulo">Situación de plagas de suelo</div>
+      <div class="situacionBox">${escapeHtml(situacion)}</div>
+    </div>
 
-  <div class="card">
-    <div class="cardTitulo">Recomendación de aplicación de cebo</div>
-    ${notaCebo && notaCebo.trim() ? `<div class="notaBox">${escapeHtml(notaCebo)}</div>` : ""}
-    ${zonasHtml || `<div class="vacio">Sin lotes cargados.</div>`}
-    ${
-      resumen.length > 0
-        ? `<div class="resumenBox">
-      <div class="resumenTitulo">Total a comprar</div>
-      ${resumenHtml}
-    </div>`
-        : ""
-    }
+    <div class="card">
+      <div class="cardTitulo">Recomendación de aplicación de cebo</div>
+      ${notaCebo && notaCebo.trim() ? `<div class="notaBox">${escapeHtml(notaCebo)}</div>` : ""}
+      ${zonasHtml || `<div class="vacio">Sin lotes cargados.</div>`}
+      ${
+        resumen.length > 0
+          ? `<div class="resumenBox">
+        <div class="resumenTitulo">Total a comprar</div>
+        ${resumenHtml}
+      </div>`
+          : ""
+      }
+    </div>
   </div>
 </body>
 </html>`;
