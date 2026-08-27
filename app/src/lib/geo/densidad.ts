@@ -212,3 +212,83 @@ export function elegirEscalaBarra(pxPorMetro: number): { metros: number; px: num
   }
   return { metros: mejor, px: mejor * pxPorMetro };
 }
+
+export interface SegmentoEscala {
+  anchoPx: number;
+  color: "#000000" | "#FFFFFF";
+}
+export interface EtiquetaEscala {
+  texto: string;
+  posicionPx: number;
+}
+export interface EscalaGraduada {
+  segmentos: SegmentoEscala[];
+  etiquetas: EtiquetaEscala[];
+  anchoTotalPx: number;
+}
+
+/** Barra de escala graduada tipo regla topográfica (como la que usa el
+ * usuario en sus informes reales, hechos con ArcGIS): el primer cuarto
+ * queda subdividido en dos octavos — da una lectura más fina cerca del
+ * cero — y el resto son tres cuartos completos, alternando blanco y
+ * negro. Etiquetas en 0, 1/8, 1/4, 1/2, 3/4 y el total. */
+export function graduarEscalaBarra(metros: number, px: number): EscalaGraduada {
+  const anchoOctavo = px / 8;
+  const anchoCuarto = px / 4;
+  const segmentos: SegmentoEscala[] = [
+    { anchoPx: anchoOctavo, color: "#000000" },
+    { anchoPx: anchoOctavo, color: "#FFFFFF" },
+    { anchoPx: anchoCuarto, color: "#000000" },
+    { anchoPx: anchoCuarto, color: "#FFFFFF" },
+    { anchoPx: anchoCuarto, color: "#000000" },
+  ];
+  const fracciones = [0, 1 / 8, 1 / 4, 1 / 2, 3 / 4, 1];
+  const etiquetas: EtiquetaEscala[] = fracciones.map((f, i) => ({
+    texto: i === fracciones.length - 1 ? `${Math.round(metros * f)} m` : String(Math.round(metros * f)),
+    posicionPx: px * f,
+  }));
+  return { segmentos, etiquetas, anchoTotalPx: px };
+}
+
+/** Puntos (en un viewBox cuadrado de 36×36) de los 4 "picos" de una rosa de
+ * los vientos clásica — blanco y negro alternados, mismos 4 puntos que
+ * comparten `MapaDensidad` (pantalla) y `construirMapaDensidadHtml` (PDF)
+ * para que se vean idénticos. */
+export const ROSA_VIENTOS_KITES: Array<{ puntos: XY[]; color: "#000000" | "#FFFFFF" }> = [
+  {
+    color: "#000000",
+    puntos: [
+      { x: 18, y: 18 },
+      { x: 21.18, y: 14.82 },
+      { x: 18, y: 5 },
+      { x: 14.82, y: 14.82 },
+    ],
+  },
+  {
+    color: "#FFFFFF",
+    puntos: [
+      { x: 18, y: 18 },
+      { x: 21.18, y: 21.18 },
+      { x: 31, y: 18 },
+      { x: 21.18, y: 14.82 },
+    ],
+  },
+  {
+    color: "#000000",
+    puntos: [
+      { x: 18, y: 18 },
+      { x: 14.82, y: 21.18 },
+      { x: 18, y: 31 },
+      { x: 21.18, y: 21.18 },
+    ],
+  },
+  {
+    color: "#FFFFFF",
+    puntos: [
+      { x: 18, y: 18 },
+      { x: 14.82, y: 14.82 },
+      { x: 5, y: 18 },
+      { x: 14.82, y: 21.18 },
+    ],
+  },
+];

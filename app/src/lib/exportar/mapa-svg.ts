@@ -1,20 +1,31 @@
 // Mapa de densidad para el informe en PDF — arma el mismo mapa "todo
 // adentro del rectángulo" que se ve en pantalla (Resultados/Salidas →
-// Informe, ver features/campo/mapa-densidad.tsx): título arriba, norte
-// arriba a la derecha, leyenda abajo a la izquierda, escala tipo regla
-// abajo a la derecha — acá como HTML+SVG en vez de vistas de React Native
+// Informe, ver features/campo/mapa-densidad.tsx): título arriba, rosa de
+// los vientos arriba a la derecha, leyenda abajo a la izquierda, escala
+// graduada tipo regla abajo a la derecha — acá como HTML+SVG en vez de
+// vistas de React Native
 // (expo-print renderiza HTML normal, no hace falta ninguna librería nueva
 // ni capturar una vista con view-shot). Sin foto satelital de fondo: un
 // PDF no tiene conexión propia al abrirse, así que acá siempre queda sobre
 // fondo claro liso — por eso el texto va oscuro, no blanco con sombra como
 // en pantalla (ahí sí hace falta leerse encima de una foto).
 
-import { calcularCeldasDensidad, elegirEscalaBarra, type RangoDensidad } from "@/lib/geo/densidad";
+import {
+  calcularCeldasDensidad,
+  elegirEscalaBarra,
+  graduarEscalaBarra,
+  ROSA_VIENTOS_KITES,
+  type RangoDensidad,
+} from "@/lib/geo/densidad";
 import type { XY } from "@/lib/geo/geometria";
 
 const PAD = 16;
 const ESCALA_MAX = 3.2;
-const SEGMENTOS_ESCALA = 4;
+// Tamaño (en px) del cuadrado donde entra la rosa de los vientos — mismo
+// viewBox de 36×36 que usa MapaDensidad en pantalla (ver lib/geo/densidad.ts).
+const TAMANO_ROSA = 30;
+const ROSA_MARGEN = 8;
+const ROSA_CAJA = TAMANO_ROSA + ROSA_MARGEN * 2;
 
 export interface PuntoDensidadSvg {
   id: string;
@@ -76,28 +87,42 @@ export function construirMapaDensidadHtml(
     .join("");
 
   const escalaBarra = elegirEscalaBarra(escala);
-  const anchoSegmento = escalaBarra.px / SEGMENTOS_ESCALA;
-  const segmentosEscala = Array.from({ length: SEGMENTOS_ESCALA })
+  const escalaGraduada = graduarEscalaBarra(escalaBarra.metros, escalaBarra.px);
+  const segmentosEscala = escalaGraduada.segmentos
+    .map((s) => `<div style="width:${s.anchoPx}px;height:6px;background:${s.color};border:0.5px solid #000000;"></div>`)
+    .join("");
+  const etiquetasEscala = escalaGraduada.etiquetas
     .map(
-      (_v, i) =>
-        `<div style="width:${anchoSegmento}px;height:6px;background:${i % 2 === 0 ? "#000000" : "#FFFFFF"};border:0.5px solid #000000;"></div>`
+      (e) =>
+        `<span style="position:absolute;left:${e.posicionPx}px;transform:translateX(-50%);">${e.texto}</span>`
     )
     .join("");
 
+  // Rosa de los vientos — mismos 4 picos blanco/negro alternados que en
+  // pantalla (ver ROSA_VIENTOS_KITES), no una simple flecha con "N".
+  const rosaPoligonos = ROSA_VIENTOS_KITES.map(
+    (k) =>
+      `<polygon points="${k.puntos.map((p) => `${p.x},${p.y}`).join(" ")}" fill="${k.color}" stroke="#000000" stroke-width="0.6" />`
+  ).join("");
+  const rosaSvg = `<svg width="${TAMANO_ROSA}" height="${TAMANO_ROSA}" viewBox="0 0 36 36" style="position:absolute;top:${ROSA_MARGEN}px;left:${ROSA_MARGEN}px;">${rosaPoligonos}</svg>`;
+
   return `<div style="position:relative;width:${ancho}px;height:${alto}px;background:#F3F7F2;border:1px solid #EDE0B8;border-radius:10px;overflow:hidden;">
     ${svg}
-    <div style="position:absolute;top:6px;left:6px;right:6px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:#1B2E1F;">Mapa de densidad poblacional</div>
-    <div style="position:absolute;top:6px;right:8px;text-align:center;color:#1B2E1F;">
-      <div style="font-size:12px;line-height:1;">▲</div>
-      <div style="font-size:8px;font-weight:800;">N</div>
+    <div style="position:absolute;top:6px;left:6px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:#1B2E1F;">Mapa de densidad poblacional</div>
+    <div style="position:absolute;top:6px;right:6px;width:${ROSA_CAJA}px;height:${ROSA_CAJA}px;color:#1B2E1F;font-size:7px;font-weight:800;">
+      ${rosaSvg}
+      <div style="position:absolute;top:0;left:0;right:0;text-align:center;">N</div>
+      <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;">S</div>
+      <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;right:0;">E</div>
+      <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;left:0;">O</div>
     </div>
     <div style="position:absolute;bottom:6px;left:6px;max-width:55%;">
       <div style="font-size:10px;font-weight:800;color:#1B2E1F;margin-bottom:2px;">${etiquetaLeyenda}</div>
       <div style="display:flex;flex-direction:column;gap:2px;">${filasLeyenda}</div>
     </div>
-    <div style="position:absolute;bottom:20px;right:10px;text-align:center;">
+    <div style="position:absolute;bottom:20px;right:10px;width:${escalaGraduada.anchoTotalPx}px;">
       <div style="display:flex;">${segmentosEscala}</div>
-      <div style="display:flex;justify-content:space-between;width:100%;margin-top:2px;font-size:8px;font-weight:700;color:#1B2E1F;"><span>0</span><span>${escalaBarra.metros} m</span></div>
+      <div style="position:relative;width:${escalaGraduada.anchoTotalPx}px;height:10px;margin-top:2px;font-size:7.5px;font-weight:700;color:#1B2E1F;">${etiquetasEscala}</div>
     </div>
   </div>`;
 }
