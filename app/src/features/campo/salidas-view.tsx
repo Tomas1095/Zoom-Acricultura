@@ -25,7 +25,7 @@ import {
   type ProductoAplicado,
   type ZonaCebo,
 } from "@/lib/exportar/informe";
-import { construirLeyendaHtml, construirSvgDensidad } from "@/lib/exportar/mapa-svg";
+import { construirMapaDensidadHtml } from "@/lib/exportar/mapa-svg";
 import { exportarGPX, exportarKML } from "@/lib/exportar/manchones";
 import { formatearHectareas } from "@/lib/format";
 import type { Lote } from "@/types/domain";
@@ -212,10 +212,24 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           establecimientoNombre,
           situacion,
           zonas,
-          mapaBichoSvg: construirSvgDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"), NIVEL_COLORES, 260, 220),
-          mapaBabosaSvg: construirSvgDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"), NIVEL_COLORES, 260, 220),
-          leyendaBichoHtml: construirLeyendaHtml(rangosDe("bicho"), NIVEL_COLORES, "Nº BB/m²"),
-          leyendaBabosaHtml: construirLeyendaHtml(rangosDe("babosa"), NIVEL_COLORES, "Nº Babosas/m²"),
+          mapaBichoHtml: construirMapaDensidadHtml(
+            puntosDensidadBicho,
+            lote.perimetro,
+            rangosDe("bicho"),
+            NIVEL_COLORES,
+            "Nº BB/m²",
+            260,
+            220
+          ),
+          mapaBabosaHtml: construirMapaDensidadHtml(
+            puntosDensidadBabosa,
+            lote.perimetro,
+            rangosDe("babosa"),
+            NIVEL_COLORES,
+            "Nº Babosas/m²",
+            260,
+            220
+          ),
         });
         await exportarInformePdf(html, valores.nombre);
       } else {

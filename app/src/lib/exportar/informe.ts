@@ -57,12 +57,11 @@ interface DatosInforme {
   establecimientoNombre?: string;
   situacion: string;
   zonas: ZonaCebo[];
-  /** SVG ya armado (ver lib/exportar/mapa-svg.ts) — informe.ts no calcula
-   * densidad, solo arma el documento. */
-  mapaBichoSvg: string;
-  mapaBabosaSvg: string;
-  leyendaBichoHtml: string;
-  leyendaBabosaHtml: string;
+  /** Bloque de mapa ya armado (título/norte/leyenda/escala incluidos, ver
+   * lib/exportar/mapa-svg.ts) — informe.ts no calcula densidad, solo arma
+   * el documento. */
+  mapaBichoHtml: string;
+  mapaBabosaHtml: string;
 }
 
 function escapeHtml(s: string): string {
@@ -81,10 +80,8 @@ export function construirInformeHtml({
   establecimientoNombre,
   situacion,
   zonas,
-  mapaBichoSvg,
-  mapaBabosaSvg,
-  leyendaBichoHtml,
-  leyendaBabosaHtml,
+  mapaBichoHtml,
+  mapaBabosaHtml,
 }: DatosInforme): string {
   const filasZonas = zonas
     .flatMap((z) =>
@@ -114,9 +111,8 @@ export function construirInformeHtml({
   table { width: 100%; border-collapse: collapse; margin-top: 10px; }
   th, td { border: 1px solid #EDE0B8; padding: 7px 9px; font-size: 12px; text-align: left; }
   th { background: #F3F7F2; }
-  .mapasFila { display: flex; flex-direction: column; gap: 22px; margin-top: 10px; }
-  .mapaBloque { display: flex; gap: 10px; align-items: flex-start; }
-  .mapaTitulo { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .mapasFila { display: flex; flex-direction: column; gap: 16px; margin-top: 10px; }
+  .mapaEtiqueta { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -127,12 +123,12 @@ export function construirInformeHtml({
   <h2>Mapa de densidad poblacional</h2>
   <div class="mapasFila">
     <div>
-      <div class="mapaTitulo">Bichos bolita</div>
-      <div class="mapaBloque">${mapaBichoSvg}${leyendaBichoHtml}</div>
+      <div class="mapaEtiqueta">Bichos bolita</div>
+      ${mapaBichoHtml}
     </div>
     <div>
-      <div class="mapaTitulo">Babosas</div>
-      <div class="mapaBloque">${mapaBabosaSvg}${leyendaBabosaHtml}</div>
+      <div class="mapaEtiqueta">Babosas</div>
+      ${mapaBabosaHtml}
     </div>
   </div>
 
