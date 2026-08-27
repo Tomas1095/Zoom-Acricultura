@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { filaAUsuario } from "./db/mappers";
 import { guardarUsuarioCache, leerUsuarioCache } from "./offline/cache-usuario";
+import { conTimeout, hayConexion } from "./offline/net";
 import type { Usuario } from "@/types/domain";
 
 interface AuthState {
@@ -26,11 +27,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function cargarUsuario(authUserId: string) {
     try {
-      const { data, error } = await supabase
-        .from("usuarios")
-        .select("*")
-        .eq("auth_user_id", authUserId)
-        .maybeSingle();
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      const { data, error } = await conTimeout(
+        supabase.from("usuarios").select("*").eq("auth_user_id", authUserId).maybeSingle()
+      );
       if (error) throw error;
       const u = data ? filaAUsuario(data) : null;
       setUsuario(u);

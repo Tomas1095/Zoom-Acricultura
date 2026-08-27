@@ -24,6 +24,7 @@ import { fetchUsuarios } from "@/lib/db/equipo";
 import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
 import { agregarCambioPendiente } from "@/lib/offline/cola";
 import { leerCacheLote } from "@/lib/offline/cache-lote";
+import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { useSync } from "@/lib/sync-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Carga, Lote, Punto, Usuario } from "@/types/domain";
@@ -172,12 +173,19 @@ export default function PuntoScreen() {
 
   const refrescar = useCallback(async () => {
     try {
-      const [l, puntos, usuarios] = await Promise.all([fetchLote(loteId), fetchPuntosDeLote(loteId), fetchUsuarios()]);
+      // Chequeo rápido antes de intentar nada — si no hay señal, ni tiene
+      // sentido esperar a que el fetch se dé por vencido solo (eso puede
+      // tardar bastante) para recién ahí caer al respaldo local. Ver
+      // lib/offline/net.ts.
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      const [l, puntos, usuarios] = await conTimeout(
+        Promise.all([fetchLote(loteId), fetchPuntosDeLote(loteId), fetchUsuarios()])
+      );
       setLote(l);
       const [linea, puntoNum] = etiqueta.split(".").map(Number);
       const p = puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
       if (l && p) {
-        const c = await fetchCarga(p.id, l.campanaActual);
+        const c = await conTimeout(fetchCarga(p.id, l.campanaActual));
         aplicarPuntoYCarga(p, c, usuarios);
       } else {
         aplicarPuntoYCarga(p, null, usuarios);
@@ -259,7 +267,11 @@ export default function PuntoScreen() {
     if (!lote || !punto || !usuario) return;
     setGuardando(true);
     try {
-      await guardarYConfirmarCarga(punto.id, lote.campanaActual, form, usuario.id);
+      // Mismo chequeo rápido que en refrescar — sin señal, ni vale la pena
+      // esperar a que el intento real se dé por vencido solo antes de
+      // encolar (ver lib/offline/net.ts).
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      await conTimeout(guardarYConfirmarCarga(punto.id, lote.campanaActual, form, usuario.id));
       router.back();
     } catch (e: any) {
       // Sin conexión (o el server no respondió a tiempo) — en vez de perder
@@ -267,7 +279,10 @@ export default function PuntoScreen() {
       // se sube solo apenas vuelva la señal (ver lib/sync-context.tsx). El
       // form ya está confirmado del lado de la persona, por eso sí se
       // vuelve atrás — no tiene sentido dejarla trabada en la pantalla
-      // esperando a que haya señal.
+      // esperando a que haya señal. Sin alerta acá: el contador de
+      // "cambios sin subir" del header ya avisa que quedó pendiente, un
+      // cartel aparte en cada punto no aportaba nada (pedido explícito del
+      // usuario tras probarlo).
       agregarCambioPendiente({
         tipo: "carga",
         puntoId: punto.id,
@@ -276,7 +291,6 @@ export default function PuntoScreen() {
         cargadoPorId: usuario.id,
       });
       avisarCambioEncolado();
-      Alert.alert("Sin conexión", "Se guardó en el celular y se va a sincronizar solo apenas haya señal.");
       router.back();
     } finally {
       setGuardando(false);
@@ -287,9 +301,16 @@ export default function PuntoScreen() {
     if (!lote || !punto || !usuario) return;
     setSubiendoFoto(true);
     try {
+      // Acá NO se usa conTimeout para la subida en sí (subirFoto): un
+      // archivo pesa más que una consulta común y puede tardar de verdad
+      // con una conexión lenta pero real — cortarla a los 4 segundos
+      // convertiría una subida lenta-pero-exitosa en un falso "sin
+      // conexión". El chequeo rápido de antes sí sirve (si YA se sabe que
+      // no hay señal, ni vale la pena intentar).
+      if (!(await hayConexion())) throw new Error("Sin conexión");
       const path = await subirFoto(lote.id, punto.id, uri);
-      await agregarFotoACarga(punto.id, lote.campanaActual, path, usuario.id);
-      const c = await fetchCarga(punto.id, lote.campanaActual);
+      await conTimeout(agregarFotoACarga(punto.id, lote.campanaActual, path, usuario.id));
+      const c = await conTimeout(fetchCarga(punto.id, lote.campanaActual));
       setCarga(c);
     } catch (e: any) {
       // Mismo criterio que handleGuardar: sin conexión, la foto queda

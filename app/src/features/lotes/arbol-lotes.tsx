@@ -12,6 +12,7 @@ import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
+import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -63,7 +64,8 @@ export function ArbolLotes() {
     if (!usuario) return;
     let arbol: db.Arbol;
     try {
-      const [arbolLive, todosLosUsuarios] = await Promise.all([db.fetchArbol(), fetchUsuarios()]);
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      const [arbolLive, todosLosUsuarios] = await conTimeout(Promise.all([db.fetchArbol(), fetchUsuarios()]));
       arbol = arbolLive;
       setClientes(arbol.clientes);
       setEstablecimientos(arbol.establecimientos);

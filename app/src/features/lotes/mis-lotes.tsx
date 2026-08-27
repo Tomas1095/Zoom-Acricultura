@@ -8,6 +8,7 @@ import * as db from "@/lib/db/lotes";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
+import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Establecimiento, Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -28,7 +29,8 @@ export function MisLotes() {
     if (!usuario) return;
     let arbol: db.Arbol;
     try {
-      arbol = await db.fetchArbol();
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      arbol = await conTimeout(db.fetchArbol());
       setLotes(arbol.lotes);
       setEstablecimientos(arbol.establecimientos);
       setUsandoCache(false);

@@ -5,6 +5,7 @@ import { fetchLote } from "@/lib/db/lotes";
 import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
 import { guardarCacheLote, leerCacheLote } from "@/lib/offline/cache-lote";
+import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Carga, Lote, Punto } from "@/types/domain";
 import { useGps } from "./usar-gps";
@@ -35,11 +36,18 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
 
   const refrescar = useCallback(async () => {
     try {
-      const l = await fetchLote(loteId);
+      // Chequeo rápido antes de intentar nada — si no hay señal, ni tiene
+      // sentido esperar a que el fetch se dé por vencido solo (eso puede
+      // tardar bastante) para recién ahí caer al respaldo local. Ver
+      // lib/offline/net.ts.
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      const l = await conTimeout(fetchLote(loteId));
       setLote(l);
       if (l) {
         const campanaEfectiva = campana ?? l.campanaActual;
-        const [ps, cs] = await Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)]);
+        const [ps, cs] = await conTimeout(
+          Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)])
+        );
         guardarCacheLote(loteId, campanaEfectiva, l, ps, cs);
         // Fusiona lo que esta persona ya guardó sin señal (todavía en la
         // cola local) para que se vea completo al toque, sin esperar a que
