@@ -202,6 +202,19 @@ const CAMPOS_PRESENCIA = [
   ["gusanoBlanco", "Gusano blanco"],
 ] as const;
 
+/** Tres escalones en vez de dos — pedido explícito del usuario: 0% no
+ * genera línea (ver `con === 0` más abajo), de ahí hasta 30% es "aislada",
+ * de 30 a 50% queda en un término intermedio ("+/- generalizada", ni tan
+ * suelta ni realmente en todo el lote), y por encima de 50% ya es
+ * "generalizada". Los cortes son inclusivos hacia abajo (30% exacto cae en
+ * "aislada", 50% exacto en "+/- generalizada") para que no se pisen entre
+ * sí ni quede un hueco sin cubrir. */
+function nivelPresencia(pct: number): string {
+  if (pct <= 0.3) return "aislada";
+  if (pct <= 0.5) return "+/- generalizada";
+  return "generalizada";
+}
+
 /** Presencias booleanas (no llevadas a m²) — sobre el total de puntos del
  * lote, no solo los ya cargados, para que el % baje solo si de verdad hay
  * poca presencia en vez de "poca porque falta cargar". */
@@ -215,8 +228,7 @@ export function resumenPresencias(
     const con = cargas.filter((c) => c[campo]).length;
     if (con === 0) continue;
     const pct = con / totalPuntos;
-    const nivel = pct > 0.3 ? "generalizada" : "aislada";
-    resultado.push(`${nombre} = presencia ${nivel}.`);
+    resultado.push(`${nombre} = presencia ${nivelPresencia(pct)}.`);
   }
   return resultado;
 }
