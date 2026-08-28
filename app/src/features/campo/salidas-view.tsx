@@ -125,6 +125,9 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           puntoNum: p.puntoNum,
           x: p.x,
           y: p.y,
+          // Un punto sin carga no es lo mismo que un punto cargado en cero
+          // — ver PuntoPlaga en lib/informe/situacion.ts.
+          cargado: !!c?.cargado,
           bicho: (c?.bicho ?? 0) * 4,
           babosa: (c?.babosa ?? 0) * 4,
           huevoBabosas: c?.huevoBabosas ?? false,
@@ -136,14 +139,29 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     [puntos, cargas]
   );
 
+  // Espaciado real entre estaciones de este lote — hace falta ARRIBA (no
+  // solo para Manchoneo más abajo) porque la distribución de la situación
+  // de plagas también agrupa puntos por cercanía real, con el mismo radio.
+  const spacingM = Math.sqrt(Math.max(lote.haPorPunto, 0.01) * 10000);
+
   // ---------- Informe ----------
   const resumenBicho = useMemo(
-    () => resumenPlaga(puntosConValores.map((p) => ({ linea: p.linea, valorM2: p.bicho })), "bicho"),
-    [puntosConValores]
+    () =>
+      resumenPlaga(
+        puntosConValores.map((p) => ({ id: p.id, x: p.x, y: p.y, valorM2: p.bicho, cargado: p.cargado })),
+        "bicho",
+        spacingM
+      ),
+    [puntosConValores, spacingM]
   );
   const resumenBabosa = useMemo(
-    () => resumenPlaga(puntosConValores.map((p) => ({ linea: p.linea, valorM2: p.babosa })), "babosa"),
-    [puntosConValores]
+    () =>
+      resumenPlaga(
+        puntosConValores.map((p) => ({ id: p.id, x: p.x, y: p.y, valorM2: p.babosa, cargado: p.cargado })),
+        "babosa",
+        spacingM
+      ),
+    [puntosConValores, spacingM]
   );
   const presencias = useMemo(() => resumenPresencias(puntosConValores, puntosConValores.length), [puntosConValores]);
   const presenciasClave = presencias.join("|");
@@ -156,7 +174,18 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   useEffect(() => {
     if (!editadoManualmente) setSituacion(textoSituacion(resumenBicho, resumenBabosa, presencias));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- presenciasClave representa a `presencias`
-  }, [resumenBicho.abundancia, resumenBicho.distribucion, resumenBabosa.abundancia, resumenBabosa.distribucion, presenciasClave, editadoManualmente]);
+  }, [
+    resumenBicho.abundancia,
+    resumenBicho.distribucion,
+    resumenBicho.sinPresencia,
+    resumenBicho.sinDatos,
+    resumenBabosa.abundancia,
+    resumenBabosa.distribucion,
+    resumenBabosa.sinPresencia,
+    resumenBabosa.sinDatos,
+    presenciasClave,
+    editadoManualmente,
+  ]);
 
   function recalcularSituacion() {
     setSituacion(textoSituacion(resumenBicho, resumenBabosa, presencias));
@@ -238,7 +267,6 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   const [pedidoExport, setPedidoExport] = useState<PedidoExport>(null);
 
   // ---------- Manchoneo ----------
-  const spacingM = Math.sqrt(Math.max(lote.haPorPunto, 0.01) * 10000);
   const estaciones: EstacionAplicacion[] = useMemo(
     () => puntosConValores.map((p) => ({ id: p.id, x: p.x, y: p.y, linea: p.linea, puntoNum: p.puntoNum, valorM2: p.babosa })),
     [puntosConValores]
