@@ -1,9 +1,10 @@
 // Zona de aplicación de cebo ("manchoneo") — portado de `calcularZonaAplicacion`
-// del prototipo, pensado sobre todo para babosas (distribución típicamente
-// sectorizada, a diferencia de bichos bolita). Regla: estaciones con valor
-// por encima del umbral, con relleno de "agujeros rodeados" entre estaciones
-// afectadas cercanas, más una franja de protección alrededor del borde real
-// del lote.
+// del prototipo, pensado originalmente para babosas (distribución típicamente
+// sectorizada, a diferencia de bichos bolita) pero hoy usado igual para las
+// dos plagas (ver Manchoneo en salidas-view.tsx, con una subsolapa por
+// plaga). Regla: estaciones con valor por encima del umbral, con relleno de
+// "agujeros rodeados" entre estaciones afectadas cercanas, más una franja de
+// protección alrededor del borde real del lote.
 //
 // Una diferencia real con el prototipo: ahí el espaciado entre estaciones
 // estaba hardcodeado (`SPACING_M = 122.47`, "1 punto cada 1.5 ha" fijo, el
@@ -12,9 +13,14 @@
 // que generó la grilla real (ver `generarGrillaDesdePerimetro` en
 // geometria.ts: `Math.sqrt(haPorPunto * 10000)`).
 
-import { puntoEnPoligono, type XY } from "./geometria";
+import { areaPoligonoM2, puntoEnPoligono, type XY } from "./geometria";
 
-export const UMBRAL_APLICACION_BABOSA = 4; // babosas/m² — arranque de la 2da categoría (ver RANGOS_BABOSA)
+// Los dos umbrales dejan afuera la primera categoría de cada mapa de
+// densidad (ver RANGOS_BABOSA/RANGOS_BICHO en lib/geo/densidad.ts) — a
+// pedido del usuario, el manchoneo se concentra solo en las estaciones que
+// ya importan, sin que las celdas más bajas empujen el polígono.
+export const UMBRAL_APLICACION_BABOSA = 4; // babosas/m² — arranque de la 2da categoría (deja afuera 0-3)
+export const UMBRAL_APLICACION_BICHO = 60; // bichos bolita/m² — arranque de la 3ra categoría (deja afuera 0-59, la 1ra y 2da combinadas)
 export const FRANJA_PROTECCION_M = 60;
 const RASTER_RES_M = 12; // resolución de la grilla de cálculo, en metros
 
@@ -226,4 +232,15 @@ export function calcularZonaAplicacion(
 
   const haIncluidas = (celdasIncluidas * RASTER_RES_M * RASTER_RES_M) / 10000;
   return { manchones, haIncluidas, seleccionadas };
+}
+
+/** Hectáreas reales de un set de manchones — a diferencia de `haIncluidas`
+ * (una estimación por conteo de celdas de `RASTER_RES_M`, calculada una
+ * sola vez junto con el polígono automático), esto mide el polígono en sí
+ * con la fórmula exacta del shoelace. Se usa solo cuando la persona edita
+ * los vértices a mano (ver MapaManchoneo/salidas-view.tsx): mientras nadie
+ * toca el manchón, se sigue mostrando `haIncluidas` tal cual vino del
+ * cálculo automático, sin recalcular nada de más. */
+export function areaManchonesHa(manchones: XY[][]): number {
+  return manchones.reduce((total, m) => total + areaPoligonoM2(m), 0) / 10000;
 }

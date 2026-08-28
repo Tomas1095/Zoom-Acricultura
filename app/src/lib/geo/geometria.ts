@@ -77,7 +77,11 @@ function rotar(p: XY, theta: number): XY {
   return { x: p.x * c - p.y * s, y: p.x * s + p.y * c };
 }
 
-function areaM2(poly: XY[]): number {
+/** Área de un polígono (fórmula del shoelace) — exportada porque también la
+ * usa `zona-aplicacion.ts` para recalcular el área real de un manchón
+ * editado a mano (en vez de la estimación por celdas del cálculo
+ * automático, ver `calcularZonaAplicacion`). */
+export function areaPoligonoM2(poly: XY[]): number {
   let area = 0;
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i];
@@ -181,7 +185,7 @@ export function generarGrillaDesdePerimetro(perimetroEntrada: LatLon[], haPorPun
     lon: perimetro.reduce((s, p) => s + p.lon, 0) / perimetro.length,
   };
   const perimetroXY = perimetro.map((p) => latLonAXY(origen, p));
-  const hectareas = areaM2(perimetroXY) / 10000;
+  const hectareas = areaPoligonoM2(perimetroXY) / 10000;
 
   const angulo = anguloBordeMasLargo(perimetroXY);
   const rotado = perimetroXY.map((p) => rotar(p, -angulo));

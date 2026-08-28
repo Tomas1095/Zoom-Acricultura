@@ -10,10 +10,16 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { ChevronDown, Download, Plus, RotateCcw, Upload, X } from "lucide-react-native";
+import { Check, ChevronDown, Download, Pencil, Plus, RotateCcw, Upload, X } from "lucide-react-native";
 
-import { calcularZonaAplicacion, UMBRAL_APLICACION_BABOSA, type EstacionAplicacion } from "@/lib/geo/zona-aplicacion";
-import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
+import {
+  areaManchonesHa,
+  calcularZonaAplicacion,
+  UMBRAL_APLICACION_BABOSA,
+  UMBRAL_APLICACION_BICHO,
+  type EstacionAplicacion,
+} from "@/lib/geo/zona-aplicacion";
+import { inferirOrigenDesdePuntos, type XY } from "@/lib/geo/geometria";
 import { NIVEL_COLORES, rangosDe } from "@/lib/geo/densidad";
 import { resumenPlaga, resumenPresencias, textoSituacion } from "@/lib/informe/situacion";
 import {
@@ -103,9 +109,9 @@ function zonaInicial(lote: Lote): ZonaCebo {
 /** Pestaña "Salidas" — portada de `SalidasView` del prototipo: informe
  * técnico (mapas de densidad, situación de plagas auto-generada + editable,
  * recomendación de cebo con exportar PDF), y zona de aplicación/manchoneo
- * (mapa + exportar GPX/KML). Sin arrastrar los vértices del manchón a mano
- * (el prototipo lo permitía; acá por ahora el polígono es siempre el
- * calculado automático). */
+ * (mapa + exportar GPX/KML), con una subsolapa por plaga (bicho bolita y
+ * babosas) y el manchón editable a mano — vértices arrastrables, con el
+ * límite del lote como freno (ver mapa-manchoneo.tsx). */
 export function SalidasView({ lote, establecimientoNombre, campanaViendo }: SalidasViewProps) {
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
   const [subTab, setSubTab] = useState<SubTab>("informe");
@@ -267,15 +273,83 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   const [pedidoExport, setPedidoExport] = useState<PedidoExport>(null);
 
   // ---------- Manchoneo ----------
-  const estaciones: EstacionAplicacion[] = useMemo(
+  // Una subsolapa por plaga (a pedido del usuario) — las dos funcionan
+  // igual (mismo `calcularZonaAplicacion`), cada una con su propio valor
+  // por estación y su propio umbral: el umbral de cada una deja afuera la
+  // primera categoría del mapa de densidad correspondiente (0-3 en babosas,
+  // 0-59 en bicho bolita — ver los comentarios en zona-aplicacion.ts).
+  const [manchoneoPlaga, setManchoneoPlaga] = useState<"bicho" | "babosa">("bicho");
+
+  const estacionesBicho: EstacionAplicacion[] = useMemo(
+    () => puntosConValores.map((p) => ({ id: p.id, x: p.x, y: p.y, linea: p.linea, puntoNum: p.puntoNum, valorM2: p.bicho })),
+    [puntosConValores]
+  );
+  const estacionesBabosa: EstacionAplicacion[] = useMemo(
     () => puntosConValores.map((p) => ({ id: p.id, x: p.x, y: p.y, linea: p.linea, puntoNum: p.puntoNum, valorM2: p.babosa })),
     [puntosConValores]
   );
-  const zonaAplicacion = useMemo(
-    () => calcularZonaAplicacion(estaciones, UMBRAL_APLICACION_BABOSA, lote.perimetro, spacingM),
-    [estaciones, lote.perimetro, spacingM]
+  const zonaAplicacionBicho = useMemo(
+    () => calcularZonaAplicacion(estacionesBicho, UMBRAL_APLICACION_BICHO, lote.perimetro, spacingM),
+    [estacionesBicho, lote.perimetro, spacingM]
   );
-  const sinEstaciones = zonaAplicacion.manchones.length === 0;
+  const zonaAplicacionBabosa = useMemo(
+    () => calcularZonaAplicacion(estacionesBabosa, UMBRAL_APLICACION_BABOSA, lote.perimetro, spacingM),
+    [estacionesBabosa, lote.perimetro, spacingM]
+  );
+
+  // El manchón editado a mano (si lo hay) — un slot por plaga, así editar
+  // bicho bolita no pisa lo que se haya tocado en babosas y viceversa. En
+  // null significa "todavía usando el cálculo automático" — recién se
+  // llena con la primera edición de un vértice (ver onEditarVerticeManchon).
+  const [manchonesManualBicho, setManchonesManualBicho] = useState<XY[][] | null>(null);
+  const [manchonesManualBabosa, setManchonesManualBabosa] = useState<XY[][] | null>(null);
+  const [editandoManchon, setEditandoManchon] = useState(false);
+
+  const manchonesManualActivo = manchoneoPlaga === "bicho" ? manchonesManualBicho : manchonesManualBabosa;
+  const zonaAplicacionActiva = manchoneoPlaga === "bicho" ? zonaAplicacionBicho : zonaAplicacionBabosa;
+  const umbralActivo = manchoneoPlaga === "bicho" ? UMBRAL_APLICACION_BICHO : UMBRAL_APLICACION_BABOSA;
+  const unidadActiva = manchoneoPlaga === "bicho" ? "bichos bolita/m²" : "babosas/m²";
+  const etiquetaActiva = manchoneoPlaga === "bicho" ? "Bicho bolita" : "Babosas";
+  const prefijoExportActivo = manchoneoPlaga === "bicho" ? "BB" : "BAB";
+
+  // Manchones/hectáreas que de verdad se muestran, exportan, etc.: el
+  // cálculo automático tal cual, salvo que la persona ya haya editado un
+  // vértice a mano — ahí se usa ese polígono editado, con el área recién
+  // recalculada con la fórmula exacta (no la estimación por celdas del
+  // cálculo automático). El `useMemo` es la parte que hace que el área
+  // "solo se vaya calculando si se modifica": mientras `manchonesManualActivo`
+  // sigue siendo el mismo array (nadie tocó nada), no se recalcula nada de
+  // más en cada render.
+  const manchonesActivos = manchonesManualActivo ?? zonaAplicacionActiva.manchones;
+  const haActivas = useMemo(
+    () => (manchonesManualActivo ? areaManchonesHa(manchonesManualActivo) : zonaAplicacionActiva.haIncluidas),
+    [manchonesManualActivo, zonaAplicacionActiva.haIncluidas]
+  );
+  const sinEstaciones = manchonesActivos.length === 0;
+
+  // Sale del modo edición y limpia el estado de edición al cambiar de
+  // plaga — evita quedar "editando" un manchón que ya no se está mirando.
+  function elegirManchoneoPlaga(plaga: "bicho" | "babosa") {
+    setManchoneoPlaga(plaga);
+    setEditandoManchon(false);
+  }
+
+  // La primera edición de un manchón "clona" el cálculo automático a mano
+  // (`manchones` llega tal cual estaba en pantalla en ese momento) — de ahí
+  // en adelante todas las ediciones parten de ese estado editado, no del
+  // automático (que de otra forma pisaría los cambios en cada recálculo).
+  function onEditarVerticeManchon(manchonIndex: number, verticeIndex: number, nuevo: XY) {
+    const setManual = manchoneoPlaga === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
+    setManual((actual) => {
+      const base = actual ?? zonaAplicacionActiva.manchones;
+      return base.map((m, i) => (i !== manchonIndex ? m : m.map((v, j) => (j !== verticeIndex ? v : nuevo))));
+    });
+  }
+
+  function restablecerManchon() {
+    const setManual = manchoneoPlaga === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
+    setManual(null);
+  }
 
   // Nombre por defecto de cada exportación — siempre editable desde el
   // modal (ver onConfirmar), esto solo prellena el campo.
@@ -283,7 +357,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     if (pedido === "pdf") {
       return `Informe monitoreo de plagas ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
     }
-    return `BAB Lote ${lote.nombre} ${zonaAplicacion.haIncluidas.toFixed(1)} Ha`;
+    return `${prefijoExportActivo} Lote ${lote.nombre} ${haActivas.toFixed(1)} Ha`;
   }
 
   async function confirmarExport(valores: Record<string, string>) {
@@ -329,8 +403,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
         await exportarInformePdf(html, valores.nombre);
       } else {
         const origen = inferirOrigenDesdePuntos(puntos);
-        if (pedido === "gpx") await exportarGPX(zonaAplicacion.manchones, lote.nombre, origen, valores.nombre);
-        else await exportarKML(zonaAplicacion.manchones, lote.nombre, origen, valores.nombre);
+        if (pedido === "gpx") await exportarGPX(manchonesActivos, lote.nombre, origen, valores.nombre);
+        else await exportarKML(manchonesActivos, lote.nombre, origen, valores.nombre);
       }
     } catch (e: any) {
       Alert.alert(`No se pudo exportar el ${pedido.toUpperCase()}`, e.message ?? String(e));
@@ -524,29 +598,79 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContenido}>
           <Text style={styles.hint}>
-            Polígono de aplicación de cebo — pensado sobre todo para babosas, cuya distribución suele ser
-            sectorizada.
+            Polígono de aplicación de cebo, uno por plaga — cada mapa se concentra en las estaciones que superan el
+            umbral, dejando afuera la categoría más baja del mapa de densidad correspondiente.
           </Text>
 
+          <View style={styles.disenoToggle}>
+            <Pressable
+              style={[styles.disenoBoton, manchoneoPlaga === "bicho" && styles.disenoBotonActivo]}
+              onPress={() => elegirManchoneoPlaga("bicho")}
+            >
+              <Text style={[styles.disenoBotonTexto, manchoneoPlaga === "bicho" && styles.disenoBotonTextoActivo]}>
+                Bicho bolita
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.disenoBoton, manchoneoPlaga === "babosa" && styles.disenoBotonActivo]}
+              onPress={() => elegirManchoneoPlaga("babosa")}
+            >
+              <Text style={[styles.disenoBotonTexto, manchoneoPlaga === "babosa" && styles.disenoBotonTextoActivo]}>
+                Babosas
+              </Text>
+            </Pressable>
+          </View>
+
           <View style={styles.card}>
-            <Text style={styles.cardTitulo}>Manchoneo — Babosas</Text>
+            <Text style={styles.cardTitulo}>Manchoneo — {etiquetaActiva}</Text>
             <Text style={styles.hint}>
-              Estaciones con ≥ {UMBRAL_APLICACION_BABOSA} babosas/m², relleno de huecos entre estaciones afectadas
-              de una misma línea, y franja de protección alrededor del borde.
+              Estaciones con ≥ {umbralActivo} {unidadActiva}, relleno de huecos entre estaciones afectadas de una
+              misma línea, y franja de protección alrededor del borde.
             </Text>
 
             <View style={styles.mapaMarco}>
-              <MapaManchoneo perimetro={lote.perimetro} manchones={zonaAplicacion.manchones} ancho={320} alto={320} />
+              <MapaManchoneo
+                perimetro={lote.perimetro}
+                manchones={manchonesActivos}
+                ancho={320}
+                alto={320}
+                editable={editandoManchon}
+                onEditarVertice={onEditarVerticeManchon}
+              />
             </View>
 
+            {!sinEstaciones && (
+              <View style={styles.editarFila}>
+                <Pressable style={styles.editarBtn} onPress={() => setEditandoManchon((v) => !v)}>
+                  {editandoManchon ? (
+                    <Check size={12} color={colors.primaryDark} />
+                  ) : (
+                    <Pencil size={12} color={colors.primaryDark} />
+                  )}
+                  <Text style={styles.editarTexto}>{editandoManchon ? "Listo" : "Editar polígono"}</Text>
+                </Pressable>
+                {manchonesManualActivo && (
+                  <Pressable style={styles.editarBtn} onPress={restablecerManchon}>
+                    <RotateCcw size={12} color={colors.primaryDark} />
+                    <Text style={styles.editarTexto}>Restablecer</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+            {editandoManchon && (
+              <Text style={styles.hint}>
+                Arrastrá los vértices para ajustar el polígono a mano — no se puede sacar del límite del lote.
+              </Text>
+            )}
+
             <View style={styles.statBox}>
-              <Text style={styles.statValor}>{zonaAplicacion.haIncluidas.toFixed(1)} ha</Text>
+              <Text style={styles.statValor}>{haActivas.toFixed(1)} ha</Text>
               <Text style={styles.statLabel}> de polígono · lote de {formatearHectareas(lote.hectareas)} ha</Text>
             </View>
 
             {sinEstaciones ? (
               <Text style={styles.hint}>
-                Ninguna estación superó el umbral de {UMBRAL_APLICACION_BABOSA}/m² — con estos datos no hace falta
+                Ninguna estación superó el umbral de {umbralActivo} {unidadActiva} — con estos datos no hace falta
                 una aplicación sectorizada.
               </Text>
             ) : (
@@ -835,6 +959,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   botonExportTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark },
+  editarFila: { flexDirection: "row", gap: 8 },
+  editarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  editarTexto: { fontSize: 12, fontWeight: "700", color: colors.primaryDark },
 });
 
 interface ZonaFilaProps {
