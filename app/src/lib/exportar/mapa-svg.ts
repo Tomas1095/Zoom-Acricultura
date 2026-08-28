@@ -28,6 +28,10 @@ const ESCALA_MAX = 3.2;
 const TAMANO_ROSA = 30;
 const ROSA_MARGEN = 8;
 const ROSA_CAJA = TAMANO_ROSA + ROSA_MARGEN * 2;
+// Título y valores de la leyenda: siempre blanco y en negrita (a pedido del
+// usuario), con sombra fija para que se lean fuerte sobre cualquier fondo —
+// mismo criterio que en mapa-densidad.tsx (pantalla).
+const SOMBRA_LEYENDA = "text-shadow:0 1px 2px rgba(0,0,0,0.65);";
 
 export interface PuntoDensidadSvg {
   id: string;
@@ -105,7 +109,7 @@ export function construirMapaDensidadHtml(
   const filasLeyenda = rangos
     .map(
       (r, i) =>
-        `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:${colorTexto};${sombra}"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:0.5px solid rgba(0,0,0,0.3);background-color:${nivelColores[i]};"></span>${r.label}</div>`
+        `<div style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:#FFFFFF;${SOMBRA_LEYENDA}"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:0.5px solid rgba(0,0,0,0.3);background-color:${nivelColores[i]};"></span>${r.label}</div>`
     )
     .join("");
 
@@ -141,7 +145,7 @@ export function construirMapaDensidadHtml(
       <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;left:0;">O</div>
     </div>
     <div style="position:absolute;bottom:18px;left:18px;max-width:62%;">
-      <div style="font-size:12px;font-weight:800;color:${colorTexto};margin-bottom:3px;${sombra}">${etiquetaLeyenda}</div>
+      <div style="font-size:12px;font-weight:800;color:#FFFFFF;margin-bottom:3px;${SOMBRA_LEYENDA}">${etiquetaLeyenda}</div>
       <div style="display:flex;flex-direction:column;gap:3px;">${filasLeyenda}</div>
     </div>
     <div style="position:absolute;bottom:32px;right:22px;width:${escalaGraduada.anchoTotalPx}px;">

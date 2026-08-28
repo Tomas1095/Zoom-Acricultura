@@ -206,11 +206,11 @@ export function MapaDensidad({
 
       {/* Leyenda — abajo a la izquierda, adentro del rectángulo */}
       <View style={estLeyenda} pointerEvents="none">
-        <Text style={[estLeyendaTitulo, { color: colorTexto }, sombraTexto]}>{etiquetaLeyenda}</Text>
+        <Text style={[estLeyendaTitulo, estLeyendaBlanco]}>{etiquetaLeyenda}</Text>
         {rangos.map((r, i) => (
           <View key={i} style={estLeyendaFila}>
             <View style={[estLeyendaMuestra, { backgroundColor: nivelColores[i] }]} />
-            <Text style={[estLeyendaTexto, { color: colorTexto }, sombraTexto]}>{r.label}</Text>
+            <Text style={[estLeyendaTexto, estLeyendaBlanco]}>{r.label}</Text>
           </View>
         ))}
       </View>
@@ -282,6 +282,17 @@ const estLeyendaTitulo = { fontSize: 12, fontWeight: "800" as const, marginBotto
 const estLeyendaFila = { flexDirection: "row" as const, alignItems: "center" as const, gap: 5 };
 const estLeyendaMuestra = { width: 12, height: 12, borderRadius: 3, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.3)" };
 const estLeyendaTexto = { fontSize: 11 };
+// Título y valores de la leyenda: siempre blanco y en negrita, sin importar
+// si hay foto satelital de fondo o no — a pedido del usuario, para que se
+// lean fuerte contra cualquier fondo (la sombra ayuda a que no se pierdan
+// sobre el fondo claro liso de cuando no hay señal/imagen).
+const estLeyendaBlanco = {
+  color: "#FFFFFF",
+  fontWeight: "800" as const,
+  textShadowColor: "rgba(0,0,0,0.65)",
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 2,
+};
 const estEscalaWrap = { position: "absolute" as const, bottom: 22, alignItems: "flex-start" as const };
 const estEscalaBarraFila = { flexDirection: "row" as const };
 const estEscalaTexto = { fontSize: 6.5, fontWeight: "700" as const };
