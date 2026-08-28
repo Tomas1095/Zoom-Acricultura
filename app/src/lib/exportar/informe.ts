@@ -288,8 +288,10 @@ export function construirInformeHtml({
 // Mini logo para el diseño "nuevo" — mismos paths/colores que LOGO_HTML,
 // pero mucho más chico y sin la columna alineada al centro (acá va al
 // lado del encabezado, no como pieza protagonista aparte).
-const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:6px;">
-  <svg width="22" height="22" viewBox="0 0 100 100">
+// Agrandado a pedido del usuario — más armónico al lado del título del
+// informe (antes quedaba chico y desbalanceado contra el h1).
+const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:9px;">
+  <svg width="34" height="34" viewBox="0 0 100 100">
     <circle cx="50" cy="50" r="26.5" stroke="${LOGO_VERDE}" stroke-width="11" fill="none" />
     <line x1="50" y1="23.5" x2="50" y2="6" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
     <line x1="50" y1="76.5" x2="50" y2="94" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
@@ -300,8 +302,8 @@ const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:6px;">
     <path d="M 29.30 81.87 L 27.26 80.45 L 25.32 78.90 L 23.48 77.22 L 21.76 75.43 L 20.16 73.53 L 18.68 71.52 L 17.34 69.43 L 16.14 67.25 L 15.09 65.00 L 14.18 62.68 L 13.43 60.31 L 12.83 57.90" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
   </svg>
   <div style="line-height:1;">
-    <div style="font-size:13px;font-weight:900;letter-spacing:-0.3px;color:${LOGO_VERDE};">ZOOM</div>
-    <div style="font-size:5.5px;font-weight:700;letter-spacing:0.5px;color:${LOGO_VERDE};margin-top:1px;">AGRICULTURA</div>
+    <div style="font-size:19px;font-weight:900;letter-spacing:-0.3px;color:${LOGO_VERDE};">ZOOM</div>
+    <div style="font-size:7.5px;font-weight:700;letter-spacing:0.5px;color:${LOGO_VERDE};margin-top:2px;">AGRICULTURA</div>
   </div>
 </div>`;
 
@@ -313,27 +315,31 @@ const NUEVO_LINEA = "#E4DEC9";
 const NUEVO_BANDA_BG = "#F4F8F4";
 
 function nuevoSeccionLabel(texto: string): string {
+  // Sin la línea horizontal al lado del texto (a pedido del usuario) — solo
+  // el rombo dorado + el texto, ya se distingue bien con el uppercase y el
+  // letter-spacing, no hacía falta la línea de relleno.
   return `<div style="display:flex;align-items:center;gap:9px;margin:26px 0 14px;">
     <div style="width:7px;height:7px;background:${NUEVO_DORADO};transform:rotate(45deg);flex-shrink:0;"></div>
     <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:${NUEVO_VERDE};text-transform:uppercase;white-space:nowrap;">${texto}</div>
-    <div style="flex:1;height:1px;background:${NUEVO_LINEA};"></div>
   </div>`;
 }
 
 function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | undefined, compacto: boolean): string {
+  // El guion entre el lote y el establecimiento, y el nombre del
+  // establecimiento en sí, quedan un poco más chicos y en dorado
+  // itálica — a pedido del usuario, para que se lea como un subtítulo
+  // secundario en vez de pelearle el protagonismo al nombre del lote (el
+  // mismo dorado que ya usa el resto del documento como color de acento,
+  // más prolijo que el gris apagado de antes).
+  const establecimientoHtml = establecimientoNombre
+    ? `<span style="font-size:0.6em;font-weight:600;font-style:italic;color:${NUEVO_DORADO};"> – ${escapeHtml(establecimientoNombre)}</span>`
+    : "";
   return `<div style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:${compacto ? 12 : 16}px;border-bottom:2px solid ${NUEVO_VERDE};">
     <div>
       <div style="font-size:9.5px;font-weight:800;letter-spacing:0.14em;color:${NUEVO_DORADO};text-transform:uppercase;">Informe técnico</div>
-      <div style="font-size:${compacto ? 17 : 22}px;font-weight:800;color:${NUEVO_VERDE};margin-top:3px;letter-spacing:-0.2px;">${escapeHtml(loteNombre)}${establecimientoNombre ? `<span style="font-weight:500;color:${NUEVO_MUTED};"> — ${escapeHtml(establecimientoNombre)}</span>` : ""}</div>
+      <div style="font-size:${compacto ? 17 : 22}px;font-weight:800;color:${NUEVO_VERDE};margin-top:3px;letter-spacing:-0.2px;">${escapeHtml(loteNombre)}${establecimientoHtml}</div>
     </div>
     ${LOGO_MINI_HTML}
-  </div>`;
-}
-
-function nuevoPie(numero: number): string {
-  return `<div style="position:absolute;bottom:20px;left:26px;right:26px;display:flex;justify-content:space-between;border-top:1px solid ${NUEVO_LINEA};padding-top:8px;font-size:8.5px;color:${NUEVO_MUTED};letter-spacing:0.03em;">
-    <span>ZOOM AGRICULTURA · Monitoreo e informe técnico de plagas de suelo</span>
-    <span>Página ${numero}</span>
   </div>`;
 }
 
@@ -403,9 +409,18 @@ export function construirInformeHtmlNuevo({
   .nHojaSegunda { break-inside: avoid; page-break-inside: avoid; }
   .nMapaBloque { margin-bottom: 20px; break-inside: avoid; page-break-inside: avoid; }
   .nMapaBloque:last-child { margin-bottom: 0; }
-  .nMapaMarco { border: 1px solid ${NUEVO_LINEA}; border-radius: 4px; overflow: hidden; }
+  /* mapaBichoHtml/mapaBabosaHtml (armados en exportar/mapa-svg.ts, compartido
+     con el informe "tradicional") traen su propio recuadro — fondo y borde
+     — pensado para ESE diseño. Acá, a pedido del usuario, el mapa va suelto
+     sin recuadro; se pisa con !important en vez de tocar mapa-svg.ts, que
+     no hay que cambiar (lo sigue usando el informe tradicional tal cual). */
+  .nMapaBloque > div { border: none !important; background: none !important; border-radius: 0 !important; }
   .nLoteBloque { margin-bottom: 16px; break-inside: avoid; page-break-inside: avoid; }
-  .nProductoFila { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; }
+  /* Antes justify-content: space-between, que pegaba el total de kg contra
+     el borde derecho de la hoja, lejos de la dosis × superficie que lo
+     originan — a pedido del usuario, ahora queda pegado cerca (gap chico)
+     en vez de estirado a todo el ancho. */
+  .nProductoFila { display: flex; justify-content: flex-start; align-items: baseline; gap: 18px; padding: 9px 0; }
   .nVacio { font-size: 12.5px; color: ${NUEVO_MUTED}; }
 </style>
 </head>
@@ -415,12 +430,10 @@ export function construirInformeHtmlNuevo({
     ${nuevoEncabezado(loteNombre, establecimientoNombre, false)}
 
     ${nuevoSeccionLabel("Resultado monitoreo — Bichos bolita")}
-    <div class="nMapaBloque"><div class="nMapaMarco">${mapaBichoHtml}</div></div>
+    <div class="nMapaBloque">${mapaBichoHtml}</div>
 
     ${nuevoSeccionLabel("Resultado monitoreo — Babosas")}
-    <div class="nMapaBloque"><div class="nMapaMarco">${mapaBabosaHtml}</div></div>
-
-    ${nuevoPie(1)}
+    <div class="nMapaBloque">${mapaBabosaHtml}</div>
   </div>
 
   <div class="nHoja nHojaSegunda">
@@ -441,8 +454,6 @@ export function construirInformeHtmlNuevo({
     </div>`
         : ""
     }
-
-    ${nuevoPie(2)}
   </div>
 
 </body>
