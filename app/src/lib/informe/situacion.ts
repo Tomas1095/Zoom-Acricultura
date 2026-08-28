@@ -32,6 +32,20 @@ import { clasificarNivel, rangosDe, type Plaga } from "@/lib/geo/densidad";
 
 const ETIQUETAS_ABUNDANCIA = ["baja a nula", "baja", "media", "media-alta", "alta", "alta a muy alta", "muy alta"];
 
+// Pedido específico del usuario, solo para babosas (bichos bolita sigue
+// con la escala genérica de arriba): en babosas la distribución suele ser
+// sectorizada, así que lo que importa es concentrarse en las celdas de
+// 4/m² para arriba — de 0 a 3/m² (ya excluido de `afectados` más abajo)
+// directamente no cuenta para la abundancia. Los 6 brackets no-cero de
+// RANGOS_BABOSA (4-8, 9-16, 17-24, 25-32, 33-64, >64) se agrupan de a
+// pares en 4 palabras — "muy alta" queda sola, reservada para el bordó
+// (>64/m²), el color más severo de la leyenda.
+const ETIQUETAS_ABUNDANCIA_BABOSA = ["media", "media-alta", "alta", "muy alta"];
+// nivel (índice en RANGOS_BABOSA) -> grupo (índice en
+// ETIQUETAS_ABUNDANCIA_BABOSA). El índice 0 (0-3/m²) no aparece acá porque
+// ya queda afuera de `afectados` antes de llegar a este mapeo.
+const GRUPO_BABOSA_POR_NIVEL: Record<number, number> = { 1: 0, 2: 0, 3: 1, 4: 1, 5: 2, 6: 3 };
+
 export interface ResumenPlaga {
   abundancia: string;
   distribucion: "generalizada" | "sectorizada" | "aislada" | "desuniforme" | null;
@@ -89,23 +103,49 @@ export function resumenPlaga(puntos: PuntoPlaga[], plaga: Plaga, spacingM: numbe
     return { abundancia: ETIQUETAS_ABUNDANCIA[0], distribucion: null, sinPresencia: false, sinDatos: false };
   }
 
-  const counts = new Map<number, number>();
-  afectados.forEach((p) => counts.set(p.nivel, (counts.get(p.nivel) ?? 0) + 1));
-  let modal = 1;
-  let max = -1;
-  counts.forEach((c, n) => {
-    if (c > max) {
-      max = c;
-      modal = n;
-    }
-  });
   // Una infestación que cubre casi todo el lote se percibe (y se redacta)
   // como más grave que la misma intensidad concentrada en un sector chico —
   // por eso la cobertura empuja la palabra de abundancia un escalón para
-  // arriba cuando la presencia es realmente generalizada.
+  // arriba cuando la presencia es realmente generalizada (para las dos
+  // plagas, más abajo).
   const cobertura = afectados.length / conNivel.length;
-  if (cobertura >= 0.8 && modal < ETIQUETAS_ABUNDANCIA.length - 1) modal += 1;
-  const abundancia = ETIQUETAS_ABUNDANCIA[modal];
+
+  let abundancia: string;
+  if (plaga === "babosa") {
+    // El bracket que MÁS se repite entre los afectados (ver rama de abajo,
+    // usada para bichos bolita) puede quedar dominado por celdas de "4-16"
+    // aunque haya un foco chico pero grave en "33-64"/">64" — para babosas
+    // conviene contar por GRUPO (media/media-alta/alta/muy alta), no por
+    // bracket crudo, así el foco severo pesa lo que corresponde.
+    const gruposCount = new Map<number, number>();
+    afectados.forEach((p) => {
+      const g = GRUPO_BABOSA_POR_NIVEL[p.nivel];
+      gruposCount.set(g, (gruposCount.get(g) ?? 0) + 1);
+    });
+    let grupoModal = 0;
+    let maxGrupo = -1;
+    gruposCount.forEach((c, g) => {
+      if (c > maxGrupo) {
+        maxGrupo = c;
+        grupoModal = g;
+      }
+    });
+    if (cobertura >= 0.8 && grupoModal < ETIQUETAS_ABUNDANCIA_BABOSA.length - 1) grupoModal += 1;
+    abundancia = ETIQUETAS_ABUNDANCIA_BABOSA[grupoModal];
+  } else {
+    const counts = new Map<number, number>();
+    afectados.forEach((p) => counts.set(p.nivel, (counts.get(p.nivel) ?? 0) + 1));
+    let modal = 1;
+    let max = -1;
+    counts.forEach((c, n) => {
+      if (c > max) {
+        max = c;
+        modal = n;
+      }
+    });
+    if (cobertura >= 0.8 && modal < ETIQUETAS_ABUNDANCIA.length - 1) modal += 1;
+    abundancia = ETIQUETAS_ABUNDANCIA[modal];
+  }
 
   // Distribución: agrupamos los puntos afectados por cercanía real
   // (union-find simple) y miramos la forma del agrupamiento resultante.
