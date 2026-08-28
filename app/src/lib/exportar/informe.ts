@@ -324,20 +324,22 @@ function nuevoSeccionLabel(texto: string): string {
   </div>`;
 }
 
-function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | undefined, compacto: boolean): string {
-  // El guion entre el lote y el establecimiento, y el nombre del
-  // establecimiento en sí, quedan un poco más chicos y en dorado
-  // itálica — a pedido del usuario, para que se lea como un subtítulo
-  // secundario en vez de pelearle el protagonismo al nombre del lote (el
-  // mismo dorado que ya usa el resto del documento como color de acento,
-  // más prolijo que el gris apagado de antes).
+function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | undefined): string {
+  // El guion queda chico (solo el signo, no el nombre) pero el nombre del
+  // establecimiento va al mismo tamaño que el del lote — a pedido del
+  // usuario, los dos son igual de importantes. Se distingue del nombre del
+  // lote solo por tipografía/color (itálica, dorado, el mismo acento que
+  // ya usa el resto del documento), no por tamaño.
   const establecimientoHtml = establecimientoNombre
-    ? `<span style="font-size:0.6em;font-weight:600;font-style:italic;color:${NUEVO_DORADO};"> – ${escapeHtml(establecimientoNombre)}</span>`
+    ? ` <span style="font-size:0.55em;color:${NUEVO_DORADO};">–</span> <span style="font-style:italic;color:${NUEVO_DORADO};">${escapeHtml(establecimientoNombre)}</span>`
     : "";
-  return `<div style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:${compacto ? 12 : 16}px;border-bottom:2px solid ${NUEVO_VERDE};">
+  // Mismo tamaño y mismo padding en las dos hojas (antes la hoja 2 achicaba
+  // el encabezado) — a pedido del usuario, la "portada" se repite igual en
+  // las dos.
+  return `<div style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:16px;border-bottom:2px solid ${NUEVO_VERDE};">
     <div>
-      <div style="font-size:9.5px;font-weight:800;letter-spacing:0.14em;color:${NUEVO_DORADO};text-transform:uppercase;">Informe técnico</div>
-      <div style="font-size:${compacto ? 17 : 22}px;font-weight:800;color:${NUEVO_VERDE};margin-top:3px;letter-spacing:-0.2px;">${escapeHtml(loteNombre)}${establecimientoHtml}</div>
+      <div style="font-size:11px;font-weight:800;letter-spacing:0.14em;color:${NUEVO_DORADO};text-transform:uppercase;">Informe técnico</div>
+      <div style="font-size:22px;font-weight:800;color:${NUEVO_VERDE};margin-top:3px;letter-spacing:-0.2px;">${escapeHtml(loteNombre)}${establecimientoHtml}</div>
     </div>
     ${LOGO_MINI_HTML}
   </div>`;
@@ -361,33 +363,43 @@ export function construirInformeHtmlNuevo({
 }: DatosInforme): string {
   const resumen = resumenPorProducto(zonas);
 
+  // Rediseño de "Recomendación de aplicación de cebo" a pedido del usuario
+  // ("algo llamativo pero fácil de entender"): cada lote es ahora su propia
+  // tarjeta con borde suave (antes era una lista suelta sin límites claros
+  // entre lotes), con los productos separados por una línea punteada
+  // cuando hay más de uno — el total en kg sigue pegado cerca de la
+  // dosis × superficie que lo origina, ahora dentro de la misma tarjeta.
   const filasProductos = zonas
     .map((z) => {
       const productos = z.productos
         .map(
           (p, i) => `
-      <div class="nProductoFila" style="${i > 0 ? `border-top:1px solid ${NUEVO_LINEA};` : ""}">
-        <div>
-          <div style="font-size:12.5px;font-weight:700;color:${NUEVO_VERDE};">${escapeHtml(p.producto)}</div>
-          <div style="font-size:10.5px;color:${NUEVO_MUTED};margin-top:1px;">${p.dosis || "0"} kg/ha &nbsp;×&nbsp; ${p.superficie || "0"} ha</div>
+      <div class="nProductoFila" style="${i > 0 ? `border-top:1px dashed ${NUEVO_LINEA};` : ""}">
+        <div style="display:flex;align-items:baseline;gap:10px;min-width:0;">
+          <div style="font-size:12.5px;font-weight:700;color:${NUEVO_VERDE};white-space:nowrap;">${escapeHtml(p.producto)}</div>
+          <div style="font-size:10.5px;color:${NUEVO_MUTED};white-space:nowrap;">${p.dosis || "0"} kg/ha × ${p.superficie || "0"} ha</div>
         </div>
-        <div style="font-size:15px;font-weight:800;color:${NUEVO_VERDE_ACENTO};white-space:nowrap;">${kgDeProducto(p).toFixed(0)} kg</div>
+        <div style="font-size:15px;font-weight:800;color:${NUEVO_VERDE_ACENTO};white-space:nowrap;">${kgDeProducto(p).toFixed(0)} <span style="font-size:10px;font-weight:700;">kg</span></div>
       </div>`
         )
         .join("");
-      return `<div class="nLoteBloque">
-        <div style="font-size:9.5px;font-weight:800;letter-spacing:0.08em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:2px;">${escapeHtml(z.loteNombre || "Lote")}</div>
+      return `<div class="nLoteCard">
+        <div style="font-size:9.5px;font-weight:800;letter-spacing:0.08em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:4px;">${escapeHtml(z.loteNombre || "Lote")}</div>
         ${productos}
       </div>`;
     })
     .join("");
 
+  // "Total a comprar" pasa de una lista plana a una tira de tarjetas tipo
+  // indicador (nombre chico arriba, número grande abajo) — es el dato que
+  // más le importa a la persona (cuánto tiene que comprar de cada cosa),
+  // así que es lo que más debe saltar a la vista en toda la hoja.
   const filasResumen = resumen
     .map(
       (r) => `
-    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;">
-      <div style="font-size:12px;color:${NUEVO_VERDE};">${escapeHtml(r.producto)}</div>
-      <div style="font-size:17px;font-weight:800;color:${NUEVO_VERDE_ACENTO};">${r.totalKg.toFixed(0)} <span style="font-size:11px;font-weight:700;">kg</span></div>
+    <div class="nTotalTile">
+      <div style="font-size:9px;font-weight:800;letter-spacing:0.07em;color:${NUEVO_MUTED};text-transform:uppercase;margin-bottom:5px;">${escapeHtml(r.producto)}</div>
+      <div style="font-size:25px;font-weight:900;color:${NUEVO_VERDE_ACENTO};line-height:1;">${r.totalKg.toFixed(0)} <span style="font-size:12px;font-weight:700;color:${NUEVO_MUTED};">kg</span></div>
     </div>`
     )
     .join("");
@@ -415,19 +427,24 @@ export function construirInformeHtmlNuevo({
      sin recuadro; se pisa con !important en vez de tocar mapa-svg.ts, que
      no hay que cambiar (lo sigue usando el informe tradicional tal cual). */
   .nMapaBloque > div { border: none !important; background: none !important; border-radius: 0 !important; }
-  .nLoteBloque { margin-bottom: 16px; break-inside: avoid; page-break-inside: avoid; }
-  /* Antes justify-content: space-between, que pegaba el total de kg contra
-     el borde derecho de la hoja, lejos de la dosis × superficie que lo
-     originan — a pedido del usuario, ahora queda pegado cerca (gap chico)
-     en vez de estirado a todo el ancho. */
+  /* Cada lote en su propia tarjeta con borde suave — antes era una lista
+     suelta sin límite visual claro entre un lote y el siguiente. */
+  .nLoteCard { background: #FFFFFF; border: 1px solid ${NUEVO_LINEA}; border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; break-inside: avoid; page-break-inside: avoid; }
+  /* justify-content: space-between pegaba el total de kg contra el borde
+     derecho de la tarjeta, lejos de la dosis × superficie que lo originan —
+     queda pegado cerca (gap chico) en vez de estirado a todo el ancho. */
   .nProductoFila { display: flex; justify-content: flex-start; align-items: baseline; gap: 18px; padding: 9px 0; }
   .nVacio { font-size: 12.5px; color: ${NUEVO_MUTED}; }
+  /* Tira de tarjetas del resumen final ("Total a comprar") — una por
+     producto, envuelve si no entran todas en una fila. */
+  .nTotalTiles { display: flex; flex-wrap: wrap; gap: 10px; }
+  .nTotalTile { flex: 1 1 150px; background: ${NUEVO_BANDA_BG}; border-radius: 10px; padding: 14px 16px; border-top: 3px solid ${NUEVO_DORADO}; }
 </style>
 </head>
 <body>
 
   <div class="nHoja nHojaMapas">
-    ${nuevoEncabezado(loteNombre, establecimientoNombre, false)}
+    ${nuevoEncabezado(loteNombre, establecimientoNombre)}
 
     ${nuevoSeccionLabel("Resultado monitoreo — Bichos bolita")}
     <div class="nMapaBloque">${mapaBichoHtml}</div>
@@ -437,7 +454,7 @@ export function construirInformeHtmlNuevo({
   </div>
 
   <div class="nHoja nHojaSegunda">
-    ${nuevoEncabezado(loteNombre, establecimientoNombre, true)}
+    ${nuevoEncabezado(loteNombre, establecimientoNombre)}
 
     ${nuevoSeccionLabel("Situación de plagas de suelo")}
     <div style="border-left:3px solid ${NUEVO_DORADO};padding:2px 0 2px 16px;font-size:12.5px;line-height:1.7;color:${NUEVO_VERDE};white-space:pre-wrap;">${escapeHtml(situacion)}</div>
@@ -448,9 +465,9 @@ export function construirInformeHtmlNuevo({
 
     ${
       resumen.length > 0
-        ? `<div style="background:${NUEVO_BANDA_BG};border-radius:6px;padding:16px 18px;margin-top:6px;">
-      <div style="font-size:9.5px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:4px;">Total a comprar</div>
-      ${filasResumen}
+        ? `<div style="margin-top:8px;">
+      <div style="font-size:9.5px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:8px;">Total a comprar</div>
+      <div class="nTotalTiles">${filasResumen}</div>
     </div>`
         : ""
     }
