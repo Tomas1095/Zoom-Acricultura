@@ -288,10 +288,12 @@ export function construirInformeHtml({
 // Mini logo para el diseño "nuevo" — mismos paths/colores que LOGO_HTML,
 // pero mucho más chico y sin la columna alineada al centro (acá va al
 // lado del encabezado, no como pieza protagonista aparte).
-// Agrandado a pedido del usuario — más armónico al lado del título del
-// informe (antes quedaba chico y desbalanceado contra el h1).
-const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:9px;">
-  <svg width="34" height="34" viewBox="0 0 100 100">
+// Agrandado dos veces a pedido del usuario — más armónico al lado del
+// título del informe (antes quedaba chico y desbalanceado contra el h1) y
+// después otro poco más, junto con el resto del texto de la hoja 2 (se veía
+// chico mirando el PDF en el celular).
+const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:11px;">
+  <svg width="42" height="42" viewBox="0 0 100 100">
     <circle cx="50" cy="50" r="26.5" stroke="${LOGO_VERDE}" stroke-width="11" fill="none" />
     <line x1="50" y1="23.5" x2="50" y2="6" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
     <line x1="50" y1="76.5" x2="50" y2="94" stroke="${LOGO_VERDE}" stroke-width="11" stroke-linecap="round" />
@@ -302,8 +304,8 @@ const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:9px;">
     <path d="M 29.30 81.87 L 27.26 80.45 L 25.32 78.90 L 23.48 77.22 L 21.76 75.43 L 20.16 73.53 L 18.68 71.52 L 17.34 69.43 L 16.14 67.25 L 15.09 65.00 L 14.18 62.68 L 13.43 60.31 L 12.83 57.90" stroke="${LOGO_NARANJA}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
   </svg>
   <div style="line-height:1;">
-    <div style="font-size:19px;font-weight:900;letter-spacing:-0.3px;color:${LOGO_VERDE};">ZOOM</div>
-    <div style="font-size:7.5px;font-weight:700;letter-spacing:0.5px;color:${LOGO_VERDE};margin-top:2px;">AGRICULTURA</div>
+    <div style="font-size:23px;font-weight:900;letter-spacing:-0.3px;color:${LOGO_VERDE};">ZOOM</div>
+    <div style="font-size:9px;font-weight:700;letter-spacing:0.5px;color:${LOGO_VERDE};margin-top:2px;">AGRICULTURA</div>
   </div>
 </div>`;
 
@@ -314,13 +316,19 @@ const NUEVO_MUTED = "#7A6F52";
 const NUEVO_LINEA = "#E4DEC9";
 const NUEVO_BANDA_BG = "#F4F8F4";
 
-function nuevoSeccionLabel(texto: string): string {
+// `grande`: variante un poco más grande, solo para los dos títulos de la
+// hoja 2 ("Situación de plagas de suelo" / "Recomendación de aplicación de
+// cebo") — a pedido del usuario, todo el contenido de esa hoja de ahí para
+// abajo sube de tamaño en las mismas proporciones; los títulos de la hoja 1
+// ("Resultado monitoreo — ...") quedan como estaban.
+function nuevoSeccionLabel(texto: string, grande = false): string {
   // Sin la línea horizontal al lado del texto (a pedido del usuario) — solo
   // el rombo dorado + el texto, ya se distingue bien con el uppercase y el
   // letter-spacing, no hacía falta la línea de relleno.
-  return `<div style="display:flex;align-items:center;gap:9px;margin:26px 0 14px;">
-    <div style="width:7px;height:7px;background:${NUEVO_DORADO};transform:rotate(45deg);flex-shrink:0;"></div>
-    <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:${NUEVO_VERDE};text-transform:uppercase;white-space:nowrap;">${texto}</div>
+  const dot = grande ? 8 : 7;
+  return `<div style="display:flex;align-items:center;gap:${grande ? 10 : 9}px;margin:${grande ? 28 : 26}px 0 ${grande ? 16 : 14}px;">
+    <div style="width:${dot}px;height:${dot}px;background:${NUEVO_DORADO};transform:rotate(45deg);flex-shrink:0;"></div>
+    <div style="font-size:${grande ? 13 : 11}px;font-weight:800;letter-spacing:0.12em;color:${NUEVO_VERDE};text-transform:uppercase;white-space:nowrap;">${texto}</div>
   </div>`;
 }
 
@@ -375,16 +383,16 @@ export function construirInformeHtmlNuevo({
         .map(
           (p, i) => `
       <div class="nProductoFila" style="${i > 0 ? `border-top:1px dashed ${NUEVO_LINEA};` : ""}">
-        <div style="display:flex;align-items:baseline;gap:10px;min-width:0;">
-          <div style="font-size:12.5px;font-weight:700;color:${NUEVO_VERDE};white-space:nowrap;">${escapeHtml(p.producto)}</div>
-          <div style="font-size:10.5px;color:${NUEVO_MUTED};white-space:nowrap;">${p.dosis || "0"} kg/ha × ${p.superficie || "0"} ha</div>
+        <div style="display:flex;align-items:baseline;gap:11px;min-width:0;">
+          <div style="font-size:14.5px;font-weight:700;color:${NUEVO_VERDE};white-space:nowrap;">${escapeHtml(p.producto)}</div>
+          <div style="font-size:12px;color:${NUEVO_MUTED};white-space:nowrap;">${p.dosis || "0"} kg/ha × ${p.superficie || "0"} ha</div>
         </div>
-        <div style="font-size:15px;font-weight:800;color:${NUEVO_VERDE_ACENTO};white-space:nowrap;">${kgDeProducto(p).toFixed(0)} <span style="font-size:10px;font-weight:700;">kg</span></div>
+        <div style="font-size:17px;font-weight:800;color:${NUEVO_VERDE_ACENTO};white-space:nowrap;">${kgDeProducto(p).toFixed(0)} <span style="font-size:11px;font-weight:700;">kg</span></div>
       </div>`
         )
         .join("");
       return `<div class="nLoteCard">
-        <div style="font-size:9.5px;font-weight:800;letter-spacing:0.08em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:4px;">${escapeHtml(z.loteNombre || "Lote")}</div>
+        <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:5px;">${escapeHtml(z.loteNombre || "Lote")}</div>
         ${productos}
       </div>`;
     })
@@ -398,8 +406,8 @@ export function construirInformeHtmlNuevo({
     .map(
       (r) => `
     <div class="nTotalTile">
-      <div style="font-size:9px;font-weight:800;letter-spacing:0.07em;color:${NUEVO_MUTED};text-transform:uppercase;margin-bottom:5px;">${escapeHtml(r.producto)}</div>
-      <div style="font-size:25px;font-weight:900;color:${NUEVO_VERDE_ACENTO};line-height:1;">${r.totalKg.toFixed(0)} <span style="font-size:12px;font-weight:700;color:${NUEVO_MUTED};">kg</span></div>
+      <div style="font-size:10.5px;font-weight:800;letter-spacing:0.07em;color:${NUEVO_MUTED};text-transform:uppercase;margin-bottom:6px;">${escapeHtml(r.producto)}</div>
+      <div style="font-size:29px;font-weight:900;color:${NUEVO_VERDE_ACENTO};line-height:1;">${r.totalKg.toFixed(0)} <span style="font-size:13px;font-weight:700;color:${NUEVO_MUTED};">kg</span></div>
     </div>`
     )
     .join("");
@@ -429,16 +437,16 @@ export function construirInformeHtmlNuevo({
   .nMapaBloque > div { border: none !important; background: none !important; border-radius: 0 !important; }
   /* Cada lote en su propia tarjeta con borde suave — antes era una lista
      suelta sin límite visual claro entre un lote y el siguiente. */
-  .nLoteCard { background: #FFFFFF; border: 1px solid ${NUEVO_LINEA}; border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; break-inside: avoid; page-break-inside: avoid; }
+  .nLoteCard { background: #FFFFFF; border: 1px solid ${NUEVO_LINEA}; border-radius: 11px; padding: 14px 18px; margin-bottom: 12px; break-inside: avoid; page-break-inside: avoid; }
   /* justify-content: space-between pegaba el total de kg contra el borde
      derecho de la tarjeta, lejos de la dosis × superficie que lo originan —
      queda pegado cerca (gap chico) en vez de estirado a todo el ancho. */
-  .nProductoFila { display: flex; justify-content: flex-start; align-items: baseline; gap: 18px; padding: 9px 0; }
-  .nVacio { font-size: 12.5px; color: ${NUEVO_MUTED}; }
+  .nProductoFila { display: flex; justify-content: flex-start; align-items: baseline; gap: 20px; padding: 10px 0; }
+  .nVacio { font-size: 14.5px; color: ${NUEVO_MUTED}; }
   /* Tira de tarjetas del resumen final ("Total a comprar") — una por
      producto, envuelve si no entran todas en una fila. */
-  .nTotalTiles { display: flex; flex-wrap: wrap; gap: 10px; }
-  .nTotalTile { flex: 1 1 150px; background: ${NUEVO_BANDA_BG}; border-radius: 10px; padding: 14px 16px; border-top: 3px solid ${NUEVO_DORADO}; }
+  .nTotalTiles { display: flex; flex-wrap: wrap; gap: 12px; }
+  .nTotalTile { flex: 1 1 160px; background: ${NUEVO_BANDA_BG}; border-radius: 11px; padding: 16px 18px; border-top: 3px solid ${NUEVO_DORADO}; }
 </style>
 </head>
 <body>
@@ -456,17 +464,17 @@ export function construirInformeHtmlNuevo({
   <div class="nHoja nHojaSegunda">
     ${nuevoEncabezado(loteNombre, establecimientoNombre)}
 
-    ${nuevoSeccionLabel("Situación de plagas de suelo")}
-    <div style="border-left:3px solid ${NUEVO_DORADO};padding:2px 0 2px 16px;font-size:12.5px;line-height:1.7;color:${NUEVO_VERDE};white-space:pre-wrap;">${escapeHtml(situacion)}</div>
+    ${nuevoSeccionLabel("Situación de plagas de suelo", true)}
+    <div style="border-left:3px solid ${NUEVO_DORADO};padding:3px 0 3px 18px;font-size:14.5px;line-height:1.7;color:${NUEVO_VERDE};white-space:pre-wrap;">${escapeHtml(situacion)}</div>
 
-    ${nuevoSeccionLabel("Recomendación de aplicación de cebo")}
-    ${notaCebo && notaCebo.trim() ? `<div style="font-size:11.5px;font-style:italic;color:${NUEVO_MUTED};line-height:1.6;margin-bottom:14px;">${escapeHtml(notaCebo)}</div>` : ""}
+    ${nuevoSeccionLabel("Recomendación de aplicación de cebo", true)}
+    ${notaCebo && notaCebo.trim() ? `<div style="font-size:13px;font-style:italic;color:${NUEVO_MUTED};line-height:1.6;margin-bottom:16px;">${escapeHtml(notaCebo)}</div>` : ""}
     ${filasProductos || `<div class="nVacio">Sin lotes cargados.</div>`}
 
     ${
       resumen.length > 0
-        ? `<div style="margin-top:8px;">
-      <div style="font-size:9.5px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:8px;">Total a comprar</div>
+        ? `<div style="margin-top:10px;">
+      <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:9px;">Total a comprar</div>
       <div class="nTotalTiles">${filasResumen}</div>
     </div>`
         : ""
