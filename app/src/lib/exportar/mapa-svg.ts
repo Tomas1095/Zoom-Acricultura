@@ -105,7 +105,7 @@ export function construirMapaDensidadHtml(
   const filasLeyenda = rangos
     .map(
       (r, i) =>
-        `<div style="display:flex;align-items:center;gap:4px;font-size:9px;color:${colorTexto};${sombra}"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;border:0.5px solid rgba(0,0,0,0.3);background-color:${nivelColores[i]};"></span>${r.label}</div>`
+        `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:${colorTexto};${sombra}"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:0.5px solid rgba(0,0,0,0.3);background-color:${nivelColores[i]};"></span>${r.label}</div>`
     )
     .join("");
 
@@ -132,7 +132,7 @@ export function construirMapaDensidadHtml(
   return `<div style="position:relative;width:${ancho}px;height:${alto}px;background-color:#F3F7F2;border:1px solid #EDE0B8;border-radius:10px;overflow:hidden;">
     ${imgTag}
     ${svg}
-    <div style="position:absolute;top:14px;left:${ROSA_CAJA + 10}px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:12px;font-weight:800;font-style:italic;color:${colorTexto};${sombra}">Mapa de densidad poblacional</div>
+    <div style="position:absolute;top:14px;left:${ROSA_CAJA + 10}px;right:${ROSA_CAJA + 10}px;text-align:center;font-size:14px;font-weight:800;font-style:italic;color:${colorTexto};${sombra}">Mapa de densidad poblacional</div>
     <div style="position:absolute;top:18px;right:18px;width:${ROSA_CAJA}px;height:${ROSA_CAJA}px;color:${colorTexto};font-size:7px;font-weight:800;${sombra}">
       ${rosaSvg}
       <div style="position:absolute;top:0;left:0;right:0;text-align:center;">N</div>
@@ -140,9 +140,9 @@ export function construirMapaDensidadHtml(
       <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;right:0;">E</div>
       <div style="position:absolute;top:${ROSA_CAJA / 2 - 5}px;left:0;">O</div>
     </div>
-    <div style="position:absolute;bottom:18px;left:18px;max-width:55%;">
-      <div style="font-size:10px;font-weight:800;color:${colorTexto};margin-bottom:2px;${sombra}">${etiquetaLeyenda}</div>
-      <div style="display:flex;flex-direction:column;gap:2px;">${filasLeyenda}</div>
+    <div style="position:absolute;bottom:18px;left:18px;max-width:62%;">
+      <div style="font-size:12px;font-weight:800;color:${colorTexto};margin-bottom:3px;${sombra}">${etiquetaLeyenda}</div>
+      <div style="display:flex;flex-direction:column;gap:3px;">${filasLeyenda}</div>
     </div>
     <div style="position:absolute;bottom:32px;right:22px;width:${escalaGraduada.anchoTotalPx}px;">
       <div style="display:flex;">${segmentosEscala}</div>

@@ -266,7 +266,7 @@ const estTitulo = {
   // real del mapa, no corrido hacia la izquierda.
   left: ROSA_CAJA + 10,
   right: ROSA_CAJA + 10,
-  fontSize: 13,
+  fontSize: 15,
   fontWeight: "800" as const,
   fontStyle: "italic" as const,
   textAlign: "center" as const,
@@ -277,11 +277,11 @@ const estRosaN = { ...estRosaLetra, top: 0, left: 0, right: 0, textAlign: "cente
 const estRosaS = { ...estRosaLetra, bottom: 0, left: 0, right: 0, textAlign: "center" as const };
 const estRosaE = { ...estRosaLetra, top: ROSA_CAJA / 2 - 6, right: 0 };
 const estRosaO = { ...estRosaLetra, top: ROSA_CAJA / 2 - 6, left: 0 };
-const estLeyenda = { position: "absolute" as const, bottom: 8, left: 8, gap: 2, maxWidth: "55%" as const };
-const estLeyendaTitulo = { fontSize: 10, fontWeight: "800" as const, marginBottom: 2 };
-const estLeyendaFila = { flexDirection: "row" as const, alignItems: "center" as const, gap: 4 };
-const estLeyendaMuestra = { width: 9, height: 9, borderRadius: 2, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.3)" };
-const estLeyendaTexto = { fontSize: 9 };
+const estLeyenda = { position: "absolute" as const, bottom: 8, left: 8, gap: 3, maxWidth: "62%" as const };
+const estLeyendaTitulo = { fontSize: 12, fontWeight: "800" as const, marginBottom: 3 };
+const estLeyendaFila = { flexDirection: "row" as const, alignItems: "center" as const, gap: 5 };
+const estLeyendaMuestra = { width: 12, height: 12, borderRadius: 3, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.3)" };
+const estLeyendaTexto = { fontSize: 11 };
 const estEscalaWrap = { position: "absolute" as const, bottom: 22, alignItems: "flex-start" as const };
 const estEscalaBarraFila = { flexDirection: "row" as const };
 const estEscalaTexto = { fontSize: 6.5, fontWeight: "700" as const };
