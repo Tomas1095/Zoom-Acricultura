@@ -199,7 +199,13 @@ export function construirInformeHtml({
   /* La primera hoja es solo el encabezado + los dos mapas — situación y
      recomendación arrancan en la hoja siguiente, no importa cuánto sobre
      o falte de espacio en la primera. */
-  .cardMapas { page-break-after: always; break-after: page; }
+  /* margin-bottom en 0: sin nada más después en esta hoja (viene el salto
+     forzado), ese margen no cumplía ninguna función — pero en el motor de
+     impresión real de iOS (WebKit) un margen así, justo antes de un salto
+     de página forzado, puede "sangrar" hacia la hoja siguiente como
+     espacio extra arriba (a diferencia de Chromium, que lo descarta bien).
+     Sacándolo, la hoja 2 arranca con el mismo margen superior que la 1. */
+  .cardMapas { page-break-after: always; break-after: page; margin-bottom: 0; }
   /* Con "Recomendación..." más largo (nota + varios productos + resumen)
      el motor de impresión a veces parte el bloque justo después de la
      hoja 1 — el card de "Situación..." arrancaba a renderear (se veía
