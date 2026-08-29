@@ -22,7 +22,17 @@ import { areaPoligonoM2, puntoEnPoligono, type XY } from "./geometria";
 export const UMBRAL_APLICACION_BABOSA = 4; // babosas/m² — arranque de la 2da categoría (deja afuera 0-3)
 export const UMBRAL_APLICACION_BICHO = 60; // bichos bolita/m² — arranque de la 3ra categoría (deja afuera 0-59, la 1ra y 2da combinadas)
 export const FRANJA_PROTECCION_M = 60;
+// Si el manchón queda a menos de esto del borde real del lote, se estira
+// hasta tocarlo — a pedido del usuario: una tira más angosta que esto entre
+// el manchón y el límite del lote es impráctica para aplicar cebo, mejor
+// sumarla directamente. Ver el "cierre de huecos" en calcularZonaAplicacion.
+export const DISTANCIA_CIERRE_BORDE_M = 40;
 const RASTER_RES_M = 12; // resolución de la grilla de cálculo, en metros
+// Qué tan cerca del borde real tiene que estar un vértice del contorno
+// calculado para "pegarlo" a ese borde en vez de dejar la escalera del
+// rasterizado — ver snapABorde. Un poco más que un lado de celda, para
+// atrapar los pocos escalones que puede haber justo contra el límite.
+const TOLERANCIA_SNAP_BORDE_M = RASTER_RES_M * 1.5;
 
 export interface EstacionAplicacion {
   id: string;
@@ -88,6 +98,61 @@ function anguloGrilla(estaciones: EstacionAplicacion[]): number {
   const p0 = ordenada[0];
   const p1 = ordenada[ordenada.length - 1];
   return Math.atan2(p1.y - p0.y, p1.x - p0.x);
+}
+
+function proyectarEnSegmento(p: XY, a: XY, b: XY): XY {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const largo2 = dx * dx + dy * dy;
+  if (largo2 === 0) return a;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / largo2));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
+/** Distancia de un punto al lado más cercano de un perímetro (no a sus
+ * vértices nomás — a cualquier punto sobre cualquiera de sus lados), más la
+ * proyección exacta sobre ese lado. Hace falta para "cerrar huecos" contra
+ * el borde y para "pegar" el contorno calculado al borde real (ver
+ * DISTANCIA_CIERRE_BORDE_M/snapABorde) — con solo la distancia a los
+ * vértices no alcanza, el punto más cercano casi siempre cae en el medio
+ * de un lado, no justo en una esquina. */
+function distanciaAPerimetro(p: XY, perimetro: XY[]): { dist: number; proyeccion: XY } {
+  let mejorDist = Infinity;
+  let mejorProy = p;
+  for (let i = 0; i < perimetro.length; i++) {
+    const a = perimetro[i];
+    const b = perimetro[(i + 1) % perimetro.length];
+    const proy = proyectarEnSegmento(p, a, b);
+    const d = Math.hypot(p.x - proy.x, p.y - proy.y);
+    if (d < mejorDist) {
+      mejorDist = d;
+      mejorProy = proy;
+    }
+  }
+  return { dist: mejorDist, proyeccion: mejorProy };
+}
+
+/** "Pega" al borde real del lote los vértices del contorno calculado que
+ * ya están pegados contra él (a menos de `tolerancia`) — sin esto, esos
+ * tramos quedan como una escalera (aproximación del rasterizado a una
+ * línea que en general no es horizontal ni vertical respecto de la grilla
+ * de cálculo) en vez de la línea recta real del borde del lote. Después de
+ * proyectar, se vuelve a sacar los vértices que quedaron colineales o
+ * duplicados (mismo criterio que al final de trazarContornoEscalera) — el
+ * snap normalmente colapsa varios escalones en un solo segmento recto. */
+function snapABorde(loop: XY[], perimetro: XY[], tolerancia: number): XY[] {
+  const snapeado = loop.map((v) => {
+    const { dist, proyeccion } = distanciaAPerimetro(v, perimetro);
+    return dist <= tolerancia ? proyeccion : v;
+  });
+  const n = snapeado.length;
+  return snapeado.filter((b, i) => {
+    const a = snapeado[(i - 1 + n) % n];
+    const c = snapeado[(i + 1) % n];
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) return false; // duplicado que dejó el snap
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    return Math.abs(cross) > 1e-6;
+  });
 }
 
 /** Traza el contorno tipo "escalera" (bordes rectos, alineados a la grilla)
@@ -193,6 +258,44 @@ export function calcularZonaAplicacion(
     }
   }
 
+  // Cerrar huecos angostos contra el borde del lote — a pedido del usuario:
+  // si el manchón queda a menos de DISTANCIA_CIERRE_BORDE_M del borde real,
+  // se estira hasta tocarlo, para no dejar tiras muy angostas entre el
+  // manchón y el límite (imprácticas para aplicar cebo a mano).
+  //
+  // OJO acá: tiene que ser una extensión LOCAL, medida contra el manchón
+  // ORIGINAL (antes de cerrar nada) — no "pegada a la celda ya incluida
+  // más cercana", que en la primera versión de esto se armaba en cadena:
+  // apenas el manchón tocaba el borde en un punto, la franja de <40m
+  // contra el borde entero quedaba conectada consigo misma célula por
+  // célula y terminaba envolviendo TODO el perímetro del lote, no solo el
+  // sector cercano al manchón real. Con la distancia directa al manchón
+  // original (Chebyshev, mismo criterio que ya usa el cálculo de arriba)
+  // en vez de la cadena, la extensión queda acotada a lo que de verdad
+  // está cerca — un lado que roza el borde se estira hasta ahí, un lado
+  // lejano no se contagia por rodeo.
+  const incluidaOriginal = [...incluidaGrid].map((key) => {
+    const [ci, ri] = key.split(",").map(Number);
+    return { u: minU + ci * RASTER_RES_M + RASTER_RES_M / 2, v: minV + ri * RASTER_RES_M + RASTER_RES_M / 2 };
+  });
+  for (let ci = 0; ci < nCols; ci++) {
+    for (let ri = 0; ri < nRows; ri++) {
+      const key = `${ci},${ri}`;
+      if (incluidaGrid.has(key)) continue;
+      const cu = minU + ci * RASTER_RES_M + RASTER_RES_M / 2;
+      const cv = minV + ri * RASTER_RES_M + RASTER_RES_M / 2;
+      if (!puntoEnPoligono(cu, cv, perimetroR)) continue;
+      if (distanciaAPerimetro({ x: cu, y: cv }, perimetroR).dist >= DISTANCIA_CIERRE_BORDE_M) continue;
+      const cercaDelManchonOriginal = incluidaOriginal.some(
+        (o) => Math.max(Math.abs(cu - o.u), Math.abs(cv - o.v)) <= DISTANCIA_CIERRE_BORDE_M
+      );
+      if (cercaDelManchonOriginal) {
+        incluidaGrid.add(key);
+        celdasIncluidas++;
+      }
+    }
+  }
+
   // componentes conexas (flood fill 4-conexo) — cada una es un "manchón" separado
   const visitado = new Set<string>();
   const componentes: Set<string>[] = [];
@@ -225,7 +328,11 @@ export function calcularZonaAplicacion(
     for (const loopUV of contornos) {
       // volvemos del marco de celdas (índices * resolución + offset) al real (x,y)
       const enUV = loopUV.map((v) => ({ x: minU + v.x, y: minV + v.y }));
-      const enXY = enUV.map((v) => rotarPunto(v.x, v.y, theta));
+      // Pega al borde real del lote los tramos que ya quedaron pegados
+      // contra él (ver snapABorde) — antes de rotar de vuelta, en el mismo
+      // marco rotado que perimetroR.
+      const snapeado = snapABorde(enUV, perimetroR, TOLERANCIA_SNAP_BORDE_M);
+      const enXY = snapeado.map((v) => rotarPunto(v.x, v.y, theta));
       manchones.push(enXY);
     }
   }
@@ -316,10 +423,15 @@ export function combinarZonas(
     }
   }
 
+  // Mismo snap al borde real que calcularZonaAplicacion (ver snapABorde) —
+  // acá también se re-rasteriza y re-traza, así que le sale el mismo
+  // serrucho contra el límite del lote si no se pega.
   const aReal = (celdas: Set<string>): XY[][] =>
-    trazarContornoEscalera(celdas, RASTER_RES_M).map((loopUV) =>
-      loopUV.map((v) => rotarPunto(minU + v.x, minV + v.y, theta))
-    );
+    trazarContornoEscalera(celdas, RASTER_RES_M).map((loopUV) => {
+      const enUV = loopUV.map((v) => ({ x: minU + v.x, y: minV + v.y }));
+      const snapeado = snapABorde(enUV, perimetroR, TOLERANCIA_SNAP_BORDE_M);
+      return snapeado.map((v) => rotarPunto(v.x, v.y, theta));
+    });
 
   const celdaAHa = (RASTER_RES_M * RASTER_RES_M) / 10000;
   return {
