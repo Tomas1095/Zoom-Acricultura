@@ -15,6 +15,7 @@ import { Check, ChevronDown, Download, Pencil, Plus, RotateCcw, Upload, X } from
 import {
   areaManchonesHa,
   calcularZonaAplicacion,
+  combinarZonas,
   UMBRAL_APLICACION_BABOSA,
   UMBRAL_APLICACION_BICHO,
   type EstacionAplicacion,
@@ -39,7 +40,7 @@ import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaDensidad } from "./mapa-densidad";
-import { MapaManchoneo } from "./mapa-manchoneo";
+import { MapaManchoneo, type CapaManchon } from "./mapa-manchoneo";
 
 // Alto fijo — adentro de un ScrollView no tiene sentido "crecer" en alto
 // (no hay límite de pantalla que respetar), pero el ancho se mide en vivo
@@ -273,12 +274,16 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   const [pedidoExport, setPedidoExport] = useState<PedidoExport>(null);
 
   // ---------- Manchoneo ----------
-  // Una subsolapa por plaga (a pedido del usuario) — las dos funcionan
+  // Dos subsolapas por plaga (a pedido del usuario) — las dos funcionan
   // igual (mismo `calcularZonaAplicacion`), cada una con su propio valor
   // por estación y su propio umbral: el umbral de cada una deja afuera la
   // primera categoría del mapa de densidad correspondiente (0-3 en babosas,
-  // 0-59 en bicho bolita — ver los comentarios en zona-aplicacion.ts).
-  const [manchoneoPlaga, setManchoneoPlaga] = useState<"bicho" | "babosa">("bicho");
+  // 0-59 en bicho bolita — ver los comentarios en zona-aplicacion.ts). Más
+  // una tercera, "Dúo": no es una plaga más, es la superposición real entre
+  // los manchones de bicho y de babosa — el sector donde conviven las dos y
+  // hace falta el producto combinado (a diferencia de las otras dos, es
+  // calculada, no editable — ver combinarZonas/MapaManchoneo).
+  const [manchoneoVista, setManchoneoVista] = useState<"bicho" | "babosa" | "duo">("bicho");
 
   const estacionesBicho: EstacionAplicacion[] = useMemo(
     () => puntosConValores.map((p) => ({ id: p.id, x: p.x, y: p.y, linea: p.linea, puntoNum: p.puntoNum, valorM2: p.bicho })),
@@ -305,54 +310,89 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   const [manchonesManualBabosa, setManchonesManualBabosa] = useState<XY[][] | null>(null);
   const [editandoManchon, setEditandoManchon] = useState(false);
 
-  const manchonesManualActivo = manchoneoPlaga === "bicho" ? manchonesManualBicho : manchonesManualBabosa;
-  const zonaAplicacionActiva = manchoneoPlaga === "bicho" ? zonaAplicacionBicho : zonaAplicacionBabosa;
-  const umbralActivo = manchoneoPlaga === "bicho" ? UMBRAL_APLICACION_BICHO : UMBRAL_APLICACION_BABOSA;
-  const unidadActiva = manchoneoPlaga === "bicho" ? "bichos bolita/m²" : "babosas/m²";
-  const etiquetaActiva = manchoneoPlaga === "bicho" ? "Bicho bolita" : "Babosas";
-  const prefijoExportActivo = manchoneoPlaga === "bicho" ? "BB" : "BAB";
-
-  // Manchones/hectáreas que de verdad se muestran, exportan, etc.: el
-  // cálculo automático tal cual, salvo que la persona ya haya editado un
-  // vértice a mano — ahí se usa ese polígono editado, con el área recién
-  // recalculada con la fórmula exacta (no la estimación por celdas del
-  // cálculo automático). El `useMemo` es la parte que hace que el área
-  // "solo se vaya calculando si se modifica": mientras `manchonesManualActivo`
-  // sigue siendo el mismo array (nadie tocó nada), no se recalcula nada de
-  // más en cada render.
-  const manchonesActivos = manchonesManualActivo ?? zonaAplicacionActiva.manchones;
-  const haActivas = useMemo(
-    () => (manchonesManualActivo ? areaManchonesHa(manchonesManualActivo) : zonaAplicacionActiva.haIncluidas),
-    [manchonesManualActivo, zonaAplicacionActiva.haIncluidas]
+  // Manchones/hectáreas efectivos de CADA plaga (editado a mano si existe,
+  // si no el automático) — se calculan siempre los dos, no solo el de la
+  // subsolapa que se esté mirando, porque "Dúo" los necesita a ambos a la
+  // vez sin importar cuál de las otras dos subsolapas se visitó última.
+  const manchonesActivosBicho = manchonesManualBicho ?? zonaAplicacionBicho.manchones;
+  const manchonesActivosBabosa = manchonesManualBabosa ?? zonaAplicacionBabosa.manchones;
+  const haActivasBicho = useMemo(
+    () => (manchonesManualBicho ? areaManchonesHa(manchonesManualBicho) : zonaAplicacionBicho.haIncluidas),
+    [manchonesManualBicho, zonaAplicacionBicho.haIncluidas]
   );
+  const haActivasBabosa = useMemo(
+    () => (manchonesManualBabosa ? areaManchonesHa(manchonesManualBabosa) : zonaAplicacionBabosa.haIncluidas),
+    [manchonesManualBabosa, zonaAplicacionBabosa.haIncluidas]
+  );
+
+  // "Dúo" se recalcula solo cuando cambia alguno de los dos manchones de
+  // origen (editado o automático) — a pedido del usuario, SÍ tiene en
+  // cuenta las ediciones a mano de bicho/babosa si existen (ver
+  // combinarZonas, que rasteriza cualquier polígono de entrada sin
+  // importar su origen, justo para poder hacer esto).
+  const zonaCombinada = useMemo(
+    () => combinarZonas(manchonesActivosBicho, manchonesActivosBabosa, lote.perimetro, estacionesBicho, spacingM),
+    [manchonesActivosBicho, manchonesActivosBabosa, lote.perimetro, estacionesBicho, spacingM]
+  );
+
+  const manchonesManualActivo = manchoneoVista === "bicho" ? manchonesManualBicho : manchoneoVista === "babosa" ? manchonesManualBabosa : null;
+  const manchonesActivos =
+    manchoneoVista === "bicho" ? manchonesActivosBicho : manchoneoVista === "babosa" ? manchonesActivosBabosa : zonaCombinada.duo;
+  const haActivas = manchoneoVista === "bicho" ? haActivasBicho : manchoneoVista === "babosa" ? haActivasBabosa : zonaCombinada.haDuo;
+  const umbralActivo = manchoneoVista === "bicho" ? UMBRAL_APLICACION_BICHO : UMBRAL_APLICACION_BABOSA;
+  const unidadActiva = manchoneoVista === "bicho" ? "bichos bolita/m²" : "babosas/m²";
+  const etiquetaActiva = manchoneoVista === "bicho" ? "Bicho bolita" : manchoneoVista === "babosa" ? "Babosas" : "Dúo";
+  const prefijoExportActivo = manchoneoVista === "bicho" ? "BB" : manchoneoVista === "babosa" ? "BAB" : "DUO";
   const sinEstaciones = manchonesActivos.length === 0;
 
+  // Colores de contorno consistentes en toda la pestaña — bicho siempre
+  // verde, babosa siempre azul, dúo siempre naranja, así se reconoce cada
+  // uno de un vistazo tanto en su propia subsolapa como superpuestos en
+  // "Dúo".
+  const colorBicho = colors.primary;
+  const colorBabosa = colors.info;
+  const colorDuo = colors.warning;
+  const capasMapa: CapaManchon[] = useMemo(() => {
+    if (manchoneoVista === "duo") {
+      return [
+        { manchones: zonaCombinada.soloA, color: colorBicho },
+        { manchones: zonaCombinada.soloB, color: colorBabosa },
+        { manchones: zonaCombinada.duo, color: colorDuo },
+      ];
+    }
+    const color = manchoneoVista === "bicho" ? colorBicho : colorBabosa;
+    return [{ manchones: manchonesActivos, color }];
+  }, [manchoneoVista, zonaCombinada, manchonesActivos, colorBicho, colorBabosa, colorDuo]);
+
   // Sale del modo edición y limpia el estado de edición al cambiar de
-  // plaga — evita quedar "editando" un manchón que ya no se está mirando.
-  function elegirManchoneoPlaga(plaga: "bicho" | "babosa") {
-    setManchoneoPlaga(plaga);
+  // vista — evita quedar "editando" un manchón que ya no se está mirando
+  // (y en Dúo directamente no hay nada que editar, ver MapaManchoneoProps).
+  function elegirManchoneoVista(vista: "bicho" | "babosa" | "duo") {
+    setManchoneoVista(vista);
     setEditandoManchon(false);
   }
 
   // MapaManchoneo llama a esto UNA sola vez por arrastre (al soltar el
   // dedo, no en cada micro-movimiento — ver la vista previa en vivo propia
   // que tiene ese componente), así que esto corre una vez por edición real,
-  // no re-renderiza toda la pantalla en cada frame del arrastre.
+  // no re-renderiza toda la pantalla en cada frame del arrastre. Nunca se
+  // llama estando en "Dúo" (esa vista no es editable).
   //
   // La primera edición de un manchón "clona" el cálculo automático a mano
   // (`manchones` llega tal cual estaba en pantalla en ese momento) — de ahí
   // en adelante todas las ediciones parten de ese estado editado, no del
   // automático (que de otra forma pisaría los cambios en cada recálculo).
   function onEditarVerticeManchon(manchonIndex: number, verticeIndex: number, nuevo: XY) {
-    const setManual = manchoneoPlaga === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
+    const setManual = manchoneoVista === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
+    const automatico = manchoneoVista === "bicho" ? zonaAplicacionBicho.manchones : zonaAplicacionBabosa.manchones;
     setManual((actual) => {
-      const base = actual ?? zonaAplicacionActiva.manchones;
+      const base = actual ?? automatico;
       return base.map((m, i) => (i !== manchonIndex ? m : m.map((v, j) => (j !== verticeIndex ? v : nuevo))));
     });
   }
 
   function restablecerManchon() {
-    const setManual = manchoneoPlaga === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
+    const setManual = manchoneoVista === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
     setManual(null);
   }
 
@@ -604,41 +644,69 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
         <ScrollView contentContainerStyle={styles.scrollContenido}>
           <Text style={styles.hint}>
             Polígono de aplicación de cebo, uno por plaga — cada mapa se concentra en las estaciones que superan el
-            umbral, dejando afuera la categoría más baja del mapa de densidad correspondiente.
+            umbral, dejando afuera la categoría más baja del mapa de densidad correspondiente. "Dúo" muestra dónde
+            se superponen las dos, para el producto combinado.
           </Text>
 
           <View style={styles.disenoToggle}>
             <Pressable
-              style={[styles.disenoBoton, manchoneoPlaga === "bicho" && styles.disenoBotonActivo]}
-              onPress={() => elegirManchoneoPlaga("bicho")}
+              style={[styles.disenoBoton, manchoneoVista === "bicho" && styles.disenoBotonActivo]}
+              onPress={() => elegirManchoneoVista("bicho")}
             >
-              <Text style={[styles.disenoBotonTexto, manchoneoPlaga === "bicho" && styles.disenoBotonTextoActivo]}>
+              <Text style={[styles.disenoBotonTexto, manchoneoVista === "bicho" && styles.disenoBotonTextoActivo]}>
                 Bicho bolita
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.disenoBoton, manchoneoPlaga === "babosa" && styles.disenoBotonActivo]}
-              onPress={() => elegirManchoneoPlaga("babosa")}
+              style={[styles.disenoBoton, manchoneoVista === "babosa" && styles.disenoBotonActivo]}
+              onPress={() => elegirManchoneoVista("babosa")}
             >
-              <Text style={[styles.disenoBotonTexto, manchoneoPlaga === "babosa" && styles.disenoBotonTextoActivo]}>
+              <Text style={[styles.disenoBotonTexto, manchoneoVista === "babosa" && styles.disenoBotonTextoActivo]}>
                 Babosas
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.disenoBoton, manchoneoVista === "duo" && styles.disenoBotonActivo]}
+              onPress={() => elegirManchoneoVista("duo")}
+            >
+              <Text style={[styles.disenoBotonTexto, manchoneoVista === "duo" && styles.disenoBotonTextoActivo]}>
+                Dúo
               </Text>
             </Pressable>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.cardTitulo}>Manchoneo — {etiquetaActiva}</Text>
-            <Text style={styles.hint}>
-              Estaciones con ≥ {umbralActivo} {unidadActiva}, relleno de huecos entre estaciones afectadas de una
-              misma línea, y franja de protección alrededor del borde.
-            </Text>
+            {manchoneoVista === "duo" ? (
+              <View style={styles.leyendaDuo}>
+                <View style={styles.leyendaDuoFila}>
+                  <View style={[styles.leyendaDuoMuestra, { borderColor: colorBicho }]} />
+                  <Text style={styles.hint}>Solo bicho bolita</Text>
+                </View>
+                <View style={styles.leyendaDuoFila}>
+                  <View style={[styles.leyendaDuoMuestra, { borderColor: colorBabosa }]} />
+                  <Text style={styles.hint}>Solo babosas</Text>
+                </View>
+                <View style={styles.leyendaDuoFila}>
+                  <View style={[styles.leyendaDuoMuestra, { borderColor: colorDuo }]} />
+                  <Text style={styles.hint}>Dúo (las dos a la vez)</Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.hint}>
+                Estaciones con ≥ {umbralActivo} {unidadActiva}, relleno de huecos entre estaciones afectadas de una
+                misma línea, y franja de protección alrededor del borde.
+              </Text>
+            )}
 
             <View style={styles.mapaMarco}>
               <MapaManchoneo
                 perimetro={lote.perimetro}
-                manchones={manchonesActivos}
-                puntosDensidad={manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa}
-                rangos={rangosDe(manchoneoPlaga)}
+                capas={capasMapa}
+                puntosDensidad={
+                  manchoneoVista === "bicho" ? puntosDensidadBicho : manchoneoVista === "babosa" ? puntosDensidadBabosa : []
+                }
+                rangos={manchoneoVista === "babosa" ? rangosDe("babosa") : rangosDe("bicho")}
                 nivelColores={NIVEL_COLORES}
                 ancho={320}
                 alto={320}
@@ -648,7 +716,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             </View>
             <Text style={styles.hint}>Pellizcá con dos dedos para acercar el mapa.</Text>
 
-            {!sinEstaciones && (
+            {!sinEstaciones && manchoneoVista !== "duo" && (
               <View style={styles.editarFila}>
                 <Pressable style={styles.editarBtn} onPress={() => setEditandoManchon((v) => !v)}>
                   {editandoManchon ? (
@@ -679,8 +747,9 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
 
             {sinEstaciones ? (
               <Text style={styles.hint}>
-                Ninguna estación superó el umbral de {umbralActivo} {unidadActiva} — con estos datos no hace falta
-                una aplicación sectorizada.
+                {manchoneoVista === "duo"
+                  ? "No hay superposición entre los manchones de bicho bolita y babosas con estos datos — no hace falta el producto combinado."
+                  : `Ninguna estación superó el umbral de ${umbralActivo} ${unidadActiva} — con estos datos no hace falta una aplicación sectorizada.`}
               </Text>
             ) : (
               <>
@@ -980,6 +1049,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   editarTexto: { fontSize: 12, fontWeight: "700", color: colors.primaryDark },
+  leyendaDuo: { gap: 4 },
+  leyendaDuoFila: { flexDirection: "row", alignItems: "center", gap: 6 },
+  leyendaDuoMuestra: { width: 14, height: 14, borderRadius: 3, borderWidth: 2.5, backgroundColor: "transparent" },
 });
 
 interface ZonaFilaProps {

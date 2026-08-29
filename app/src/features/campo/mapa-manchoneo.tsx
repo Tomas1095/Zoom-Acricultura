@@ -26,9 +26,19 @@ export interface PuntoDensidadManchoneo {
   valor: number;
 }
 
+/** Un grupo de manchones con su propio color de contorno — normalmente una
+ * sola capa (el manchón de una plaga), pero la vista "Dúo" (ver
+ * salidas-view.tsx) pasa tres a la vez: solo bicho, solo babosa, y la
+ * superposición de las dos, cada una con su color, para poder compararlas
+ * en el mismo mapa. */
+export interface CapaManchon {
+  manchones: XY[][];
+  color: string;
+}
+
 interface MapaManchoneoProps {
   perimetro: XY[];
-  manchones: XY[][];
+  capas: CapaManchon[];
   // Mapa de densidad de fondo (mismo cálculo que MapaDensidad) — el usuario
   // necesita ver dónde está parado el manchón respecto de la densidad real,
   // no solo el contorno solo contra un fondo vacío.
@@ -37,13 +47,15 @@ interface MapaManchoneoProps {
   nivelColores: readonly string[];
   ancho: number;
   alto: number;
-  /** Modo edición: muestra los "agarres" en cada vértice de cada manchón,
-   * arrastrables con el dedo. Fuera de este modo el mapa es puramente
-   * visual, igual que antes. */
+  /** Modo edición: muestra los "agarres" en cada vértice, arrastrables con
+   * el dedo. Solo tiene efecto con una única capa (`capas.length === 1`) —
+   * no hay forma sensata de "editar" la capa Dúo, que es calculada a partir
+   * de las otras dos, no un polígono propio guardado en ningún lado. */
   editable?: boolean;
   /** Se llama UNA vez al soltar el dedo (no en cada micro-movimiento del
    * arrastre — ver el comentario largo más abajo, en VerticeArrastrable),
-   * con la posición final ya validada contra el perímetro. */
+   * con la posición final ya validada contra el perímetro. Siempre sobre
+   * `capas[0]`, la única capa editable. */
   onEditarVertice?: (manchonIndex: number, verticeIndex: number, nuevo: XY) => void;
 }
 
@@ -62,7 +74,7 @@ interface MapaManchoneoProps {
  * ya corregidas por iOS, sin ningún cálculo extra de nuestra parte. */
 export function MapaManchoneo({
   perimetro,
-  manchones,
+  capas,
   puntosDensidad,
   rangos,
   nivelColores,
@@ -92,20 +104,33 @@ export function MapaManchoneo({
     }
   }, [puntosDensidad, perimetro, rangos]);
 
+  // Edición solo con una única capa (ver el comentario en MapaManchoneoProps)
+  // — con varias (la vista Dúo) no hay agarres ni vista previa en vivo,
+  // el mapa queda puramente visual.
+  const editableDeVerdad = editable && capas.length === 1;
+
   // Vista previa en vivo del vértice que se está arrastrando ahora mismo —
   // vive ACÁ (no en salidas-view.tsx) a propósito: mientras dura el
   // arrastre, solo este componente (mapa chico) se vuelve a dibujar en cada
   // micro-movimiento, no toda la pantalla de Salidas con sus resúmenes y
   // demás cálculos — eso era lo que hacía sentir lento el arrastre. El
   // padre (salidas-view.tsx, con `onEditarVertice`) recién se entera —y
-  // recalcula el área real— una sola vez, al soltar el dedo.
+  // recalcula el área real— una sola vez, al soltar el dedo. Siempre sobre
+  // capas[0] (la única capa editable).
   const [enVivo, setEnVivo] = useState<{ manchonIndex: number; verticeIndex: number; punto: XY } | null>(null);
-  const manchonesRender = useMemo(() => {
-    if (!enVivo) return manchones;
-    return manchones.map((m, i) =>
-      i !== enVivo.manchonIndex ? m : m.map((v, j) => (j !== enVivo.verticeIndex ? v : enVivo.punto))
+  const capasRender = useMemo(() => {
+    if (!enVivo) return capas;
+    return capas.map((capa, ci) =>
+      ci !== 0
+        ? capa
+        : {
+            ...capa,
+            manchones: capa.manchones.map((m, i) =>
+              i !== enVivo.manchonIndex ? m : m.map((v, j) => (j !== enVivo.verticeIndex ? v : enVivo.punto))
+            ),
+          }
     );
-  }, [manchones, enVivo]);
+  }, [capas, enVivo]);
 
   function commit(manchonIndex: number, verticeIndex: number, punto: XY) {
     setEnVivo(null);
@@ -137,16 +162,20 @@ export function MapaManchoneo({
 
           {/* Sin relleno a propósito (fill="none") — a pedido del usuario,
               así el manchón no tapa la densidad de fondo, solo marca el
-              contorno de la zona de aplicación. */}
-          {manchonesRender.map((m, i) => (
-            <Polygon
-              key={i}
-              points={m.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
-              fill="none"
-              stroke={colors.primary}
-              strokeWidth={2.5}
-            />
-          ))}
+              contorno de la zona de aplicación. Una capa por color (ver
+              CapaManchon) — con una sola (el caso normal, Bicho/Babosas) es
+              un solo color; la vista Dúo pasa varias a la vez. */}
+          {capasRender.map((capa, ci) =>
+            capa.manchones.map((m, i) => (
+              <Polygon
+                key={`${ci}-${i}`}
+                points={m.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
+                fill="none"
+                stroke={capa.color}
+                strokeWidth={2.5}
+              />
+            ))
+          )}
 
           {perimetroPx.map((a, i) => {
             const b = perimetroPx[(i + 1) % perimetroPx.length];
@@ -156,8 +185,8 @@ export function MapaManchoneo({
           })}
         </Svg>
 
-        {editable &&
-          manchonesRender.map((m, manchonIndex) =>
+        {editableDeVerdad &&
+          capasRender[0].manchones.map((m, manchonIndex) =>
             m.map((v, verticeIndex) => (
               <VerticeArrastrable
                 key={`${manchonIndex}-${verticeIndex}`}
