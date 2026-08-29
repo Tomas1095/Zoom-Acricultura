@@ -22,17 +22,7 @@ import { areaPoligonoM2, puntoEnPoligono, type XY } from "./geometria";
 export const UMBRAL_APLICACION_BABOSA = 4; // babosas/m² — arranque de la 2da categoría (deja afuera 0-3)
 export const UMBRAL_APLICACION_BICHO = 60; // bichos bolita/m² — arranque de la 3ra categoría (deja afuera 0-59, la 1ra y 2da combinadas)
 export const FRANJA_PROTECCION_M = 60;
-// Si el manchón queda a menos de esto del borde real del lote, se estira
-// hasta tocarlo — a pedido del usuario: una tira más angosta que esto entre
-// el manchón y el límite del lote es impráctica para aplicar cebo, mejor
-// sumarla directamente. Ver el "cierre de huecos" en calcularZonaAplicacion.
-export const DISTANCIA_CIERRE_BORDE_M = 40;
 const RASTER_RES_M = 12; // resolución de la grilla de cálculo, en metros
-// Qué tan cerca del borde real tiene que estar un vértice del contorno
-// calculado para "pegarlo" a ese borde en vez de dejar la escalera del
-// rasterizado — ver snapABorde. Un poco más que un lado de celda, para
-// atrapar los pocos escalones que puede haber justo contra el límite.
-const TOLERANCIA_SNAP_BORDE_M = RASTER_RES_M * 1.5;
 
 export interface EstacionAplicacion {
   id: string;
@@ -98,124 +88,6 @@ function anguloGrilla(estaciones: EstacionAplicacion[]): number {
   const p0 = ordenada[0];
   const p1 = ordenada[ordenada.length - 1];
   return Math.atan2(p1.y - p0.y, p1.x - p0.x);
-}
-
-function proyectarEnSegmento(p: XY, a: XY, b: XY): XY {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const largo2 = dx * dx + dy * dy;
-  if (largo2 === 0) return a;
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / largo2));
-  return { x: a.x + t * dx, y: a.y + t * dy };
-}
-
-/** Distancia de un punto al lado más cercano de un perímetro (no a sus
- * vértices nomás — a cualquier punto sobre cualquiera de sus lados), más la
- * proyección exacta sobre ese lado. Hace falta para "cerrar huecos" contra
- * el borde y para "pegar" el contorno calculado al borde real (ver
- * DISTANCIA_CIERRE_BORDE_M/snapABorde) — con solo la distancia a los
- * vértices no alcanza, el punto más cercano casi siempre cae en el medio
- * de un lado, no justo en una esquina. */
-function distanciaAPerimetro(p: XY, perimetro: XY[]): { dist: number; proyeccion: XY } {
-  let mejorDist = Infinity;
-  let mejorProy = p;
-  for (let i = 0; i < perimetro.length; i++) {
-    const a = perimetro[i];
-    const b = perimetro[(i + 1) % perimetro.length];
-    const proy = proyectarEnSegmento(p, a, b);
-    const d = Math.hypot(p.x - proy.x, p.y - proy.y);
-    if (d < mejorDist) {
-      mejorDist = d;
-      mejorProy = proy;
-    }
-  }
-  return { dist: mejorDist, proyeccion: mejorProy };
-}
-
-/** "Pega" al borde real del lote los vértices del contorno calculado que
- * ya están pegados contra él (a menos de `tolerancia`) — sin esto, esos
- * tramos quedan como una escalera (aproximación del rasterizado a una
- * línea que en general no es horizontal ni vertical respecto de la grilla
- * de cálculo) en vez de la línea recta real del borde del lote. Después de
- * proyectar, se vuelve a sacar los vértices que quedaron colineales o
- * duplicados (mismo criterio que al final de trazarContornoEscalera) — el
- * snap normalmente colapsa varios escalones en un solo segmento recto. */
-function snapABorde(loop: XY[], perimetro: XY[], tolerancia: number): XY[] {
-  const snapeado = loop.map((v) => {
-    const { dist, proyeccion } = distanciaAPerimetro(v, perimetro);
-    return dist <= tolerancia ? proyeccion : v;
-  });
-  const n = snapeado.length;
-  return snapeado.filter((b, i) => {
-    const a = snapeado[(i - 1 + n) % n];
-    const c = snapeado[(i + 1) % n];
-    if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) return false; // duplicado que dejó el snap
-    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
-    return Math.abs(cross) > 1e-6;
-  });
-}
-
-function vecindad(ci: number, ri: number, radioCeldas: number): Array<[number, number]> {
-  const v: Array<[number, number]> = [];
-  for (let dci = -radioCeldas; dci <= radioCeldas; dci++) {
-    for (let dri = -radioCeldas; dri <= radioCeldas; dri++) {
-      if (dci !== 0 || dri !== 0) v.push([ci + dci, ri + dri]);
-    }
-  }
-  return v;
-}
-
-/** Erosión morfológica: una celda sobrevive solo si TODAS las celdas
- * dentro de `radioCeldas` (un cuadrado, no solo las 8 vecinas inmediatas)
- * también están incluidas — cualquier "diente" más angosto que el kernel
- * (que no tiene un núcleo así de rodeado) desaparece entero, no solo se
- * achica. */
-function erosionar(celdas: Set<string>, radioCeldas: number): Set<string> {
-  const resultado = new Set<string>();
-  celdas.forEach((key) => {
-    const [ci, ri] = key.split(",").map(Number);
-    if (vecindad(ci, ri, radioCeldas).every(([nci, nri]) => celdas.has(`${nci},${nri}`))) resultado.add(key);
-  });
-  return resultado;
-}
-
-/** Dilatación morfológica: suma toda celda dentro de `radioCeldas` de una
- * ya incluida — vuelve a crecer lo que sacó la erosión, pero un diente que
- * ya desapareció del todo no puede "resucitar" (no queda ninguna celda
- * suya de la que crecer). Revalidada contra el lote real: una celda no
- * puede crecer para afuera del perímetro. */
-function dilatar(celdas: Set<string>, radioCeldas: number, perimetroR: XY[], minU: number, minV: number): Set<string> {
-  const resultado = new Set(celdas);
-  celdas.forEach((key) => {
-    const [ci, ri] = key.split(",").map(Number);
-    for (const [nci, nri] of vecindad(ci, ri, radioCeldas)) {
-      const nk = `${nci},${nri}`;
-      if (resultado.has(nk)) continue;
-      const cu = minU + nci * RASTER_RES_M + RASTER_RES_M / 2;
-      const cv = minV + nri * RASTER_RES_M + RASTER_RES_M / 2;
-      if (puntoEnPoligono(cu, cv, perimetroR)) resultado.add(nk);
-    }
-  });
-  return resultado;
-}
-
-/** Suaviza un manchón calculado para que quede una figura simple — a
- * pedido del usuario: tiene que poder recorrerse con una máquina, sin
- * tantas idas y vueltas. Apertura (erosión + dilatación) saca salientes
- * angostos; cierre (dilatación + erosión) tapa muescas angostas.
- *
- * El kernel (radioCeldas) NO es un tamaño fijo — se ata a `spacingM`, la
- * separación real entre estaciones: las ondulaciones que hay que sacar
- * vienen de que estaciones vecinas alternan arriba/abajo del umbral, así
- * que el kernel tiene que ser comparable a esa distancia, no al tamaño de
- * la grilla de cálculo (12m, mucho más chico que la separación real entre
- * estaciones — un kernel atado a eso no alcanzaba a limpiar nada de esta
- * escala, que es la que en la práctica mete casi todo el "recoveco"). */
-function suavizarCeldas(celdas: Set<string>, perimetroR: XY[], minU: number, minV: number, spacingM: number): Set<string> {
-  const radioCeldas = Math.max(1, Math.round((spacingM * 0.5) / RASTER_RES_M));
-  let resultado = dilatar(erosionar(celdas, radioCeldas), radioCeldas, perimetroR, minU, minV); // apertura
-  resultado = erosionar(dilatar(resultado, radioCeldas, perimetroR, minU, minV), radioCeldas); // cierre
-  return resultado;
 }
 
 /** Traza el contorno tipo "escalera" (bordes rectos, alineados a la grilla)
@@ -302,7 +174,7 @@ export function calcularZonaAplicacion(
 
   const nCols = Math.ceil((maxU - minU) / RASTER_RES_M);
   const nRows = Math.ceil((maxV - minV) / RASTER_RES_M);
-  let incluidaGrid = new Set<string>();
+  const incluidaGrid = new Set<string>();
   let celdasIncluidas = 0;
   const radioTotal = spacingM / 2 + FRANJA_PROTECCION_M;
 
@@ -316,52 +188,6 @@ export function calcularZonaAplicacion(
       );
       if (incluida) {
         incluidaGrid.add(`${ci},${ri}`);
-        celdasIncluidas++;
-      }
-    }
-  }
-
-  // Suaviza el manchón "crudo" (a pedido del usuario: la figura le quedaba
-  // muy recortada, con demasiadas idas y vueltas para poder recorrerla con
-  // una máquina) — ver suavizarCeldas. Antes de estirarlo hacia el borde
-  // (más abajo): mejor partir de una forma ya prolija, no suavizar recién
-  // después de sumarle esas tiras.
-  incluidaGrid = suavizarCeldas(incluidaGrid, perimetroR, minU, minV, spacingM);
-  celdasIncluidas = incluidaGrid.size;
-
-  // Cerrar huecos angostos contra el borde del lote — a pedido del usuario:
-  // si el manchón queda a menos de DISTANCIA_CIERRE_BORDE_M del borde real,
-  // se estira hasta tocarlo, para no dejar tiras muy angostas entre el
-  // manchón y el límite (imprácticas para aplicar cebo a mano).
-  //
-  // OJO acá: tiene que ser una extensión LOCAL, medida contra el manchón
-  // ORIGINAL (antes de cerrar nada) — no "pegada a la celda ya incluida
-  // más cercana", que en la primera versión de esto se armaba en cadena:
-  // apenas el manchón tocaba el borde en un punto, la franja de <40m
-  // contra el borde entero quedaba conectada consigo misma célula por
-  // célula y terminaba envolviendo TODO el perímetro del lote, no solo el
-  // sector cercano al manchón real. Con la distancia directa al manchón
-  // original (Chebyshev, mismo criterio que ya usa el cálculo de arriba)
-  // en vez de la cadena, la extensión queda acotada a lo que de verdad
-  // está cerca — un lado que roza el borde se estira hasta ahí, un lado
-  // lejano no se contagia por rodeo.
-  const incluidaOriginal = [...incluidaGrid].map((key) => {
-    const [ci, ri] = key.split(",").map(Number);
-    return { u: minU + ci * RASTER_RES_M + RASTER_RES_M / 2, v: minV + ri * RASTER_RES_M + RASTER_RES_M / 2 };
-  });
-  for (let ci = 0; ci < nCols; ci++) {
-    for (let ri = 0; ri < nRows; ri++) {
-      const key = `${ci},${ri}`;
-      if (incluidaGrid.has(key)) continue;
-      const cu = minU + ci * RASTER_RES_M + RASTER_RES_M / 2;
-      const cv = minV + ri * RASTER_RES_M + RASTER_RES_M / 2;
-      if (!puntoEnPoligono(cu, cv, perimetroR)) continue;
-      if (distanciaAPerimetro({ x: cu, y: cv }, perimetroR).dist >= DISTANCIA_CIERRE_BORDE_M) continue;
-      const cercaDelManchonOriginal = incluidaOriginal.some(
-        (o) => Math.max(Math.abs(cu - o.u), Math.abs(cv - o.v)) <= DISTANCIA_CIERRE_BORDE_M
-      );
-      if (cercaDelManchonOriginal) {
-        incluidaGrid.add(key);
         celdasIncluidas++;
       }
     }
@@ -399,11 +225,7 @@ export function calcularZonaAplicacion(
     for (const loopUV of contornos) {
       // volvemos del marco de celdas (índices * resolución + offset) al real (x,y)
       const enUV = loopUV.map((v) => ({ x: minU + v.x, y: minV + v.y }));
-      // Pega al borde real del lote los tramos que ya quedaron pegados
-      // contra él (ver snapABorde) — antes de rotar de vuelta, en el mismo
-      // marco rotado que perimetroR.
-      const snapeado = snapABorde(enUV, perimetroR, TOLERANCIA_SNAP_BORDE_M);
-      const enXY = snapeado.map((v) => rotarPunto(v.x, v.y, theta));
+      const enXY = enUV.map((v) => rotarPunto(v.x, v.y, theta));
       manchones.push(enXY);
     }
   }
