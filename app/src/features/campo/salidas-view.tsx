@@ -334,6 +334,11 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     setEditandoManchon(false);
   }
 
+  // MapaManchoneo llama a esto UNA sola vez por arrastre (al soltar el
+  // dedo, no en cada micro-movimiento — ver la vista previa en vivo propia
+  // que tiene ese componente), así que esto corre una vez por edición real,
+  // no re-renderiza toda la pantalla en cada frame del arrastre.
+  //
   // La primera edición de un manchón "clona" el cálculo automático a mano
   // (`manchones` llega tal cual estaba en pantalla en ese momento) — de ahí
   // en adelante todas las ediciones parten de ese estado editado, no del
@@ -632,12 +637,16 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
               <MapaManchoneo
                 perimetro={lote.perimetro}
                 manchones={manchonesActivos}
+                puntosDensidad={manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa}
+                rangos={rangosDe(manchoneoPlaga)}
+                nivelColores={NIVEL_COLORES}
                 ancho={320}
                 alto={320}
                 editable={editandoManchon}
                 onEditarVertice={onEditarVerticeManchon}
               />
             </View>
+            <Text style={styles.hint}>Pellizcá con dos dedos para acercar el mapa.</Text>
 
             {!sinEstaciones && (
               <View style={styles.editarFila}>
