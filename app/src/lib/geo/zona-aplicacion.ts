@@ -22,11 +22,6 @@ import { areaPoligonoM2, puntoEnPoligono, type XY } from "./geometria";
 export const UMBRAL_APLICACION_BABOSA = 4; // babosas/m² — arranque de la 2da categoría (deja afuera 0-3)
 export const UMBRAL_APLICACION_BICHO = 60; // bichos bolita/m² — arranque de la 3ra categoría (deja afuera 0-59, la 1ra y 2da combinadas)
 export const FRANJA_PROTECCION_M = 60;
-// Si el manchón queda a menos de esto del borde real del lote, se estira
-// hasta tocarlo — a pedido del usuario: una tira más angosta que esto entre
-// el manchón y el límite del lote es impráctica para aplicar cebo, mejor
-// sumarla directamente. Ver el "cierre de huecos" en calcularZonaAplicacion.
-export const DISTANCIA_CIERRE_BORDE_M = 40;
 const RASTER_RES_M = 12; // resolución de la grilla de cálculo, en metros
 // Qué tan cerca del borde real tiene que estar un vértice del contorno
 // calculado para "pegarlo" a ese borde en vez de dejar la escalera del
@@ -111,9 +106,8 @@ function proyectarEnSegmento(p: XY, a: XY, b: XY): XY {
 
 /** Distancia de un punto al lado más cercano de un perímetro (no a sus
  * vértices nomás — a cualquier punto sobre cualquiera de sus lados), más la
- * proyección exacta sobre ese lado. Hace falta para "cerrar huecos" contra
- * el borde y para "pegar" el contorno calculado al borde real (ver
- * DISTANCIA_CIERRE_BORDE_M/snapABorde) — con solo la distancia a los
+ * proyección exacta sobre ese lado. Hace falta para "pegar" el contorno
+ * calculado al borde real (ver snapABorde) — con solo la distancia a los
  * vértices no alcanza, el punto más cercano casi siempre cae en el medio
  * de un lado, no justo en una esquina. */
 function distanciaAPerimetro(p: XY, perimetro: XY[]): { dist: number; proyeccion: XY } {
@@ -258,44 +252,6 @@ export function calcularZonaAplicacion(
     }
   }
 
-  // Cerrar huecos angostos contra el borde del lote — a pedido del usuario:
-  // si el manchón queda a menos de DISTANCIA_CIERRE_BORDE_M del borde real,
-  // se estira hasta tocarlo, para no dejar tiras muy angostas entre el
-  // manchón y el límite (imprácticas para aplicar cebo a mano).
-  //
-  // OJO acá: tiene que ser una extensión LOCAL, medida contra el manchón
-  // ORIGINAL (antes de cerrar nada) — no "pegada a la celda ya incluida
-  // más cercana", que en la primera versión de esto se armaba en cadena:
-  // apenas el manchón tocaba el borde en un punto, la franja de <40m
-  // contra el borde entero quedaba conectada consigo misma célula por
-  // célula y terminaba envolviendo TODO el perímetro del lote, no solo el
-  // sector cercano al manchón real. Con la distancia directa al manchón
-  // original (Chebyshev, mismo criterio que ya usa el cálculo de arriba)
-  // en vez de la cadena, la extensión queda acotada a lo que de verdad
-  // está cerca — un lado que roza el borde se estira hasta ahí, un lado
-  // lejano no se contagia por rodeo.
-  const incluidaOriginal = [...incluidaGrid].map((key) => {
-    const [ci, ri] = key.split(",").map(Number);
-    return { u: minU + ci * RASTER_RES_M + RASTER_RES_M / 2, v: minV + ri * RASTER_RES_M + RASTER_RES_M / 2 };
-  });
-  for (let ci = 0; ci < nCols; ci++) {
-    for (let ri = 0; ri < nRows; ri++) {
-      const key = `${ci},${ri}`;
-      if (incluidaGrid.has(key)) continue;
-      const cu = minU + ci * RASTER_RES_M + RASTER_RES_M / 2;
-      const cv = minV + ri * RASTER_RES_M + RASTER_RES_M / 2;
-      if (!puntoEnPoligono(cu, cv, perimetroR)) continue;
-      if (distanciaAPerimetro({ x: cu, y: cv }, perimetroR).dist >= DISTANCIA_CIERRE_BORDE_M) continue;
-      const cercaDelManchonOriginal = incluidaOriginal.some(
-        (o) => Math.max(Math.abs(cu - o.u), Math.abs(cv - o.v)) <= DISTANCIA_CIERRE_BORDE_M
-      );
-      if (cercaDelManchonOriginal) {
-        incluidaGrid.add(key);
-        celdasIncluidas++;
-      }
-    }
-  }
-
   // componentes conexas (flood fill 4-conexo) — cada una es un "manchón" separado
   const visitado = new Set<string>();
   const componentes: Set<string>[] = [];
@@ -339,109 +295,6 @@ export function calcularZonaAplicacion(
 
   const haIncluidas = (celdasIncluidas * RASTER_RES_M * RASTER_RES_M) / 10000;
   return { manchones, haIncluidas, seleccionadas };
-}
-
-export interface ZonaCombinadaResultado {
-  /** Zona A sin superposición con B (ej. bicho bolita solo). */
-  soloA: XY[][];
-  /** Zona B sin superposición con A (ej. babosas sola). */
-  soloB: XY[][];
-  /** Superposición real entre A y B — el "Dúo": donde conviven las dos
-   * plagas y hace falta el producto combinado. */
-  duo: XY[][];
-  haSoloA: number;
-  haSoloB: number;
-  haDuo: number;
-}
-
-/** Combina dos manchones YA calculados (de cualquier origen — automático o
- * editado a mano, ver `manchonesA`/`manchonesB`) en tres zonas mutuamente
- * excluyentes: solo A, solo B, y la intersección ("Dúo" en la app, ver
- * salidas-view.tsx — el producto combinado que se usa cuando bicho bolita y
- * babosas conviven en el mismo sector).
- *
- * En vez de intersección/diferencia de polígonos "de verdad" (algo tipo
- * Weiler–Atherton — bastante más difícil de hacer bien con polígonos
- * cóncavos, varios manchones sueltos, y encima polígonos editados a mano
- * con formas arbitrarias), se rasteriza cada manchón contra la MISMA
- * grilla que usa `calcularZonaAplicacion` (mismo `RASTER_RES_M`, mismo
- * criterio de orientación) y las operaciones de conjunto se hacen sobre las
- * celdas — el mismo truco que ya usa el cálculo automático para el
- * flood-fill, aplicado acá a cualquier polígono de entrada sin importar su
- * origen (por eso funciona igual si `manchonesA`/`manchonesB` vienen del
- * cálculo automático o de una edición a mano). */
-export function combinarZonas(
-  manchonesA: XY[][],
-  manchonesB: XY[][],
-  perimetro: XY[],
-  estacionesParaAngulo: EstacionAplicacion[],
-  spacingM: number
-): ZonaCombinadaResultado {
-  const vacio: ZonaCombinadaResultado = { soloA: [], soloB: [], duo: [], haSoloA: 0, haSoloB: 0, haDuo: 0 };
-  if ((manchonesA.length === 0 && manchonesB.length === 0) || perimetro.length < 3) return vacio;
-
-  const theta = anguloGrilla(estacionesParaAngulo);
-  const perimetroR = perimetro.map((v) => rotarPunto(v.x, v.y, -theta));
-  const us = perimetroR.map((v) => v.x);
-  const vs = perimetroR.map((v) => v.y);
-  const minU = Math.min(...us) - FRANJA_PROTECCION_M;
-  const maxU = Math.max(...us) + FRANJA_PROTECCION_M;
-  const minV = Math.min(...vs) - FRANJA_PROTECCION_M;
-  const maxV = Math.max(...vs) + FRANJA_PROTECCION_M;
-  const nCols = Math.ceil((maxU - minU) / RASTER_RES_M);
-  const nRows = Math.ceil((maxV - minV) / RASTER_RES_M);
-
-  const celdasSoloA = new Set<string>();
-  const celdasSoloB = new Set<string>();
-  const celdasDuo = new Set<string>();
-  let nSoloA = 0;
-  let nSoloB = 0;
-  let nDuo = 0;
-
-  for (let ci = 0; ci < nCols; ci++) {
-    for (let ri = 0; ri < nRows; ri++) {
-      const cu = minU + ci * RASTER_RES_M + RASTER_RES_M / 2;
-      const cv = minV + ri * RASTER_RES_M + RASTER_RES_M / 2;
-      if (!puntoEnPoligono(cu, cv, perimetroR)) continue;
-      // Vuelve al plano x,y real para probar contra los manchones (que
-      // están en x,y sin rotar) — más simple que rotar cada manchón de
-      // entrada, que puede venir editado a mano con cualquier forma.
-      const { x: cx, y: cy } = rotarPunto(cu, cv, theta);
-      const enA = manchonesA.some((m) => puntoEnPoligono(cx, cy, m));
-      const enB = manchonesB.some((m) => puntoEnPoligono(cx, cy, m));
-      const key = `${ci},${ri}`;
-      if (enA && enB) {
-        celdasDuo.add(key);
-        nDuo++;
-      } else if (enA) {
-        celdasSoloA.add(key);
-        nSoloA++;
-      } else if (enB) {
-        celdasSoloB.add(key);
-        nSoloB++;
-      }
-    }
-  }
-
-  // Mismo snap al borde real que calcularZonaAplicacion (ver snapABorde) —
-  // acá también se re-rasteriza y re-traza, así que le sale el mismo
-  // serrucho contra el límite del lote si no se pega.
-  const aReal = (celdas: Set<string>): XY[][] =>
-    trazarContornoEscalera(celdas, RASTER_RES_M).map((loopUV) => {
-      const enUV = loopUV.map((v) => ({ x: minU + v.x, y: minV + v.y }));
-      const snapeado = snapABorde(enUV, perimetroR, TOLERANCIA_SNAP_BORDE_M);
-      return snapeado.map((v) => rotarPunto(v.x, v.y, theta));
-    });
-
-  const celdaAHa = (RASTER_RES_M * RASTER_RES_M) / 10000;
-  return {
-    soloA: aReal(celdasSoloA),
-    soloB: aReal(celdasSoloB),
-    duo: aReal(celdasDuo),
-    haSoloA: nSoloA * celdaAHa,
-    haSoloB: nSoloB * celdaAHa,
-    haDuo: nDuo * celdaAHa,
-  };
 }
 
 /** Hectáreas reales de un set de manchones — a diferencia de `haIncluidas`
