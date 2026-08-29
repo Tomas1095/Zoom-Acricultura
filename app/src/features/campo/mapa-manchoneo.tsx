@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { Check } from "lucide-react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import Svg, { Line, Polygon } from "react-native-svg";
@@ -28,12 +29,16 @@ export interface PuntoDensidadManchoneo {
 
 /** Un grupo de manchones con su propio color de contorno — normalmente una
  * sola capa (el manchón de una plaga), pero la vista "Dúo" (ver
- * salidas-view.tsx) pasa tres a la vez: solo bicho, solo babosa, y la
- * superposición de las dos, cada una con su color, para poder compararlas
- * en el mismo mapa. */
+ * salidas-view.tsx) pasa dos a la vez, una por plaga, para poder verlas y
+ * compararlas en el mismo mapa. */
 export interface CapaManchon {
   manchones: XY[][];
   color: string;
+  /** Índices (dentro de `manchones`) marcados con `colorMarcado` en vez de
+   * `color` — en la vista Dúo, los manchones que la persona tocó para
+   * decir "este va como Dúo". */
+  marcados?: Set<number>;
+  colorMarcado?: string;
 }
 
 interface MapaManchoneoProps {
@@ -47,16 +52,32 @@ interface MapaManchoneoProps {
   nivelColores: readonly string[];
   ancho: number;
   alto: number;
-  /** Modo edición: muestra los "agarres" en cada vértice, arrastrables con
-   * el dedo. Solo tiene efecto con una única capa (`capas.length === 1`) —
-   * no hay forma sensata de "editar" la capa Dúo, que es calculada a partir
-   * de las otras dos, no un polígono propio guardado en ningún lado. */
+  /** Modo edición: muestra los "agarres" en cada vértice de la capa
+   * `capaEditable`, arrastrables con el dedo. */
   editable?: boolean;
+  /** Qué capa (índice en `capas`) es la editable — por default 0. En la
+   * vista Dúo, la persona elige si está editando el manchón de bicho o el
+   * de babosa (ver salidas-view.tsx), así que puede ser cualquiera de las
+   * dos capas, no siempre la primera. */
+  capaEditable?: number;
   /** Se llama UNA vez al soltar el dedo (no en cada micro-movimiento del
    * arrastre — ver el comentario largo más abajo, en VerticeArrastrable),
    * con la posición final ya validada contra el perímetro. Siempre sobre
-   * `capas[0]`, la única capa editable. */
+   * `capas[capaEditable]`. */
   onEditarVertice?: (manchonIndex: number, verticeIndex: number, nuevo: XY) => void;
+  /** Si está definida, cada manchón de cada capa muestra una chapita
+   * tocable en su centro para marcarlo/desmarcarlo (ver `marcados` en
+   * CapaManchon) — usado en la vista "Dúo" para elegir a mano qué
+   * manchones exportar como Dúo. */
+  onTocarManchon?: (capaIndex: number, manchonIndex: number) => void;
+}
+
+function centroide(poligono: XY[]): XY {
+  const n = poligono.length || 1;
+  return {
+    x: poligono.reduce((s, p) => s + p.x, 0) / n,
+    y: poligono.reduce((s, p) => s + p.y, 0) / n,
+  };
 }
 
 /** Mapa de la zona de aplicación (manchoneo): densidad de fondo (para
@@ -81,7 +102,9 @@ export function MapaManchoneo({
   ancho,
   alto,
   editable,
+  capaEditable = 0,
   onEditarVertice,
+  onTocarManchon,
 }: MapaManchoneoProps) {
   const { toPx, escala } = useMemo(() => {
     const xs = perimetro.map((p) => p.x);
@@ -104,10 +127,7 @@ export function MapaManchoneo({
     }
   }, [puntosDensidad, perimetro, rangos]);
 
-  // Edición solo con una única capa (ver el comentario en MapaManchoneoProps)
-  // — con varias (la vista Dúo) no hay agarres ni vista previa en vivo,
-  // el mapa queda puramente visual.
-  const editableDeVerdad = editable && capas.length === 1;
+  const editableDeVerdad = editable && !!capas[capaEditable];
 
   // Vista previa en vivo del vértice que se está arrastrando ahora mismo —
   // vive ACÁ (no en salidas-view.tsx) a propósito: mientras dura el
@@ -116,12 +136,12 @@ export function MapaManchoneo({
   // demás cálculos — eso era lo que hacía sentir lento el arrastre. El
   // padre (salidas-view.tsx, con `onEditarVertice`) recién se entera —y
   // recalcula el área real— una sola vez, al soltar el dedo. Siempre sobre
-  // capas[0] (la única capa editable).
+  // capas[capaEditable].
   const [enVivo, setEnVivo] = useState<{ manchonIndex: number; verticeIndex: number; punto: XY } | null>(null);
   const capasRender = useMemo(() => {
     if (!enVivo) return capas;
     return capas.map((capa, ci) =>
-      ci !== 0
+      ci !== capaEditable
         ? capa
         : {
             ...capa,
@@ -130,7 +150,7 @@ export function MapaManchoneo({
             ),
           }
     );
-  }, [capas, enVivo]);
+  }, [capas, enVivo, capaEditable]);
 
   function commit(manchonIndex: number, verticeIndex: number, punto: XY) {
     setEnVivo(null);
@@ -164,14 +184,16 @@ export function MapaManchoneo({
               así el manchón no tapa la densidad de fondo, solo marca el
               contorno de la zona de aplicación. Una capa por color (ver
               CapaManchon) — con una sola (el caso normal, Bicho/Babosas) es
-              un solo color; la vista Dúo pasa varias a la vez. */}
+              un solo color; la vista Dúo pasa dos a la vez, una por plaga.
+              Un manchón marcado (`marcados`, ver la vista Dúo) se pinta con
+              `colorMarcado` en vez del color de su capa. */}
           {capasRender.map((capa, ci) =>
             capa.manchones.map((m, i) => (
               <Polygon
                 key={`${ci}-${i}`}
                 points={m.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
                 fill="none"
-                stroke={capa.color}
+                stroke={capa.marcados?.has(i) ? capa.colorMarcado ?? capa.color : capa.color}
                 strokeWidth={2.5}
               />
             ))
@@ -186,7 +208,7 @@ export function MapaManchoneo({
         </Svg>
 
         {editableDeVerdad &&
-          capasRender[0].manchones.map((m, manchonIndex) =>
+          capasRender[capaEditable].manchones.map((m, manchonIndex) =>
             m.map((v, verticeIndex) => (
               <VerticeArrastrable
                 key={`${manchonIndex}-${verticeIndex}`}
@@ -200,6 +222,37 @@ export function MapaManchoneo({
                 onCommit={commit}
               />
             ))
+          )}
+
+        {/* Chapita tocable en el centro de cada manchón, para marcarlo/
+            desmarcarlo como Dúo (ver onTocarManchon) — no aparece en las
+            solapas Bicho bolita/Babosas, solo en Dúo, que es quien pasa
+            este callback. */}
+        {onTocarManchon &&
+          capasRender.map((capa, ci) =>
+            capa.manchones.map((m, i) => {
+              const marcado = !!capa.marcados?.has(i);
+              const c = centroide(m);
+              const centro = toPx(c.x, c.y);
+              return (
+                <Pressable
+                  key={`chapa-${ci}-${i}`}
+                  onPress={() => onTocarManchon(ci, i)}
+                  style={[
+                    estChapa,
+                    {
+                      left: centro.left,
+                      top: centro.top,
+                      backgroundColor: marcado ? capa.colorMarcado ?? capa.color : colors.surface,
+                      borderColor: marcado ? capa.colorMarcado ?? capa.color : capa.color,
+                    },
+                  ]}
+                >
+                  {marcado && <Check size={11} color={colors.surface} />}
+                  <Text style={[estChapaTexto, { color: marcado ? colors.surface : capa.color }]}>Dúo</Text>
+                </Pressable>
+              );
+            })
           )}
       </View>
     </ScrollView>
@@ -298,3 +351,15 @@ const estVerticeVisual = {
   borderWidth: 2,
   borderColor: colors.primaryDark,
 };
+const estChapa = {
+  position: "absolute" as const,
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 3,
+  paddingVertical: 3,
+  paddingHorizontal: 7,
+  borderRadius: 20,
+  borderWidth: 1.5,
+  transform: [{ translateX: -20 }, { translateY: -10 }] as const, // centrado sobre el punto
+};
+const estChapaTexto = { fontSize: 10, fontWeight: "800" as const };
