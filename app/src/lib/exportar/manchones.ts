@@ -15,7 +15,7 @@ const GPX_HEADER =
   'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
   'xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">';
 
-export function construirGPX(manchones: XY[][], nombreLote: string, origen: LatLon): string {
+export function construirGPX(manchones: XY[][], nombreLote: string, origen: LatLon, prefijo: string): string {
   let rutas = "";
   manchones.forEach((m, i) => {
     const cerrado = [...m, m[0]];
@@ -25,12 +25,12 @@ export function construirGPX(manchones: XY[][], nombreLote: string, origen: LatL
         return `      <rtept lat="${lat.toFixed(7)}" lon="${lon.toFixed(7)}"></rtept>`;
       })
       .join("\n");
-    rutas += `  <rte>\n    <name>${escapeXml(`Manchón ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n${pts}\n  </rte>\n`;
+    rutas += `  <rte>\n    <name>${escapeXml(`${prefijo} ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n${pts}\n  </rte>\n`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>\n${GPX_HEADER}\n${rutas}</gpx>`;
 }
 
-export function construirKML(manchones: XY[][], nombreLote: string, origen: LatLon): string {
+export function construirKML(manchones: XY[][], nombreLote: string, origen: LatLon, prefijo: string): string {
   let placemarks = "";
   manchones.forEach((m, i) => {
     const cerrado = [...m, m[0]];
@@ -40,19 +40,34 @@ export function construirKML(manchones: XY[][], nombreLote: string, origen: LatL
         return `${lon.toFixed(7)},${lat.toFixed(7)},0`;
       })
       .join(" ");
-    placemarks += `  <Placemark>\n    <name>${escapeXml(`Manchón ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n    <Style><PolyStyle><color>7d3fa07b</color></PolyStyle></Style>\n    <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n  </Placemark>\n`;
+    placemarks += `  <Placemark>\n    <name>${escapeXml(`${prefijo} ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n    <Style><PolyStyle><color>7d3fa07b</color></PolyStyle></Style>\n    <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n  </Placemark>\n`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n${placemarks}</Document>\n</kml>`;
 }
 
 /** `nombreArchivo` es el nombre elegido por la persona (sin extensión, ver
- * ExportarNombreModal) — ya no se arma solo acá adentro. */
-export async function exportarGPX(manchones: XY[][], nombreLote: string, origen: LatLon, nombreArchivo: string): Promise<void> {
-  const gpx = construirGPX(manchones, nombreLote, origen);
+ * ExportarNombreModal) — ya no se arma solo acá adentro. `prefijo` es
+ * "BB" o "BAB" según la plaga activa (ver prefijoExportActivo en
+ * salidas-view.tsx) — nombra cada manchón individual dentro del archivo
+ * (ej. "BB 1 - Lote Tal"), no confundir con el nombre del archivo en sí. */
+export async function exportarGPX(
+  manchones: XY[][],
+  nombreLote: string,
+  origen: LatLon,
+  nombreArchivo: string,
+  prefijo: string
+): Promise<void> {
+  const gpx = construirGPX(manchones, nombreLote, origen, prefijo);
   await guardarYCompartirTexto(`${sanitizarNombreArchivo(nombreArchivo)}.gpx`, gpx, "application/gpx+xml");
 }
 
-export async function exportarKML(manchones: XY[][], nombreLote: string, origen: LatLon, nombreArchivo: string): Promise<void> {
-  const kml = construirKML(manchones, nombreLote, origen);
+export async function exportarKML(
+  manchones: XY[][],
+  nombreLote: string,
+  origen: LatLon,
+  nombreArchivo: string,
+  prefijo: string
+): Promise<void> {
+  const kml = construirKML(manchones, nombreLote, origen, prefijo);
   await guardarYCompartirTexto(`${sanitizarNombreArchivo(nombreArchivo)}.kml`, kml, "application/vnd.google-earth.kml+xml");
 }

@@ -413,8 +413,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
         await exportarInformePdf(html, valores.nombre);
       } else {
         const origen = inferirOrigenDesdePuntos(puntos);
-        if (pedido === "gpx") await exportarGPX(manchonesActivos, lote.nombre, origen, valores.nombre);
-        else await exportarKML(manchonesActivos, lote.nombre, origen, valores.nombre);
+        if (pedido === "gpx") await exportarGPX(manchonesActivos, lote.nombre, origen, valores.nombre, prefijoExportActivo);
+        else await exportarKML(manchonesActivos, lote.nombre, origen, valores.nombre, prefijoExportActivo);
       }
     } catch (e: any) {
       Alert.alert(`No se pudo exportar el ${pedido.toUpperCase()}`, e.message ?? String(e));
