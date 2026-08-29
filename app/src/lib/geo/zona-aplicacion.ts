@@ -155,6 +155,72 @@ function snapABorde(loop: XY[], perimetro: XY[], tolerancia: number): XY[] {
   });
 }
 
+function vecinos8(ci: number, ri: number): Array<[number, number]> {
+  const v: Array<[number, number]> = [];
+  for (let dci = -1; dci <= 1; dci++) {
+    for (let dri = -1; dri <= 1; dri++) {
+      if (dci !== 0 || dri !== 0) v.push([ci + dci, ri + dri]);
+    }
+  }
+  return v;
+}
+
+/** Erosión morfológica: una celda sobrevive solo si sus 8 vecinas TAMBIÉN
+ * están incluidas — cualquier "diente" angosto (que no tiene un núcleo
+ * rodeado de celdas propias) desaparece entero, no solo se achica. */
+function erosionar(celdas: Set<string>): Set<string> {
+  const resultado = new Set<string>();
+  celdas.forEach((key) => {
+    const [ci, ri] = key.split(",").map(Number);
+    if (vecinos8(ci, ri).every(([nci, nri]) => celdas.has(`${nci},${nri}`))) resultado.add(key);
+  });
+  return resultado;
+}
+
+/** Dilatación morfológica: suma toda celda vecina de una ya incluida —
+ * vuelve a crecer lo que sacó la erosión, pero un diente que ya
+ * desapareció del todo no puede "resucitar" (no queda ninguna celda suya
+ * de la que crecer). Revalidada contra el lote real: una celda no puede
+ * crecer para afuera del perímetro. */
+function dilatar(celdas: Set<string>, perimetroR: XY[], minU: number, minV: number): Set<string> {
+  const resultado = new Set(celdas);
+  celdas.forEach((key) => {
+    const [ci, ri] = key.split(",").map(Number);
+    for (const [nci, nri] of vecinos8(ci, ri)) {
+      const nk = `${nci},${nri}`;
+      if (resultado.has(nk)) continue;
+      const cu = minU + nci * RASTER_RES_M + RASTER_RES_M / 2;
+      const cv = minV + nri * RASTER_RES_M + RASTER_RES_M / 2;
+      if (puntoEnPoligono(cu, cv, perimetroR)) resultado.add(nk);
+    }
+  });
+  return resultado;
+}
+
+// Cuántas rondas de apertura+cierre aplicar — una sola alcanza para sacar
+// salientes/muescas de una celda (RASTER_RES_M, 12m) de ancho, que es lo
+// que más "recoveco" mete en un manchón calculado a partir de datos reales
+// (la plaga varía de estación a estación, así que el contorno "crudo" sale
+// bastante recortado). Subible si hiciera falta más adelante.
+const RONDAS_SUAVIZADO = 1;
+
+/** Suaviza un manchón calculado para que quede una figura simple — a
+ * pedido del usuario: tiene que poder recorrerse con una máquina, sin
+ * tantas idas y vueltas. Apertura (erosión + dilatación) saca salientes
+ * angostos; cierre (dilatación + erosión) tapa muescas angostas. Entre las
+ * dos, el resultado pierde el "diente a diente" del contorno crudo y
+ * queda con contornos rectos más largos — alguna escalera puede seguir
+ * quedando donde el manchón de verdad tiene un borde en diagonal respecto
+ * de la grilla, pero no la maraña de entrantes/salientes de antes. */
+function suavizarCeldas(celdas: Set<string>, perimetroR: XY[], minU: number, minV: number): Set<string> {
+  let resultado = celdas;
+  for (let i = 0; i < RONDAS_SUAVIZADO; i++) {
+    resultado = dilatar(erosionar(resultado), perimetroR, minU, minV); // apertura
+    resultado = erosionar(dilatar(resultado, perimetroR, minU, minV)); // cierre
+  }
+  return resultado;
+}
+
 /** Traza el contorno tipo "escalera" (bordes rectos, alineados a la grilla)
  * de un conjunto de celdas incluidas, simplificado juntando segmentos
  * colineales — portado tal cual de `trazarContornoEscalera`. Trabaja en el
@@ -239,7 +305,7 @@ export function calcularZonaAplicacion(
 
   const nCols = Math.ceil((maxU - minU) / RASTER_RES_M);
   const nRows = Math.ceil((maxV - minV) / RASTER_RES_M);
-  const incluidaGrid = new Set<string>();
+  let incluidaGrid = new Set<string>();
   let celdasIncluidas = 0;
   const radioTotal = spacingM / 2 + FRANJA_PROTECCION_M;
 
@@ -257,6 +323,14 @@ export function calcularZonaAplicacion(
       }
     }
   }
+
+  // Suaviza el manchón "crudo" (a pedido del usuario: la figura le quedaba
+  // muy recortada, con demasiadas idas y vueltas para poder recorrerla con
+  // una máquina) — ver suavizarCeldas. Antes de estirarlo hacia el borde
+  // (más abajo): mejor partir de una forma ya prolija, no suavizar recién
+  // después de sumarle esas tiras.
+  incluidaGrid = suavizarCeldas(incluidaGrid, perimetroR, minU, minV);
+  celdasIncluidas = incluidaGrid.size;
 
   // Cerrar huecos angostos contra el borde del lote — a pedido del usuario:
   // si el manchón queda a menos de DISTANCIA_CIERRE_BORDE_M del borde real,
