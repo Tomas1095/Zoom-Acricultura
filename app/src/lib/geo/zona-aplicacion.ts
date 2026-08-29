@@ -155,38 +155,40 @@ function snapABorde(loop: XY[], perimetro: XY[], tolerancia: number): XY[] {
   });
 }
 
-function vecinos8(ci: number, ri: number): Array<[number, number]> {
+function vecindad(ci: number, ri: number, radioCeldas: number): Array<[number, number]> {
   const v: Array<[number, number]> = [];
-  for (let dci = -1; dci <= 1; dci++) {
-    for (let dri = -1; dri <= 1; dri++) {
+  for (let dci = -radioCeldas; dci <= radioCeldas; dci++) {
+    for (let dri = -radioCeldas; dri <= radioCeldas; dri++) {
       if (dci !== 0 || dri !== 0) v.push([ci + dci, ri + dri]);
     }
   }
   return v;
 }
 
-/** Erosión morfológica: una celda sobrevive solo si sus 8 vecinas TAMBIÉN
- * están incluidas — cualquier "diente" angosto (que no tiene un núcleo
- * rodeado de celdas propias) desaparece entero, no solo se achica. */
-function erosionar(celdas: Set<string>): Set<string> {
+/** Erosión morfológica: una celda sobrevive solo si TODAS las celdas
+ * dentro de `radioCeldas` (un cuadrado, no solo las 8 vecinas inmediatas)
+ * también están incluidas — cualquier "diente" más angosto que el kernel
+ * (que no tiene un núcleo así de rodeado) desaparece entero, no solo se
+ * achica. */
+function erosionar(celdas: Set<string>, radioCeldas: number): Set<string> {
   const resultado = new Set<string>();
   celdas.forEach((key) => {
     const [ci, ri] = key.split(",").map(Number);
-    if (vecinos8(ci, ri).every(([nci, nri]) => celdas.has(`${nci},${nri}`))) resultado.add(key);
+    if (vecindad(ci, ri, radioCeldas).every(([nci, nri]) => celdas.has(`${nci},${nri}`))) resultado.add(key);
   });
   return resultado;
 }
 
-/** Dilatación morfológica: suma toda celda vecina de una ya incluida —
- * vuelve a crecer lo que sacó la erosión, pero un diente que ya
- * desapareció del todo no puede "resucitar" (no queda ninguna celda suya
- * de la que crecer). Revalidada contra el lote real: una celda no puede
- * crecer para afuera del perímetro. */
-function dilatar(celdas: Set<string>, perimetroR: XY[], minU: number, minV: number): Set<string> {
+/** Dilatación morfológica: suma toda celda dentro de `radioCeldas` de una
+ * ya incluida — vuelve a crecer lo que sacó la erosión, pero un diente que
+ * ya desapareció del todo no puede "resucitar" (no queda ninguna celda
+ * suya de la que crecer). Revalidada contra el lote real: una celda no
+ * puede crecer para afuera del perímetro. */
+function dilatar(celdas: Set<string>, radioCeldas: number, perimetroR: XY[], minU: number, minV: number): Set<string> {
   const resultado = new Set(celdas);
   celdas.forEach((key) => {
     const [ci, ri] = key.split(",").map(Number);
-    for (const [nci, nri] of vecinos8(ci, ri)) {
+    for (const [nci, nri] of vecindad(ci, ri, radioCeldas)) {
       const nk = `${nci},${nri}`;
       if (resultado.has(nk)) continue;
       const cu = minU + nci * RASTER_RES_M + RASTER_RES_M / 2;
@@ -197,27 +199,22 @@ function dilatar(celdas: Set<string>, perimetroR: XY[], minU: number, minV: numb
   return resultado;
 }
 
-// Cuántas rondas de apertura+cierre aplicar — una sola alcanza para sacar
-// salientes/muescas de una celda (RASTER_RES_M, 12m) de ancho, que es lo
-// que más "recoveco" mete en un manchón calculado a partir de datos reales
-// (la plaga varía de estación a estación, así que el contorno "crudo" sale
-// bastante recortado). Subible si hiciera falta más adelante.
-const RONDAS_SUAVIZADO = 1;
-
 /** Suaviza un manchón calculado para que quede una figura simple — a
  * pedido del usuario: tiene que poder recorrerse con una máquina, sin
  * tantas idas y vueltas. Apertura (erosión + dilatación) saca salientes
- * angostos; cierre (dilatación + erosión) tapa muescas angostas. Entre las
- * dos, el resultado pierde el "diente a diente" del contorno crudo y
- * queda con contornos rectos más largos — alguna escalera puede seguir
- * quedando donde el manchón de verdad tiene un borde en diagonal respecto
- * de la grilla, pero no la maraña de entrantes/salientes de antes. */
-function suavizarCeldas(celdas: Set<string>, perimetroR: XY[], minU: number, minV: number): Set<string> {
-  let resultado = celdas;
-  for (let i = 0; i < RONDAS_SUAVIZADO; i++) {
-    resultado = dilatar(erosionar(resultado), perimetroR, minU, minV); // apertura
-    resultado = erosionar(dilatar(resultado, perimetroR, minU, minV)); // cierre
-  }
+ * angostos; cierre (dilatación + erosión) tapa muescas angostas.
+ *
+ * El kernel (radioCeldas) NO es un tamaño fijo — se ata a `spacingM`, la
+ * separación real entre estaciones: las ondulaciones que hay que sacar
+ * vienen de que estaciones vecinas alternan arriba/abajo del umbral, así
+ * que el kernel tiene que ser comparable a esa distancia, no al tamaño de
+ * la grilla de cálculo (12m, mucho más chico que la separación real entre
+ * estaciones — un kernel atado a eso no alcanzaba a limpiar nada de esta
+ * escala, que es la que en la práctica mete casi todo el "recoveco"). */
+function suavizarCeldas(celdas: Set<string>, perimetroR: XY[], minU: number, minV: number, spacingM: number): Set<string> {
+  const radioCeldas = Math.max(1, Math.round((spacingM * 0.5) / RASTER_RES_M));
+  let resultado = dilatar(erosionar(celdas, radioCeldas), radioCeldas, perimetroR, minU, minV); // apertura
+  resultado = erosionar(dilatar(resultado, radioCeldas, perimetroR, minU, minV), radioCeldas); // cierre
   return resultado;
 }
 
@@ -329,7 +326,7 @@ export function calcularZonaAplicacion(
   // una máquina) — ver suavizarCeldas. Antes de estirarlo hacia el borde
   // (más abajo): mejor partir de una forma ya prolija, no suavizar recién
   // después de sumarle esas tiras.
-  incluidaGrid = suavizarCeldas(incluidaGrid, perimetroR, minU, minV);
+  incluidaGrid = suavizarCeldas(incluidaGrid, perimetroR, minU, minV, spacingM);
   celdasIncluidas = incluidaGrid.size;
 
   // Cerrar huecos angostos contra el borde del lote — a pedido del usuario:
