@@ -362,7 +362,11 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     if (pedido === "pdf") {
       return `Informe monitoreo de plagas ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
     }
-    return `${prefijoExportActivo} Lote ${lote.nombre} ${haActivas.toFixed(1)} Ha`;
+    // BB/BAB, lote, establecimiento (si hay) y superficie con coma decimal
+    // (24,1 Ha, no 24.1) — a pedido del usuario, mismo criterio "es
+    // castellano" que ya usa el resto de la app.
+    const superficie = haActivas.toFixed(1).replace(".", ",");
+    return `${prefijoExportActivo} Lote ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""} ${superficie} Ha`;
   }
 
   async function confirmarExport(valores: Record<string, string>) {
