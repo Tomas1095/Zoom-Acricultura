@@ -16,7 +16,7 @@
       "package": "com.zoomagricultura.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#14231A",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -31,7 +31,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#14231A",
+          "backgroundColor": "#FFFFFF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 180
         }
