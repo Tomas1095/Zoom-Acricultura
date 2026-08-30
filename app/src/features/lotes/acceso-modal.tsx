@@ -5,6 +5,7 @@ import { Check } from "lucide-react-native";
 import * as db from "@/lib/db/lotes";
 import { fetchUsuarios } from "@/lib/db/equipo";
 import { etiquetaRol } from "@/lib/roles";
+import { useAuth } from "@/lib/auth-context";
 import type { Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
 
@@ -16,14 +17,16 @@ interface AccesoModalProps {
 /** Quién ve/carga este lote — lo administra el jefe/encargado. Portado de
  * "toggleAcceso" del prototipo. */
 export function AccesoModal({ lote, onCerrar }: AccesoModalProps) {
+  const { usuario: yo } = useAuth();
   const [cargando, setCargando] = useState(true);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    if (!yo) return;
     (async () => {
       try {
-        const [todosLosUsuarios, accesos] = await Promise.all([fetchUsuarios(), db.fetchAccesos(lote.id)]);
+        const [todosLosUsuarios, accesos] = await Promise.all([fetchUsuarios(yo.comunidadId), db.fetchAccesos(lote.id)]);
         setUsuarios(todosLosUsuarios.filter((u) => u.rol === "monitoreador" && u.activo));
         setSeleccionados(new Set(accesos));
       } catch (e: any) {
@@ -32,7 +35,7 @@ export function AccesoModal({ lote, onCerrar }: AccesoModalProps) {
         setCargando(false);
       }
     })();
-  }, [lote.id]);
+  }, [lote.id, yo]);
 
   async function toggle(usuarioId: string) {
     const tenia = seleccionados.has(usuarioId);

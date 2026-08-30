@@ -65,7 +65,9 @@ export function ArbolLotes() {
     let arbol: db.Arbol;
     try {
       if (!(await hayConexion())) throw new Error("Sin conexión");
-      const [arbolLive, todosLosUsuarios] = await conTimeout(Promise.all([db.fetchArbol(), fetchUsuarios()]));
+      const [arbolLive, todosLosUsuarios] = await conTimeout(
+        Promise.all([db.fetchArbol(), fetchUsuarios(usuario.comunidadId)])
+      );
       arbol = arbolLive;
       setClientes(arbol.clientes);
       setEstablecimientos(arbol.establecimientos);

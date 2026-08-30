@@ -172,6 +172,7 @@ export default function PuntoScreen() {
   }
 
   const refrescar = useCallback(async () => {
+    if (!usuario) return;
     try {
       // Chequeo rápido antes de intentar nada — si no hay señal, ni tiene
       // sentido esperar a que el fetch se dé por vencido solo (eso puede
@@ -179,7 +180,7 @@ export default function PuntoScreen() {
       // lib/offline/net.ts.
       if (!(await hayConexion())) throw new Error("Sin conexión");
       const [l, puntos, usuarios] = await conTimeout(
-        Promise.all([fetchLote(loteId), fetchPuntosDeLote(loteId), fetchUsuarios()])
+        Promise.all([fetchLote(loteId), fetchPuntosDeLote(loteId), fetchUsuarios(usuario.comunidadId)])
       );
       setLote(l);
       const [linea, puntoNum] = etiqueta.split(".").map(Number);
@@ -212,7 +213,7 @@ export default function PuntoScreen() {
     } finally {
       setCargando(false);
     }
-  }, [loteId, etiqueta]);
+  }, [loteId, etiqueta, usuario]);
 
   useEffect(() => {
     refrescar();

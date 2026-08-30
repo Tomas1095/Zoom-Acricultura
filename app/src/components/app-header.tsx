@@ -2,6 +2,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RefreshCw } from "lucide-react-native";
 
+import { useAuth } from "@/lib/auth-context";
 import { useSync } from "@/lib/sync-context";
 import { ZoomLogo } from "./zoom-logo";
 
@@ -24,11 +25,17 @@ interface AppHeaderProps {
 export function AppHeader({ loteNombre }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
   const { pendientes, sincronizando, sincronizarAhora } = useSync();
+  // El nombre de la propia comunidad (ver lib/auth-context.tsx) — antes
+  // decía "Zoom Agricultura" fijo, como el prototipo (NOMBRE_COMUNIDAD);
+  // ahora que puede haber más de una comunidad, cada quien ve la suya.
+  // "Zoom Agricultura" queda como respaldo (mientras carga, o algún caso
+  // borde sin comunidad resuelta todavía) — es la comunidad real de hoy.
+  const { comunidad } = useAuth();
   return (
     <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
       <View>
         <Text style={styles.eyebrow}>MONITOREO DE PLAGAS</Text>
-        <Text style={styles.titulo}>Zoom Agricultura</Text>
+        <Text style={styles.titulo}>{comunidad?.nombre ?? "Zoom Agricultura"}</Text>
         <View style={styles.rule} />
         {loteNombre && <Text style={styles.loteNombre}>{loteNombre}</Text>}
         {pendientes > 0 && (

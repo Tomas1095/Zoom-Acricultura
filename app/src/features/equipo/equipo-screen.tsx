@@ -20,15 +20,16 @@ export function EquipoScreen() {
   const [generando, setGenerando] = useState(false);
 
   const refrescar = useCallback(async () => {
+    if (!yo) return;
     try {
-      const usuarios = await db.fetchUsuarios();
+      const usuarios = await db.fetchUsuarios(yo.comunidadId);
       setMiembros(usuarios.filter((u) => u.activo));
     } catch (e: any) {
       Alert.alert("No se pudo cargar el equipo", e.message ?? String(e));
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [yo]);
 
   useEffect(() => {
     refrescar();

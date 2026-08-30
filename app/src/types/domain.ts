@@ -15,11 +15,29 @@ export type Rol = "socio_fundador" | "socio_gerente" | "encargado" | "monitoread
 export interface Usuario {
   id: string;
   authUserId: string; // FK a auth.users(id) de Supabase
+  comunidadId: string;
   nombre: string;
   mail: string;
   color: string; // hex, para identificar al usuario en el mapa/conflictos
-  rol: Rol;
+  rol: Rol; // POR comunidad — ver adminPlataforma para lo que cruza comunidades
   activo: boolean;
+  // Aparte de `rol`: administra la plataforma entera (aprueba/rechaza
+  // comunidades nuevas, ver Comunidad más abajo) — hoy solo el usuario
+  // original de Zoom Agricultura.
+  adminPlataforma: boolean;
+  createdAt: string;
+}
+
+/** Multi-tenant: cada empresa de monitoreo que usa la app es una comunidad
+ * aislada de las demás (ver supabase/schema.sql). Alta de una comunidad
+ * nueva NO es self-service — nace "pendiente" y un admin de plataforma la
+ * aprueba o rechaza (ver lib/db/comunidades.ts). */
+export interface Comunidad {
+  id: string;
+  nombre: string;
+  estado: "pendiente" | "activa" | "rechazada";
+  creadaPorId: string | null;
+  aprobadaPorId: string | null;
   createdAt: string;
 }
 

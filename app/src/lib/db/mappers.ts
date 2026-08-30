@@ -1,6 +1,6 @@
 // Conversión fila de Postgres (snake_case) -> tipo de dominio (camelCase).
 // Centralizado acá para no repetirlo en cada archivo de queries.
-import type { Cliente, Establecimiento, Invitacion, Lote, PuntoGeo, Usuario } from "@/types/domain";
+import type { Cliente, Comunidad, Establecimiento, Invitacion, Lote, PuntoGeo, Usuario } from "@/types/domain";
 
 export function filaACliente(f: any): Cliente {
   return { id: f.id, nombre: f.nombre };
@@ -28,11 +28,24 @@ export function filaAUsuario(f: any): Usuario {
   return {
     id: f.id,
     authUserId: f.auth_user_id,
+    comunidadId: f.comunidad_id,
     nombre: f.nombre,
     mail: f.mail,
     color: f.color,
     rol: f.rol,
     activo: f.activo,
+    adminPlataforma: f.admin_plataforma,
+    createdAt: f.created_at,
+  };
+}
+
+export function filaAComunidad(f: any): Comunidad {
+  return {
+    id: f.id,
+    nombre: f.nombre,
+    estado: f.estado,
+    creadaPorId: f.creada_por_id,
+    aprobadaPorId: f.aprobada_por_id,
     createdAt: f.created_at,
   };
 }

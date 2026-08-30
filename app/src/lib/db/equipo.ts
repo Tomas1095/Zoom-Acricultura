@@ -2,8 +2,15 @@ import { supabase } from "@/lib/supabase";
 import type { Invitacion, Usuario } from "@/types/domain";
 import { filaAInvitacion, filaAUsuario } from "./mappers";
 
-export async function fetchUsuarios(): Promise<Usuario[]> {
-  const { data, error } = await supabase.from("usuarios").select("*").order("nombre");
+/** `comunidadId` filtra explícito el lado del cliente aunque RLS ya lo
+ * haga para la mayoría — para quien administra la plataforma entera (ver
+ * adminPlataforma en Usuario) RLS deja ver usuarios de CUALQUIER comunidad
+ * (necesario para revisar solicitudes, ver lib/db/comunidades.ts), así que
+ * sin este filtro "Mi equipo" le mostraría gente de otras comunidades
+ * también. Para cualquier otra persona este filtro no cambia nada (RLS ya
+ * le devolvía solo su propia comunidad). */
+export async function fetchUsuarios(comunidadId: string): Promise<Usuario[]> {
+  const { data, error } = await supabase.from("usuarios").select("*").eq("comunidad_id", comunidadId).order("nombre");
   if (error) throw error;
   return (data ?? []).map(filaAUsuario);
 }

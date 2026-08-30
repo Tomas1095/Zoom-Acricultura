@@ -17,14 +17,16 @@ import { StatusBar } from "expo-status-bar";
 
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
+import { solicitarComunidad } from "@/lib/db/comunidades";
 import { ZoomLogo } from "@/components/zoom-logo";
 import { colors } from "@/theme/colors";
 
-type Modo = "ingresar" | "unirse" | "recuperar-pedir" | "recuperar-confirmar";
+type Modo = "ingresar" | "unirse" | "crear-comunidad" | "recuperar-pedir" | "recuperar-confirmar";
 
 const TITULOS: Record<Modo, string> = {
   ingresar: "Iniciar sesión",
   unirse: "Unirme al equipo",
+  "crear-comunidad": "Crear una comunidad nueva",
   "recuperar-pedir": "Recuperar contraseña",
   "recuperar-confirmar": "Elegir nueva contraseña",
 };
@@ -43,20 +45,27 @@ const TITULOS: Record<Modo, string> = {
  * eso: la persona lo escribe a mano en la app, como un segundo factor,
  * sin depender de ningún link ni esquema de URL. */
 export default function LoginScreen() {
-  const { session, usuario, refrescarUsuario } = useAuth();
+  const { session, usuario, comunidad, refrescarUsuario } = useAuth();
   const insets = useSafeAreaInsets();
   const [modo, setModo] = useState<Modo>("ingresar");
   const [mail, setMail] = useState("");
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
   const [codigo, setCodigo] = useState("");
+  const [nombreComunidad, setNombreComunidad] = useState("");
   const [codigoRecuperacion, setCodigoRecuperacion] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [cargando, setCargando] = useState(false);
 
   // Ya hay sesión + perfil resuelto (p. ej. volviste de canjear el código,
-  // o recién cambiaste tu contraseña) → afuera.
-  if (session && usuario) return <Redirect href="/(app)" />;
+  // o recién cambiaste tu contraseña) → afuera. Salvo que la comunidad
+  // todavía esté pendiente de aprobación (recién pedida una nueva, ver
+  // crearComunidad) — ahí a la pantalla de espera, no a la app.
+  if (session && usuario) {
+    // Falla "cerrado": hace falta una comunidad conocida y activa.
+    if (!comunidad || comunidad.estado !== "activa") return <Redirect href="/comunidad-pendiente" />;
+    return <Redirect href="/(app)" />;
+  }
 
   async function ingresar() {
     setCargando(true);
@@ -89,6 +98,38 @@ export default function LoginScreen() {
     if (rpcError) {
       setCargando(false);
       Alert.alert("Código inválido", "Revisá el código de invitación con quien te lo dio.");
+      return;
+    }
+    await refrescarUsuario();
+    setCargando(false);
+  }
+
+  /** A diferencia de "unirse con código", esto NO deja entrar de una — la
+   * comunidad nace "pendiente" y hay que esperar a que el administrador de
+   * la plataforma la apruebe (a pedido explícito del usuario, ver
+   * lib/db/comunidades.ts). Quien la pide ya queda con la cuenta creada
+   * (Socio Fundador de esa comunidad), pero refrescarUsuario() la manda a
+   * la pantalla de espera, no adentro — ver el chequeo de arriba. */
+  async function crearComunidad() {
+    if (!nombre.trim() || !mail.trim() || !password || !nombreComunidad.trim()) {
+      Alert.alert("Faltan datos", "Completá tu nombre, el nombre de la comunidad, mail y contraseña.");
+      return;
+    }
+    setCargando(true);
+    const { error: signUpError } = await supabase.auth.signUp({
+      email: mail.trim().toLowerCase(),
+      password,
+    });
+    if (signUpError) {
+      setCargando(false);
+      Alert.alert("No se pudo crear la cuenta", signUpError.message);
+      return;
+    }
+    try {
+      await solicitarComunidad(nombreComunidad, nombre);
+    } catch (e: any) {
+      setCargando(false);
+      Alert.alert("No se pudo enviar la solicitud", e.message ?? String(e));
       return;
     }
     await refrescarUsuario();
@@ -148,6 +189,7 @@ export default function LoginScreen() {
     setModo("ingresar");
     setPassword("");
     setCodigo("");
+    setNombreComunidad("");
     setCodigoRecuperacion("");
     setNuevaClave("");
   }
@@ -157,18 +199,22 @@ export default function LoginScreen() {
       ? ingresar
       : modo === "unirse"
         ? unirseConCodigo
-        : modo === "recuperar-pedir"
-          ? enviarCodigoRecuperacion
-          : confirmarNuevaClave;
+        : modo === "crear-comunidad"
+          ? crearComunidad
+          : modo === "recuperar-pedir"
+            ? enviarCodigoRecuperacion
+            : confirmarNuevaClave;
 
   const textoBoton =
     modo === "ingresar"
       ? "Ingresar"
       : modo === "unirse"
         ? "Unirme"
-        : modo === "recuperar-pedir"
-          ? "Enviarme un código"
-          : "Cambiar contraseña";
+        : modo === "crear-comunidad"
+          ? "Enviar solicitud"
+          : modo === "recuperar-pedir"
+            ? "Enviarme un código"
+            : "Cambiar contraseña";
 
   return (
     <View style={styles.pantalla}>
@@ -186,13 +232,23 @@ export default function LoginScreen() {
 
           <View style={styles.body}>
             <View style={styles.form}>
-              {modo === "unirse" && (
+              {(modo === "unirse" || modo === "crear-comunidad") && (
                 <TextInput
                   style={styles.input}
                   placeholder="Tu nombre"
                   placeholderTextColor={colors.textMuted}
                   value={nombre}
                   onChangeText={setNombre}
+                />
+              )}
+
+              {modo === "crear-comunidad" && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nombre de la comunidad (tu empresa)"
+                  placeholderTextColor={colors.textMuted}
+                  value={nombreComunidad}
+                  onChangeText={setNombreComunidad}
                 />
               )}
 
@@ -211,7 +267,7 @@ export default function LoginScreen() {
                 <Text style={styles.mailConfirmado}>Código enviado a {mail.trim()}</Text>
               )}
 
-              {(modo === "ingresar" || modo === "unirse") && (
+              {(modo === "ingresar" || modo === "unirse" || modo === "crear-comunidad") && (
                 <TextInput
                   style={styles.input}
                   placeholder="Contraseña"
@@ -267,6 +323,9 @@ export default function LoginScreen() {
               <>
                 <Pressable style={styles.botonUnirse} onPress={() => setModo("unirse")}>
                   <Text style={styles.botonUnirseTexto}>¿Sos nuevo? Unirte con un código de invitación</Text>
+                </Pressable>
+                <Pressable style={styles.volverLink} onPress={() => setModo("crear-comunidad")}>
+                  <Text style={styles.volverLinkTexto}>¿Querés armar tu propia comunidad? (requiere aprobación)</Text>
                 </Pressable>
                 <Pressable style={styles.volverLink} onPress={() => setModo("recuperar-pedir")}>
                   <Text style={styles.volverLinkTexto}>¿Olvidaste tu contraseña?</Text>
