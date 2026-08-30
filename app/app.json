@@ -8,13 +8,16 @@
     "scheme": "zoomagricultura",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/icon-ios.png",
+      "bundleIdentifier": "com.zoomagricultura.app",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.zoomagricultura.app",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#14231A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
@@ -28,15 +31,29 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#14231A",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 180
         }
       ],
       [
         "expo-notifications",
         {
           "color": "#1B8A4A"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Zoom Agricultura usa tu ubicación para mostrarte dónde estás parado dentro del lote mientras monitoreás."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Zoom Agricultura usa la cámara para sacar fotos de cada punto de monitoreo.",
+          "photosPermission": "Zoom Agricultura accede a tus fotos para adjuntar alguna ya existente a un punto de monitoreo.",
+          "microphonePermission": false
         }
       ]
     ],
