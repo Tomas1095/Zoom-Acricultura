@@ -149,9 +149,28 @@ export function EquipoScreen() {
             {!esUnoMismo && u.rol !== "socio_fundador" && (
               <View style={styles.accionesFila}>
                 {yo?.rol === "socio_fundador" && u.rol !== "socio_gerente" && (
-                  <Pressable style={styles.iconBtn} onPress={() => confirmarAscenso(u)}>
-                    <ArrowUpCircle size={18} color={colors.primary} />
-                  </Pressable>
+                  <>
+                    {/* Mismo botón toggle Encargado/Monitoreador que ya tenía
+                        Socio Gerente más abajo — al Fundador antes solo le
+                        aparecía "ascender a Socio Gerente", sin forma de
+                        categorizar en Encargado (el backend, cambiar_rol_usuario,
+                        siempre lo permitió; era solo un hueco en esta pantalla). */}
+                    <Pressable
+                      style={styles.iconBtn}
+                      onPress={() =>
+                        conManejoDeError(() =>
+                          db.cambiarRolUsuario(u.id, u.rol === "encargado" ? "monitoreador" : "encargado")
+                        )
+                      }
+                    >
+                      <Text style={styles.cambiarTexto}>
+                        {u.rol === "encargado" ? "→ Monitoreador" : "→ Encargado"}
+                      </Text>
+                    </Pressable>
+                    <Pressable style={styles.iconBtn} onPress={() => confirmarAscenso(u)}>
+                      <ArrowUpCircle size={18} color={colors.primary} />
+                    </Pressable>
+                  </>
                 )}
                 {yo?.rol === "socio_fundador" && u.rol === "socio_gerente" && (
                   <>
