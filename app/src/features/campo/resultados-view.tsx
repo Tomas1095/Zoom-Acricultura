@@ -150,7 +150,9 @@ const styles = StyleSheet.create({
   subTabTextoActivo: { color: colors.primary, borderBottomWidth: 2, borderBottomColor: colors.primary },
   datosScroll: { flex: 1, width: "100%" },
   datosContenido: { paddingTop: 4 },
-  mapasContenido: { flex: 1, width: "100%", gap: 10, alignItems: "center", justifyContent: "center" },
+  // flex-start (no "center") a pedido del usuario — que quede el espacio
+  // vacío abajo, no repartido arriba y abajo por igual.
+  mapasContenido: { flex: 1, width: "100%", gap: 10, alignItems: "center", justifyContent: "flex-start", paddingTop: 8 },
   plagaToggle: { flexDirection: "row", gap: 8 },
   plagaBoton: {
     borderWidth: 1,
