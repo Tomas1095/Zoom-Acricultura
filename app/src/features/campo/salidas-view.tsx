@@ -10,7 +10,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Check, ChevronDown, Download, Pencil, Plus, RotateCcw, Upload, X } from "lucide-react-native";
+import { Check, ChevronDown, Download, Pencil, Plus, RotateCcw, Undo2, Upload, X } from "lucide-react-native";
 
 import {
   areaManchonesHa,
@@ -313,7 +313,16 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   const [manchonesManualBabosa, setManchonesManualBabosa] = useState<XY[][] | null>(null);
   const [editandoManchon, setEditandoManchon] = useState(false);
 
+  // Pila de "deshacer" — un slot por plaga, misma idea que manchonesManual*.
+  // Cada edición de vértice apila el estado ANTERIOR a esa edición puntual
+  // (ver onEditarVerticeManchon); "Deshacer" saca el último y lo restaura,
+  // paso a paso, a diferencia de "Restablecer" que vuelve todo de una al
+  // cálculo automático original y vacía esta pila entera.
+  const [historialBicho, setHistorialBicho] = useState<XY[][][]>([]);
+  const [historialBabosa, setHistorialBabosa] = useState<XY[][][]>([]);
+
   const manchonesManualActivo = manchoneoPlaga === "bicho" ? manchonesManualBicho : manchonesManualBabosa;
+  const historialActivo = manchoneoPlaga === "bicho" ? historialBicho : historialBabosa;
   const zonaAplicacionActiva = manchoneoPlaga === "bicho" ? zonaAplicacionBicho : zonaAplicacionBabosa;
   const umbralActivo = manchoneoPlaga === "bicho" ? UMBRAL_APLICACION_BICHO : UMBRAL_APLICACION_BABOSA;
   const unidadActiva = manchoneoPlaga === "bicho" ? "bichos bolita/m²" : "babosas/m²";
@@ -353,15 +362,37 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   // automático (que de otra forma pisaría los cambios en cada recálculo).
   function onEditarVerticeManchon(manchonIndex: number, verticeIndex: number, nuevo: XY) {
     const setManual = manchoneoPlaga === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
-    setManual((actual) => {
-      const base = actual ?? zonaAplicacionActiva.manchones;
-      return base.map((m, i) => (i !== manchonIndex ? m : m.map((v, j) => (j !== verticeIndex ? v : nuevo))));
-    });
+    const setHistorial = manchoneoPlaga === "bicho" ? setHistorialBicho : setHistorialBabosa;
+    // MapaManchoneo llama a esto una sola vez por arrastre (ver el comentario
+    // de arriba), así que `manchonesManualActivo` de acá afuera ya es el
+    // estado real justo antes de este movimiento — apilarlo tal cual es lo
+    // que permite deshacer, después, exactamente este paso.
+    const base = manchonesManualActivo ?? zonaAplicacionActiva.manchones;
+    setHistorial((h) => [...h, base]);
+    setManual(base.map((m, i) => (i !== manchonIndex ? m : m.map((v, j) => (j !== verticeIndex ? v : nuevo)))));
+  }
+
+  /** Un paso atrás: saca el último estado apilado y lo restaura. Si era el
+   * único que quedaba, ese estado es el cálculo automático original (así
+   * arrancó la pila, ver onEditarVerticeManchon) — ahí se vuelve a `null`
+   * en vez de al array clonado, mismo resultado visual pero deja todo
+   * exactamente como si nunca se hubiera editado nada (oculta "Restablecer"
+   * y "Deshacer" a la vez). */
+  function deshacerManchon() {
+    if (historialActivo.length === 0) return;
+    const anterior = historialActivo[historialActivo.length - 1];
+    const historialSinUltimo = historialActivo.slice(0, -1);
+    const setManual = manchoneoPlaga === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
+    const setHistorial = manchoneoPlaga === "bicho" ? setHistorialBicho : setHistorialBabosa;
+    setHistorial(historialSinUltimo);
+    setManual(historialSinUltimo.length === 0 ? null : anterior);
   }
 
   function restablecerManchon() {
     const setManual = manchoneoPlaga === "bicho" ? setManchonesManualBicho : setManchonesManualBabosa;
+    const setHistorial = manchoneoPlaga === "bicho" ? setHistorialBicho : setHistorialBabosa;
     setManual(null);
+    setHistorial([]);
   }
 
   // Nombre por defecto de cada exportación — siempre editable desde el
@@ -684,6 +715,12 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                   )}
                   <Text style={styles.editarTexto}>{editandoManchon ? "Listo" : "Editar polígono"}</Text>
                 </Pressable>
+                {historialActivo.length > 0 && (
+                  <Pressable style={styles.editarBtn} onPress={deshacerManchon}>
+                    <Undo2 size={12} color={colors.primaryDark} />
+                    <Text style={styles.editarTexto}>Deshacer</Text>
+                  </Pressable>
+                )}
                 {manchonesManualActivo && (
                   <Pressable style={styles.editarBtn} onPress={restablecerManchon}>
                     <RotateCcw size={12} color={colors.primaryDark} />
@@ -1015,7 +1052,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   botonExportTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark },
-  editarFila: { flexDirection: "row", gap: 8 },
+  // wrap por las dudas — con "Editar polígono"/"Deshacer"/"Restablecer" los
+  // tres a la vez (mientras se edita, con historial y con algo editado) no
+  // siempre entran en una sola fila en pantallas angostas.
+  editarFila: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   editarBtn: {
     flexDirection: "row",
     alignItems: "center",
