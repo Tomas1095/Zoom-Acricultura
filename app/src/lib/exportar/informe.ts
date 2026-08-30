@@ -497,8 +497,16 @@ export function construirInformeHtmlNuevo({
  * con el nombre interno. Se copia a un archivo nuevo con el nombre elegido
  * (mismo patrón que `guardarYCompartirTexto` en archivo.ts) antes de
  * compartirlo, así el nombre real del archivo compartido es el correcto. */
-export async function exportarInformePdf(html: string, nombreArchivoBase: string): Promise<void> {
-  const { uri } = await Print.printToFileAsync({ html });
+export async function exportarInformePdf(
+  html: string,
+  nombreArchivoBase: string,
+  // Tamaño de hoja en puntos (72dpi) — sin esto sale Carta vertical (el
+  // tamaño por defecto de expo-print), que es lo que usa este informe. Lo
+  // usa lib/exportar/datos.ts para pedir A4 apaisada en vez de tocar nada
+  // acá.
+  opciones?: { width?: number; height?: number }
+): Promise<void> {
+  const { uri } = await Print.printToFileAsync({ html, width: opciones?.width, height: opciones?.height });
   const generado = new File(uri);
   const destino = new File(Paths.cache, `${sanitizarNombreArchivo(nombreArchivoBase)}.pdf`);
   if (destino.exists) destino.delete();

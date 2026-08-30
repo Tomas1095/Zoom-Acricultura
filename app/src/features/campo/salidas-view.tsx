@@ -33,6 +33,7 @@ import {
 } from "@/lib/exportar/informe";
 import { construirMapaDensidadHtml } from "@/lib/exportar/mapa-svg";
 import { exportarGPX, exportarKML } from "@/lib/exportar/manchones";
+import { construirDatosHtml, exportarDatosPdf } from "@/lib/exportar/datos";
 import { formatearHectareas } from "@/lib/format";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -40,6 +41,7 @@ import { PromptModal } from "@/components/prompt-modal";
 import { useDatosCampo } from "./usar-datos-campo";
 import { MapaDensidad } from "./mapa-densidad";
 import { MapaManchoneo } from "./mapa-manchoneo";
+import { TablaDatosPuntos } from "./tabla-datos-puntos";
 
 // Alto fijo — adentro de un ScrollView no tiene sentido "crecer" en alto
 // (no hay límite de pantalla que respetar), pero el ancho se mide en vivo
@@ -60,8 +62,11 @@ const MAPA_PDF_ALTO = 380;
 
 const PRODUCTOS = ["Crustacicida", "Molusquicida", "Crustacicida + Molusquicida", "No aplicar"];
 
-type SubTab = "informe" | "manchoneo";
-type PedidoExport = "pdf" | "gpx" | "kml" | null;
+type SubTab = "informe" | "manchoneo" | "datos";
+// "pdfDatos" además de "pdf" — son dos PDF distintos (informe técnico vs.
+// la tabla de datos cruda), cada uno con su propio nombre por defecto y su
+// propio armador de HTML (ver nombreDefaultExport/confirmarExport).
+type PedidoExport = "pdf" | "pdfDatos" | "gpx" | "kml" | null;
 
 interface SalidasViewProps {
   lote: Lote;
@@ -108,10 +113,13 @@ function zonaInicial(lote: Lote): ZonaCebo {
 
 /** Pestaña "Salidas" — portada de `SalidasView` del prototipo: informe
  * técnico (mapas de densidad, situación de plagas auto-generada + editable,
- * recomendación de cebo con exportar PDF), y zona de aplicación/manchoneo
+ * recomendación de cebo con exportar PDF), zona de aplicación/manchoneo
  * (mapa + exportar GPX/KML), con una subsolapa por plaga (bicho bolita y
  * babosas) y el manchón editable a mano — vértices arrastrables, con el
- * límite del lote como freno (ver mapa-manchoneo.tsx). */
+ * límite del lote como freno (ver mapa-manchoneo.tsx) — y "Datos", la misma
+ * tabla de puntos que Resultados (ver tabla-datos-puntos.tsx) como vista
+ * previa, con su propio "Exportar PDF" en A4 apaisada (ver
+ * lib/exportar/datos.ts). */
 export function SalidasView({ lote, establecimientoNombre, campanaViendo }: SalidasViewProps) {
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
   const [subTab, setSubTab] = useState<SubTab>("informe");
@@ -265,7 +273,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     setZonas((zs) => zs.filter((z) => z.id !== id));
   }
 
-  const [exportando, setExportando] = useState<"pdf" | "gpx" | "kml" | null>(null);
+  const [exportando, setExportando] = useState<"pdf" | "pdfDatos" | "gpx" | "kml" | null>(null);
   // Qué exportación se está por hacer — mientras no sea null, el modal de
   // nombre está abierto, prellenado con el nombre por defecto de esa
   // exportación puntual (ver nombreDefaultExport). El nombre final lo
@@ -362,6 +370,9 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     if (pedido === "pdf") {
       return `Informe monitoreo de plagas ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
     }
+    if (pedido === "pdfDatos") {
+      return `Datos Monitoreo ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+    }
     // BB/BAB, nombre del lote, establecimiento (si hay) y superficie con
     // coma decimal (24,1 Ha, no 24.1) — a pedido del usuario, mismo
     // criterio "es castellano" que ya usa el resto de la app. Sin la
@@ -411,13 +422,17 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
         const html =
           disenoInforme === "nuevo" ? construirInformeHtmlNuevo(datosInforme) : construirInformeHtml(datosInforme);
         await exportarInformePdf(html, valores.nombre);
+      } else if (pedido === "pdfDatos") {
+        const html = construirDatosHtml(puntos, cargas, lote.nombre, establecimientoNombre);
+        await exportarDatosPdf(html, valores.nombre);
       } else {
         const origen = inferirOrigenDesdePuntos(puntos);
         if (pedido === "gpx") await exportarGPX(manchonesActivos, lote.nombre, origen, valores.nombre, prefijoExportActivo);
         else await exportarKML(manchonesActivos, lote.nombre, origen, valores.nombre, prefijoExportActivo);
       }
     } catch (e: any) {
-      Alert.alert(`No se pudo exportar el ${pedido.toUpperCase()}`, e.message ?? String(e));
+      const etiquetaError = pedido === "pdfDatos" ? "PDF" : pedido.toUpperCase();
+      Alert.alert(`No se pudo exportar el ${etiquetaError}`, e.message ?? String(e));
     } finally {
       setExportando(null);
       setPedidoExport(null);
@@ -456,6 +471,12 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           style={[styles.subTabTexto, subTab === "manchoneo" && styles.subTabTextoActivo]}
         >
           Manchoneo
+        </Text>
+        <Text
+          onPress={() => setSubTab("datos")}
+          style={[styles.subTabTexto, subTab === "datos" && styles.subTabTextoActivo]}
+        >
+          Datos
         </Text>
       </View>
 
@@ -605,7 +626,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             <Text style={styles.botonPdfTexto}>Exportar PDF</Text>
           </Pressable>
         </ScrollView>
-      ) : (
+      ) : subTab === "manchoneo" ? (
         <ScrollView contentContainerStyle={styles.scrollContenido}>
           <Text style={styles.hint}>
             Polígono de aplicación de cebo, uno por plaga — cada mapa se concentra en las estaciones que superan el
@@ -715,11 +736,32 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             )}
           </View>
         </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContenido}>
+          <View style={styles.card}>
+            <Text style={styles.cardTitulo}>Datos</Text>
+            <Text style={styles.hint}>Vista previa de todos los puntos cargados — el PDF sale igual, en A4 apaisada.</Text>
+            <TablaDatosPuntos puntos={puntos} cargas={cargas} />
+          </View>
+
+          <Pressable style={styles.botonPdf} onPress={() => setPedidoExport("pdfDatos")} disabled={exportando !== null}>
+            {exportando === "pdfDatos" ? (
+              <ActivityIndicator color={colors.surface} size="small" />
+            ) : (
+              <Download size={15} color={colors.surface} />
+            )}
+            <Text style={styles.botonPdfTexto}>Exportar PDF</Text>
+          </Pressable>
+        </ScrollView>
       )}
 
       <PromptModal
         visible={pedidoExport !== null}
-        titulo={pedidoExport === "pdf" ? "Exportar PDF" : `Exportar manchoneo (${pedidoExport?.toUpperCase()})`}
+        titulo={
+          pedidoExport === "pdf" || pedidoExport === "pdfDatos"
+            ? "Exportar PDF"
+            : `Exportar manchoneo (${pedidoExport?.toUpperCase()})`
+        }
         fields={pedidoExport ? [{ key: "nombre", label: "Nombre del archivo", valorInicial: nombreDefaultExport(pedidoExport) }] : []}
         textoConfirmar="Exportar"
         confirmando={exportando !== null}
