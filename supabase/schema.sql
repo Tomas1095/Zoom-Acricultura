@@ -210,9 +210,21 @@ as $$
   select rol from usuarios where auth_user_id = auth.uid()
 $$;
 
+-- SECURITY DEFINER acá (a diferencia de current_rol()/current_usuario_id()
+-- de arriba) a propósito: estas dos se usan DENTRO de las políticas de la
+-- propia tabla `usuarios` (ver más abajo) — sin esto, resolver "¿puedo leer
+-- mi fila?" necesitaría evaluar esta función, que lee `usuarios`, lo que
+-- dispara la MISMA política de nuevo — recursión infinita ("infinite
+-- recursion detected in policy for relation usuarios"). SECURITY DEFINER
+-- las corre con los permisos de quien las creó (dueño de las tablas), que
+-- por default está exento de la RLS de sus propias tablas — la consulta
+-- interna a `usuarios` no vuelve a disparar la política, y el círculo se
+-- corta ahí.
 create or replace function current_comunidad_id()
 returns uuid
 language sql stable
+security definer
+set search_path = public
 as $$
   select comunidad_id from usuarios where auth_user_id = auth.uid()
 $$;
@@ -220,6 +232,8 @@ $$;
 create or replace function es_admin_plataforma()
 returns boolean
 language sql stable
+security definer
+set search_path = public
 as $$
   select coalesce((select admin_plataforma from usuarios where auth_user_id = auth.uid()), false)
 $$;
