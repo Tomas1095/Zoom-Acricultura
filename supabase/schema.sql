@@ -431,8 +431,22 @@ create policy "establecimientos: actualización para administradores"
 create policy "establecimientos: borrado solo socio_fundador/socio_gerente"
   on establecimientos for delete using (comunidad_id = current_comunidad_id() and current_rol() in ('socio_fundador', 'socio_gerente'));
 
+-- No usa tiene_acceso_a_lote(id) a propósito (a diferencia de puntos/
+-- establecimientos/clientes/cargas_en_conflicto más abajo, que sí la usan):
+-- esa función re-consulta `lotes` desde adentro, y esa sub-consulta no ve
+-- una fila de `lotes` recién insertada en la MISMA sentencia — rompe
+-- crearLote (INSERT ... RETURNING) con "new row violates row-level
+-- security policy" aunque la fila exista un instante después. Acá
+-- comparamos directo la columna `comunidad_id` de la propia fila, sin
+-- volver a consultar la tabla, así no hay problema de visibilidad.
 create policy "lotes: lectura según acceso"
-  on lotes for select using (tiene_acceso_a_lote(id));
+  on lotes for select using (
+    comunidad_id = current_comunidad_id()
+    and (
+      es_administrador()
+      or exists (select 1 from accesos where lote_id = lotes.id and usuario_id = current_usuario_id())
+    )
+  );
 create policy "lotes: escritura para administradores"
   on lotes for insert with check (es_administrador());
 create policy "lotes: actualización para administradores"
