@@ -10,7 +10,13 @@
 
 import NetInfo from "@react-native-community/netinfo";
 
-const TIMEOUT_MS = 4000;
+// Antes 4000: con las consultas de Comunidades (chequeos extra de a qué
+// comunidad/rol pertenece cada uno) 4s se quedaba corto en conexiones no
+// perfectas y tiraba "Tardó demasiado en responder" con señal real — el
+// pedido no estaba colgado, solo un poco lento. 10s sigue siendo corto
+// comparado con "sin conexión real" (que NetInfo/hayConexion ya filtra
+// antes), así que no perdemos la detección rápida de sin-señal.
+const TIMEOUT_MS = 10000;
 
 export async function hayConexion(): Promise<boolean> {
   try {
