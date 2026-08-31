@@ -266,9 +266,17 @@ as $$
   select current_rol() in ('socio_fundador', 'socio_gerente') and comunidad_activa()
 $$;
 
+-- SECURITY DEFINER acá por lo mismo que current_comunidad_id()/
+-- es_admin_plataforma() más arriba: esta función se usa como política de
+-- lectura de la propia tabla `lotes` ("lotes: lectura según acceso" más
+-- abajo), y la consulta interna de acá también es contra `lotes` — sin
+-- SECURITY DEFINER, evaluar "¿puedo leer esta fila?" dispara la MISMA
+-- política de nuevo, recursión infinita ("stack depth limit exceeded").
 create or replace function tiene_acceso_a_lote(p_lote_id uuid)
 returns boolean
 language sql stable
+security definer
+set search_path = public
 as $$
   select exists (select 1 from lotes where id = p_lote_id and comunidad_id = current_comunidad_id())
     and (
