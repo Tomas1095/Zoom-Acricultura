@@ -439,12 +439,29 @@ create policy "establecimientos: borrado solo socio_fundador/socio_gerente"
 -- security policy" aunque la fila exista un instante después. Acá
 -- comparamos directo la columna `comunidad_id` de la propia fila, sin
 -- volver a consultar la tabla, así no hay problema de visibilidad.
+--
+-- El chequeo de `accesos` (Monitoreador con ese lote asignado) tampoco es
+-- una consulta cruda: la política de LECTURA de `accesos` (más abajo)
+-- vuelve a consultar `lotes` para confirmar la comunidad — una consulta
+-- cruda acá cerraría un círculo lotes → accesos → lotes ("infinite
+-- recursion detected in policy for relation lotes"). Por eso está aislada
+-- en una función SECURITY DEFINER aparte, mismo motivo que
+-- current_comunidad_id()/tiene_acceso_a_lote() más arriba.
+create or replace function usuario_tiene_acceso_en_accesos(p_lote_id uuid)
+returns boolean
+language sql stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from accesos where lote_id = p_lote_id and usuario_id = current_usuario_id())
+$$;
+
 create policy "lotes: lectura según acceso"
   on lotes for select using (
     comunidad_id = current_comunidad_id()
     and (
       es_administrador()
-      or exists (select 1 from accesos where lote_id = lotes.id and usuario_id = current_usuario_id())
+      or usuario_tiene_acceso_en_accesos(lotes.id)
     )
   );
 create policy "lotes: escritura para administradores"
