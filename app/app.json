@@ -10,7 +10,10 @@
     "ios": {
       "icon": "./assets/images/icon-ios.png",
       "bundleIdentifier": "com.zoomagricultura.app",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.zoomagricultura.app",
