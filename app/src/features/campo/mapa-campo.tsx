@@ -44,17 +44,7 @@ const NIVELES_ZOOM = [0.04, 0.07, 0.15, 0.25, 0.4, 0.6, 0.8, 1, 1.3, 1.6, 2, ZOO
 const NIVEL_ZOOM_INICIAL = NIVELES_ZOOM.indexOf(1);
 
 export interface PuntoMapa {
-  /** Identidad real del punto — única en TODO el lote (clave de React,
-   * de qué punto se tocó/toca `onTapPunto`, del recorrido personal y de
-   * `puntoCercanoId`). Como `linea` reinicia en 1 en cada pieza (ver
-   * geometria.ts), esto NO puede ser solo "linea.puntoNum" — dos piezas
-   * pueden compartir esos números. Quien arma este objeto debe incluir la
-   * pieza acá (p.ej. `${p.pieza}.${p.linea}.${p.puntoNum}`). */
   id: string;
-  /** Lo que efectivamente se ve dibujado en el mapa junto al punto —
-   * "linea.puntoNum" sin la pieza, a propósito: cada pieza tiene que
-   * verse numerada como si fuera su propio lote chico. */
-  etiqueta: string;
   x: number;
   y: number;
   confirmado: boolean;
@@ -312,18 +302,26 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   }));
 
   // Contra-rotación (para que la numeración de cada punto se lea siempre en
-  // horizontal, gire lo que gire el mapa) + contra-escala SOLO en vista
-  // general (para que la etiqueta no se agrande al acercar y siga
-  // legible/no se solape con las vecinas — ver estiloContraEscalaPunto,
-  // mismo motivo). En modo trabajo la escala sigue agrandando la etiqueta
-  // con el zoom como siempre (a propósito, para leer caminando). Un solo
-  // estilo animado reutilizado en todas las etiquetas (no se puede llamar
-  // useAnimatedStyle adentro del .map() de abajo, así que va una vez acá
-  // arriba).
+  // horizontal, gire lo que gire el mapa) + contra-escala PARCIAL SOLO en
+  // vista general — a propósito NO cancela la escala del todo: si el
+  // círculo quedara con el mismo tamaño de siempre pasara lo que pasara
+  // con el zoom, acercar con el pellizco no serviría para nada (ver el
+  // primer intento de esto: separa los puntos entre sí pero cada uno
+  // sigue tan chico e ilegible como antes de acercar). Achicando la
+  // contra-escala con la raíz cuadrada en vez de 1/scale entero, el
+  // círculo/número SÍ crece al acercar (más legible), pero más lento que
+  // la separación entre puntos (que crece con la escala entera) — así
+  // ambas cosas mejoran juntas: separa los puntos que estaban encimados Y
+  // se pueden leer mejor de cerca. En modo trabajo la escala sigue
+  // agrandando la etiqueta 1 a 1 con el zoom como siempre (a propósito,
+  // para leer caminando, con menos puntos por pantalla que en vista
+  // general). Un solo estilo animado reutilizado en todas las etiquetas
+  // (no se puede llamar useAnimatedStyle adentro del .map() de abajo, así
+  // que va una vez acá arriba).
   const estiloContraTransformEtiqueta = useAnimatedStyle(() => {
     "worklet";
     return {
-      transform: [{ rotateZ: `${-rotacion.value}rad` }, { scale: pantallaCompleta ? 1 : 1 / scale.value }],
+      transform: [{ rotateZ: `${-rotacion.value}rad` }, { scale: pantallaCompleta ? 1 : 1 / Math.sqrt(scale.value) }],
     };
   });
 
@@ -333,7 +331,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // vista general.
   const estiloContraEscalaPunto = useAnimatedStyle(() => {
     "worklet";
-    return { transform: [{ scale: pantallaCompleta ? 1 : 1 / scale.value }] };
+    return { transform: [{ scale: pantallaCompleta ? 1 : 1 / Math.sqrt(scale.value) }] };
   });
 
   // Solo modo trabajo: el marcador "Yo" está fuera del grupo que
@@ -593,7 +591,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     estiloContraTransformEtiqueta,
                   ]}
                 >
-                  {p.etiqueta}
+                  {p.id}
                 </Animated.Text>
               </Pressable>
             );

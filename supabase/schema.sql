@@ -118,20 +118,13 @@ create table lotes (
 create table puntos (
   id uuid primary key default gen_random_uuid(),
   lote_id uuid not null references lotes (id) on delete cascade,
-  -- A qué pieza de terreno pertenece (0 si el lote es una sola pieza, que
-  -- es casi siempre) — permite que `linea` reinicie en 1 en cada pieza
-  -- (ver generarGrillaDesdePerimetro en geometria.ts) sin que dos puntos
-  -- de piezas distintas choquen contra el unique de abajo. La app la lee
-  -- de vuelta para identificar un punto sin ambigüedad (dos piezas pueden
-  -- compartir la misma linea.puntoNum) — ver Punto en types/domain.ts.
-  pieza int not null default 0,
   linea int not null,
   punto_num int not null,
   lat double precision not null,
   lon double precision not null,
   x numeric not null,
   y numeric not null,
-  unique (lote_id, pieza, linea, punto_num)
+  unique (lote_id, linea, punto_num)
 );
 
 -- Quién puede ver/cargar cada lote (lo administra socio_gerente/fundador/encargado).

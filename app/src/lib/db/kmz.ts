@@ -17,7 +17,6 @@ export async function guardarGrillaGenerada(loteId: string, grilla: GrillaGenera
 
   const filas = grilla.puntos.map((p) => ({
     lote_id: loteId,
-    pieza: p.pieza,
     linea: p.linea,
     punto_num: p.puntoNum,
     lat: p.lat,

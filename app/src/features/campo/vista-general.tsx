@@ -80,10 +80,7 @@ export function VistaGeneral({
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>
       puntos.map((p) => ({
-        // Única en el lote (ver el comentario en PuntoMapa) — el texto que
-        // se ve en el mapa es `etiqueta`, sin la pieza.
-        id: `${p.pieza}.${p.linea}.${p.puntoNum}`,
-        etiqueta: `${p.linea}.${p.puntoNum}`,
+        id: `${p.linea}.${p.puntoNum}`,
         x: p.x,
         y: p.y,
         confirmado: cargas.get(p.id)?.confirmado ?? false,
@@ -222,9 +219,7 @@ export function VistaGeneral({
         puntos={puntosMapa}
         perimetro={lote.perimetro}
         miPos={gps.posicion}
-        puntoCercanoId={
-          puntoCercano ? `${puntoCercano.punto.pieza}.${puntoCercano.punto.linea}.${puntoCercano.punto.puntoNum}` : null
-        }
+        puntoCercanoId={puntoCercano ? `${puntoCercano.punto.linea}.${puntoCercano.punto.puntoNum}` : null}
         enRango={enRango}
         heading={gps.heading}
         pantallaCompleta={false}

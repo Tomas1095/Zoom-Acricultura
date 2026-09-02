@@ -99,6 +99,40 @@ export function indicePiezaMasCercana(p: XY, piezas: XY[][]): number {
   return mejor;
 }
 
+/** Casco convexo (Andrew monotone chain) — portado tal cual del prototipo.
+ * Vive acá (y no en densidad.ts, que también lo usa) porque
+ * `generarGrillaDesdePerimetro` también lo necesita, para el ángulo
+ * compartido de la grilla — ver más abajo. */
+export function cascoConvexo(pts: XY[]): XY[] {
+  const vistos = new Set<string>();
+  const unicos: XY[] = [];
+  for (const p of pts) {
+    const clave = `${p.x}|${p.y}`;
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    unicos.push(p);
+  }
+  unicos.sort((a, b) => a.x - b.x || a.y - b.y);
+  if (unicos.length <= 2) return unicos;
+
+  const cross = (o: XY, a: XY, b: XY) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+  const lower: XY[] = [];
+  for (const p of unicos) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: XY[] = [];
+  for (let i = unicos.length - 1; i >= 0; i--) {
+    const p = unicos[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
 function rotar(p: XY, theta: number): XY {
   const c = Math.cos(theta);
   const s = Math.sin(theta);
@@ -172,11 +206,6 @@ function tramosDeFila(v: number, poly: XY[]): Array<[number, number]> {
 }
 
 export interface PuntoGrillaGenerado {
-  /** A qué pieza pertenece — solo para que `db/kmz.ts` la guarde junto al
-   * punto y `linea` pueda reiniciar en 1 en cada pieza sin chocar con la
-   * de otra (ver `unique (lote_id, pieza, linea, punto_num)` en
-   * schema.sql). El resto de la app nunca necesita leerla. */
-  pieza: number;
   linea: number;
   puntoNum: number;
   lat: number;
@@ -210,27 +239,27 @@ function limpiarPieza(piezaEntrada: LatLon[]): LatLon[] {
 /** Genera la grilla de muestreo real a partir del perímetro del KMZ, que
  * puede venir en una o más "piezas" — un campo compuesto por varios lotes
  * NO contiguos (sin borde compartido, cada uno un `<Polygon>` separado
- * dentro de un `<MultiGeometry>`, ver parsear-kmz.ts). Cada pieza se siembra
- * de forma completamente independiente, como si fuera su propio lote chico:
+ * dentro de un `<MultiGeometry>`, ver parsear-kmz.ts). A pedido del usuario
+ * (ver el GPX de referencia que mandó, de Global Mapper) se arma UNA sola
+ * grilla que cubre TODO el área combinada, como si las piezas fueran un
+ * mismo campo grande con huecos vacíos en el medio:
  * 1. Un único origen local (centro = promedio de TODOS los vértices de
- *    TODAS las piezas) para que las piezas queden en el mismo plano x,y,
- *    comparable entre sí (mapa, densidad, etc.) — no cambia ningún lat/lon
- *    real, es solo el punto de referencia de la conversión a metros.
- * 2. Por cada pieza: rota para alinear SU PROPIO borde más largo con el eje
- *    horizontal (cada pieza puede estar "parada" en un ángulo distinto —
- *    no tendría sentido forzarlas todas al mismo ángulo), arma sus líneas
- *    de muestreo con el mismo criterio de siempre (`tramosDeFila`, para
- *    que una pieza cóncava tipo "L" también funcione bien), y NUNCA deja
- *    que una línea salga de esa pieza hacia otra: una persona no puede
- *    caminar una línea que salte entre dos lotes separados en el campo.
- * 3. La numeración de línea reinicia en 1 en cada pieza — cada pieza es un
- *    lote físicamente separado del resto, así que a pedido del usuario se
- *    numera como si fuera su propio lote chico ("1.1, 1.2, 1.3…" en cada
- *    una, no siguiendo corrida desde la pieza anterior). Como esto puede
- *    hacer que dos piezas tengan las dos una "línea 1", cada punto también
- *    lleva marcado a qué pieza pertenece (ver `pieza` en
- *    PuntoGrillaGenerado) — así `linea` sigue siendo única DENTRO de su
- *    pieza aunque se repita entre piezas distintas.
+ *    TODAS las piezas) y un único ángulo de rotación (el borde más largo
+ *    del casco convexo de TODOS los vértices juntos, no el de cada pieza
+ *    por separado) — una sola orientación para toda la grilla.
+ * 2. Se barre fila por fila TODO el rectángulo que envuelve a las piezas
+ *    juntas (mismo `tramosDeFila` de siempre, pero calculado pieza por
+ *    pieza y después juntando los tramos de esa fila ordenados de
+ *    izquierda a derecha). Así, una fila puede atravesar varias piezas
+ *    separadas por un hueco — el hueco entre piezas queda automáticamente
+ *    sin puntos, no hace falta "eliminarlos" en un paso aparte.
+ * 3. La numeración queda única en toda la grilla sin necesitar nada más:
+ *    la línea es una sola secuencia para todo el campo (no se reinicia por
+ *    pieza) y el número de punto sigue corrido de un tramo al siguiente
+ *    DENTRO de la misma fila, cruzando de una pieza a otra sin cortarse
+ *    (p.ej. línea 1 puede ir del 1.1 al 1.10, con 1.1-1.3 en una pieza,
+ *    1.4-1.6 en otra y 1.7-1.10 en una tercera, si esa fila las atraviesa
+ *    a las tres).
  * 4. Hectáreas = suma de las de cada pieza (shoelace, una por una). */
 export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunto: number): GrillaGenerada {
   const piezasLimpias = piezasEntrada.map(limpiarPieza).filter((p) => p.length >= 3);
@@ -245,46 +274,37 @@ export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunt
   };
 
   const espaciado = Math.sqrt(haPorPunto * 10000);
-  const piezas: XY[][] = [];
+  const piezas: XY[][] = piezasLimpias.map((pieza) => pieza.map((p) => latLonAXY(origen, p)));
+  const hectareas = piezas.reduce((s, pz) => s + areaPoligonoM2(pz) / 10000, 0);
+
+  // Ángulo compartido por TODA la grilla — el lado más largo del casco
+  // convexo de todos los vértices juntos (ver el comentario de arriba).
+  const angulo = anguloBordeMasLargo(cascoConvexo(piezas.flat()));
+  const piezasRotadas = piezas.map((pz) => pz.map((p) => rotar(p, -angulo)));
+  const vs = piezasRotadas.flat().map((p) => p.y);
+  const minV = Math.min(...vs);
+  const maxV = Math.max(...vs);
+
   const puntos: PuntoGrillaGenerado[] = [];
-  let hectareas = 0;
-
-  for (const [indicePieza, pieza] of piezasLimpias.entries()) {
-    let linea = 0; // reinicia en cada pieza, ver el comentario de arriba
-    const piezaXY = pieza.map((p) => latLonAXY(origen, p));
-    piezas.push(piezaXY);
-    hectareas += areaPoligonoM2(piezaXY) / 10000;
-
-    const angulo = anguloBordeMasLargo(piezaXY);
-    const rotado = piezaXY.map((p) => rotar(p, -angulo));
-    const vs = rotado.map((p) => p.y);
-    const minV = Math.min(...vs);
-    const maxV = Math.max(...vs);
-
-    // La primera línea de CADA pieza (paralela al lado más largo de esa
-    // pieza) queda exacta a espaciado/2 del borde real de entrada. Las
-    // siguientes van sumando el espaciado pedido tal cual, sin ajustarlo —
-    // así la cantidad de puntos sigue de cerca a hectareas/haPorPunto (la
-    // última línea puede quedar más cerca o más lejos del borde opuesto,
-    // la forma de la pieza manda).
-    for (const v of espaciarDesdeInicio(minV, maxV, espaciado)) {
-      // Dónde entra y sale el perímetro real de ESTA pieza en esta fila
-      // (puede haber más de un tramo si la pieza tiene una forma cóncava,
-      // tipo "L" o con una entrada) — reparte los puntos dentro de cada
-      // tramo, no de la caja que envuelve a la pieza.
-      const tramos = tramosDeFila(v, rotado);
-      const filaXY: XY[] = [];
-      for (const [inicio, fin] of tramos) {
-        for (const u of espaciarDesdeInicio(inicio, fin, espaciado)) {
-          filaXY.push(rotar({ x: u, y: v }, angulo)); // vuelve al plano x,y original (sin rotar)
-        }
-      }
-      if (filaXY.length === 0) continue;
-      linea += 1;
-      filaXY.forEach((p, i) => {
+  let linea = 0;
+  for (const v of espaciarDesdeInicio(minV, maxV, espaciado)) {
+    // Tramos de CADA pieza en esta fila, juntados de izquierda a derecha —
+    // una fila puede así cruzar varias piezas separadas por un hueco vacío
+    // en el medio (ver el comentario de arriba). Puede haber más de un
+    // tramo por pieza si es cóncava (forma de "L", con una entrada, etc.).
+    const tramos = piezasRotadas
+      .flatMap((pz) => tramosDeFila(v, pz))
+      .sort((a, b) => a[0] - b[0]);
+    if (tramos.length === 0) continue;
+    linea += 1;
+    let puntoNum = 0;
+    for (const [inicio, fin] of tramos) {
+      for (const u of espaciarDesdeInicio(inicio, fin, espaciado)) {
+        puntoNum += 1; // sigue corrido de un tramo (pieza) al siguiente, no se reinicia
+        const p = rotar({ x: u, y: v }, angulo); // vuelve al plano x,y original (sin rotar)
         const { lat, lon } = xyALatLon(origen, p);
-        puntos.push({ pieza: indicePieza, linea, puntoNum: i + 1, lat, lon, x: p.x, y: p.y });
-      });
+        puntos.push({ linea, puntoNum, lat, lon, x: p.x, y: p.y });
+      }
     }
   }
 

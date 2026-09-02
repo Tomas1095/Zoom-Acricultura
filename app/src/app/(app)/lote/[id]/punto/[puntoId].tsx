@@ -67,13 +67,7 @@ const FORM_VACIO: FormCarga = {
  * escritura por tecla, ver comentario en guardarYConfirmarCarga); las fotos
  * sí se suben al toque porque son una acción puntual, no texto en curso. */
 export default function PuntoScreen() {
-  // El segmento de ruta es "pieza.linea.puntoNum" (único en TODO el lote —
-  // ver el comentario en PuntoMapa, mapa-campo.tsx: `linea` sola no alcanza
-  // porque reinicia en 1 en cada pieza). Lo que se muestra en pantalla
-  // ("Punto 1.1") es sin la pieza, ver `etiqueta` más abajo.
-  const { id: loteId, puntoId: idParam } = useLocalSearchParams<{ id: string; puntoId: string }>();
-  const [pieza, linea, puntoNum] = idParam.split(".").map(Number);
-  const etiqueta = `${linea}.${puntoNum}`;
+  const { id: loteId, puntoId: etiqueta } = useLocalSearchParams<{ id: string; puntoId: string }>();
   const { usuario } = useAuth();
   const { avisarCambioEncolado } = useSync();
 
@@ -189,7 +183,8 @@ export default function PuntoScreen() {
         Promise.all([fetchLote(loteId), fetchPuntosDeLote(loteId), fetchUsuarios(usuario.comunidadId)])
       );
       setLote(l);
-      const p = puntos.find((x) => x.pieza === pieza && x.linea === linea && x.puntoNum === puntoNum) ?? null;
+      const [linea, puntoNum] = etiqueta.split(".").map(Number);
+      const p = puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
       if (l && p) {
         const c = await conTimeout(fetchCarga(p.id, l.campanaActual));
         aplicarPuntoYCarga(p, c, usuarios);
@@ -207,7 +202,8 @@ export default function PuntoScreen() {
       // queda otra que avisar que falló.
       const cache = leerCacheLote(loteId);
       if (cache) {
-        const p = cache.puntos.find((x) => x.pieza === pieza && x.linea === linea && x.puntoNum === puntoNum) ?? null;
+        const [linea, puntoNum] = etiqueta.split(".").map(Number);
+        const p = cache.puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
         setLote(cache.lote);
         aplicarPuntoYCarga(p, p ? (cache.cargas.get(p.id) ?? null) : null, []);
         setUsandoCache(true);
@@ -217,7 +213,7 @@ export default function PuntoScreen() {
     } finally {
       setCargando(false);
     }
-  }, [loteId, idParam, usuario]); // eslint-disable-line react-hooks/exhaustive-deps -- pieza/linea/puntoNum derivan de idParam
+  }, [loteId, etiqueta, usuario]);
 
   useEffect(() => {
     refrescar();

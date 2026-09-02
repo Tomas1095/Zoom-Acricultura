@@ -9,7 +9,7 @@
 // prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
-import { indicePiezaMasCercana, puntoEnPoligono, type XY } from "./geometria";
+import { cascoConvexo, indicePiezaMasCercana, puntoEnPoligono, type XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
 
@@ -60,37 +60,6 @@ export function rangosDe(plaga: Plaga): RangoDensidad[] {
 export function clasificarNivel(valorM2: number, rangos: RangoDensidad[]): number {
   const i = rangos.findIndex((r) => valorM2 <= r.max);
   return i === -1 ? rangos.length - 1 : i;
-}
-
-/** Casco convexo (Andrew monotone chain) — portado tal cual del prototipo. */
-export function cascoConvexo(pts: XY[]): XY[] {
-  const vistos = new Set<string>();
-  const unicos: XY[] = [];
-  for (const p of pts) {
-    const clave = `${p.x}|${p.y}`;
-    if (vistos.has(clave)) continue;
-    vistos.add(clave);
-    unicos.push(p);
-  }
-  unicos.sort((a, b) => a.x - b.x || a.y - b.y);
-  if (unicos.length <= 2) return unicos;
-
-  const cross = (o: XY, a: XY, b: XY) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-
-  const lower: XY[] = [];
-  for (const p of unicos) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
-    lower.push(p);
-  }
-  const upper: XY[] = [];
-  for (let i = unicos.length - 1; i >= 0; i--) {
-    const p = unicos[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
-    upper.push(p);
-  }
-  lower.pop();
-  upper.pop();
-  return lower.concat(upper);
 }
 
 type Tupla = [number, number];
