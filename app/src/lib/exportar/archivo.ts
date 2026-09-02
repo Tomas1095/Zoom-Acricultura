@@ -16,6 +16,17 @@ export function sanitizarNombreArchivo(nombre: string): string {
  * pueda ver, así que se comparte al toque (a otra app, a Archivos/Drive, a
  * WhatsApp, etc.) en vez de guardarlo silencioso en un lugar fijo. */
 export async function guardarYCompartirTexto(nombreArchivo: string, contenido: string, mimeType: string): Promise<void> {
+  await guardarYCompartir(nombreArchivo, contenido, mimeType);
+}
+
+/** Igual que `guardarYCompartirTexto`, pero para contenido binario (el
+ * .zip del shapefile, ver exportar/shapefile.ts) — `File.write` acepta
+ * tanto texto como un `Uint8Array` tal cual. */
+export async function guardarYCompartirBinario(nombreArchivo: string, contenido: Uint8Array, mimeType: string): Promise<void> {
+  await guardarYCompartir(nombreArchivo, contenido, mimeType);
+}
+
+async function guardarYCompartir(nombreArchivo: string, contenido: string | Uint8Array, mimeType: string): Promise<void> {
   const disponible = await Sharing.isAvailableAsync();
   if (!disponible) throw new Error("Compartir no está disponible en este dispositivo.");
 

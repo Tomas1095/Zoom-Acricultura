@@ -1,7 +1,17 @@
 import { useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { Download, Maximize2, RotateCcw } from "lucide-react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { ChevronDown, Download, Maximize2, RotateCcw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
@@ -18,6 +28,8 @@ import { CerrarCampanaBoton } from "./cerrar-campana-boton";
 import { MiRutaControles } from "./mi-ruta-controles";
 
 const FIT_ALTO = 460;
+
+const NOMBRE_FORMATO: Record<"kml" | "gpx" | "shp", string> = { kml: "KML", gpx: "GPX", shp: "Shapefile" };
 
 /** Verde SOLO cuando está todo: para un Socio/Encargado eso es "toda la
  * grilla completada y todo lo completado ya sincronizado"; para un
@@ -74,8 +86,15 @@ export function VistaGeneral({
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
   const miRutaHook = useMiRuta(lote.id, usuario?.id);
-  const [formatoAExportar, setFormatoAExportar] = useState<"gpx" | "kml" | null>(null);
+  const [formatoAExportar, setFormatoAExportar] = useState<"gpx" | "kml" | "shp" | null>(null);
   const [exportandoGrilla, setExportandoGrilla] = useState(false);
+  // Un solo botón "Exportar grilla" que despliega los 3 formatos, en vez de
+  // un botón por formato (con Shapefile ya son 3 — pedido explícito del
+  // usuario para no cargar de más la vista principal). `menuPos` guarda
+  // dónde poner el desplegable (ver abrirMenuExportar, más abajo) — null
+  // significa cerrado.
+  const botonExportarRef = useRef<View>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>
@@ -96,6 +115,21 @@ export function VistaGeneral({
   const anchoMapa = Math.min(width - 32, 400);
 
   const nombreGrillaDefault = `Puntos ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+
+  // Mide dónde está el botón en la pantalla (no en el contenido del
+  // ScrollView, que se puede haber desplazado) para poner el desplegable
+  // justo debajo — el desplegable en sí va en un <Modal>, así queda por
+  // encima de todo lo demás sin que el ScrollView le recorte el contenido.
+  function abrirMenuExportar() {
+    botonExportarRef.current?.measureInWindow((x, y, _width, height) => {
+      setMenuPos({ top: y + height + 4, left: x });
+    });
+  }
+
+  function elegirFormatoExportar(formato: "kml" | "gpx" | "shp") {
+    setMenuPos(null);
+    setFormatoAExportar(formato);
+  }
 
   async function confirmarExportarGrilla(valores: Record<string, string>) {
     const formato = formatoAExportar;
@@ -149,17 +183,11 @@ export function VistaGeneral({
 
       <View style={styles.accionesFila}>
         {puedeExportarGrilla && puntos.length > 0 && (
-          <View style={styles.exportarGrillaFila}>
-            <Text style={styles.exportarGrillaTexto}>Exportar grilla:</Text>
-            <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("kml")}>
-              <Download size={12} color={colors.primaryDark} />
-              <Text style={styles.botonExportarGrillaTexto}>KML</Text>
-            </Pressable>
-            <Pressable style={styles.botonExportarGrilla} onPress={() => setFormatoAExportar("gpx")}>
-              <Download size={12} color={colors.primaryDark} />
-              <Text style={styles.botonExportarGrillaTexto}>GPX</Text>
-            </Pressable>
-          </View>
+          <Pressable ref={botonExportarRef} style={styles.botonExportarGrilla} onPress={abrirMenuExportar}>
+            <Download size={12} color={colors.primaryDark} />
+            <Text style={styles.botonExportarGrillaTexto}>Exportar grilla</Text>
+            <ChevronDown size={12} color={colors.primaryDark} />
+          </Pressable>
         )}
         <View style={styles.accionesFilaDerecha}>
           {vistaModificada && (
@@ -186,9 +214,25 @@ export function VistaGeneral({
         </View>
       </View>
 
+      <Modal visible={menuPos !== null} transparent animationType="fade" onRequestClose={() => setMenuPos(null)}>
+        <Pressable style={styles.menuExportarBackdrop} onPress={() => setMenuPos(null)}>
+          <View style={[styles.menuExportar, menuPos ? { top: menuPos.top, left: menuPos.left } : null]}>
+            <Pressable style={styles.menuExportarItem} onPress={() => elegirFormatoExportar("kml")}>
+              <Text style={styles.menuExportarItemTexto}>KML</Text>
+            </Pressable>
+            <Pressable style={styles.menuExportarItem} onPress={() => elegirFormatoExportar("gpx")}>
+              <Text style={styles.menuExportarItemTexto}>GPX</Text>
+            </Pressable>
+            <Pressable style={styles.menuExportarItem} onPress={() => elegirFormatoExportar("shp")}>
+              <Text style={styles.menuExportarItemTexto}>Shapefile</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
       <PromptModal
         visible={formatoAExportar !== null}
-        titulo={`Exportar grilla (${formatoAExportar?.toUpperCase()})`}
+        titulo={`Exportar grilla (${NOMBRE_FORMATO[formatoAExportar ?? "kml"]})`}
         fields={[{ key: "nombre", label: "Nombre del archivo", valorInicial: nombreGrillaDefault }]}
         textoConfirmar="Exportar"
         confirmando={exportandoGrilla}
@@ -295,8 +339,6 @@ const styles = StyleSheet.create({
   },
   botonModoTrabajoTexto: { color: colors.surface, fontWeight: "700", fontSize: 12 },
   aviso: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
-  exportarGrillaFila: { flexDirection: "row", alignItems: "center", gap: 8 },
-  exportarGrillaTexto: { fontSize: 12, fontWeight: "600", color: colors.textMuted },
   botonExportarGrilla: {
     flexDirection: "row",
     alignItems: "center",
@@ -308,4 +350,25 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   botonExportarGrillaTexto: { color: colors.primaryDark, fontWeight: "700", fontSize: 11 },
+  // El backdrop cubre toda la pantalla (para poder cerrar el desplegable
+  // tocando afuera) pero es invisible — no hace falta oscurecer nada para
+  // un menú tan chico. El menú en sí se posiciona a mano con `menuPos` (ver
+  // abrirMenuExportar), calculado desde dónde está el botón en pantalla.
+  menuExportarBackdrop: { flex: 1 },
+  menuExportar: {
+    position: "absolute",
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 4,
+    minWidth: 140,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  menuExportarItem: { paddingHorizontal: 14, paddingVertical: 10 },
+  menuExportarItemTexto: { color: colors.text, fontWeight: "600", fontSize: 13 },
 });

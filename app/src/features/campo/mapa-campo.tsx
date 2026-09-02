@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import Svg, { Line, Path } from "react-native-svg";
+import Svg, { Circle, Line, Path, Text as SvgText } from "react-native-svg";
 import { Check, Navigation } from "lucide-react-native";
 
 import type { XY } from "@/lib/geo/geometria";
@@ -543,6 +543,8 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             const marcandoRuta = modoMarcarRuta && !pantallaCompleta;
             const tocable = marcandoRuta || puedeTocarPuntos;
             const marcadoEnRuta = marcandoRuta && miRutaSet.has(p.id);
+            const colorFondo = marcadoEnRuta ? colors.info : p.confirmado ? colorFillCompleto : colors.surface;
+            const colorBorde = marcadoEnRuta ? colors.info : p.confirmado ? colorBorderCompleto : colorBorderPendiente;
             return (
               <Pressable
                 key={p.id}
@@ -568,31 +570,88 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     puntos entre sí, y con una grilla densa terminan
                     tapándose igual por más zoom que se haga. */}
                 <Animated.View
-                  style={[
-                    styles.puntoCirculo,
-                    {
-                      width: tamPunto,
-                      height: tamPunto,
-                      borderRadius: tamPunto / 2,
-                      backgroundColor: marcadoEnRuta ? colors.info : p.confirmado ? colorFillCompleto : colors.surface,
-                      borderColor: marcadoEnRuta ? colors.info : p.confirmado ? colorBorderCompleto : colorBorderPendiente,
-                      borderWidth: pantallaCompleta ? 3 : 2,
-                    },
-                    estiloContraEscalaPunto,
-                  ]}
+                  style={[styles.puntoCirculo, { width: tamPunto, height: tamPunto }, estiloContraEscalaPunto]}
                 >
-                  {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                  {pantallaCompleta ? (
+                    // Modo trabajo: vista nativa de siempre, sin cambios —
+                    // acá el zoom es a lo sumo 2.5x (botones +/-, no
+                    // pellizco) y nunca se notó pixelado; de paso evita el
+                    // bug ya conocido de esta librería de SVG con la
+                    // rotación grande de seguir rumbo (ver el contorno del
+                    // lote, más abajo).
+                    <View
+                      style={{
+                        width: tamPunto,
+                        height: tamPunto,
+                        borderRadius: tamPunto / 2,
+                        backgroundColor: colorFondo,
+                        borderColor: colorBorde,
+                        borderWidth: 3,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                    </View>
+                  ) : (
+                    <>
+                      {/* Vista general: el círculo se dibuja con SVG en vez
+                          de con una vista nativa (borderRadius/borderWidth)
+                          — a diferencia de esa, un círculo de SVG se ve
+                          nítido sin importar cuánto zoom se le aplique
+                          (mismo motivo por el que el contorno del lote, más
+                          abajo, tampoco se pixela nunca). Acá el zoom llega
+                          hasta 9x (ver ZOOM_MAX_VISTA_GENERAL), suficiente
+                          para que una vista nativa se note bien pixelada. */}
+                      <Svg width={tamPunto} height={tamPunto} style={{ position: "absolute" }} pointerEvents="none">
+                        <Circle
+                          cx={tamPunto / 2}
+                          cy={tamPunto / 2}
+                          r={tamPunto / 2 - 1}
+                          fill={colorFondo}
+                          stroke={colorBorde}
+                          strokeWidth={2}
+                        />
+                      </Svg>
+                      {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                    </>
+                  )}
                 </Animated.View>
-                <Animated.Text
-                  numberOfLines={1}
-                  style={[
-                    styles.puntoLabel,
-                    { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                    estiloContraTransformEtiqueta,
-                  ]}
-                >
-                  {p.id}
-                </Animated.Text>
+                {pantallaCompleta ? (
+                  <Animated.Text
+                    numberOfLines={1}
+                    style={[
+                      styles.puntoLabel,
+                      { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
+                      estiloContraTransformEtiqueta,
+                    ]}
+                  >
+                    {p.id}
+                  </Animated.Text>
+                ) : (
+                  // Mismo motivo que el círculo de arriba: el número
+                  // dibujado con SVG (en vez de <Text>) no se pixela con
+                  // el zoom de vista general.
+                  <Animated.View
+                    style={[
+                      { position: "absolute", width: 40, top: tamPunto + 1, left: tamPunto / 2 - 20 },
+                      estiloContraTransformEtiqueta,
+                    ]}
+                  >
+                    <Svg width={40} height={tamFuente * 1.6} pointerEvents="none">
+                      <SvgText
+                        x={20}
+                        y={tamFuente * 1.15}
+                        fontSize={tamFuente}
+                        fontWeight="700"
+                        fill={colorEtiqueta}
+                        textAnchor="middle"
+                      >
+                        {p.id}
+                      </SvgText>
+                    </Svg>
+                  </Animated.View>
+                )}
               </Pressable>
             );
           })}

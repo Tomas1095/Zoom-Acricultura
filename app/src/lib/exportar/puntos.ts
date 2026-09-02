@@ -1,11 +1,12 @@
-// Exportar la grilla completa de puntos de muestreo a GPX/KML — para
-// llevarla a un GPS de mano o cargarla en apps de agricultura de precisión
-// antes de ir al campo (a diferencia de manchones.ts, que exporta el
-// polígono de aplicación calculado, esto es la lista de estaciones tal
-// cual, una a una).
+// Exportar la grilla completa de puntos de muestreo a GPX/KML/Shapefile —
+// para llevarla a un GPS de mano o cargarla en apps de agricultura de
+// precisión antes de ir al campo (a diferencia de manchones.ts, que
+// exporta el polígono de aplicación calculado, esto es la lista de
+// estaciones tal cual, una a una).
 
 import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
-import { guardarYCompartirTexto, sanitizarNombreArchivo } from "./archivo";
+import { guardarYCompartirBinario, guardarYCompartirTexto, sanitizarNombreArchivo } from "./archivo";
+import { construirShapefilePuntosZip } from "./shapefile";
 import { escapeXml } from "./xml";
 
 const GPX_HEADER =
@@ -43,13 +44,19 @@ export function construirKMLPuntos(puntos: PuntoGrillaExport[], origen: LatLon):
 export async function exportarPuntos(
   puntos: PuntoGrillaExport[],
   origen: LatLon,
-  formato: "gpx" | "kml",
+  formato: "gpx" | "kml" | "shp",
   nombreArchivo: string
 ): Promise<void> {
   const nombre = sanitizarNombreArchivo(nombreArchivo);
   if (formato === "gpx") {
     await guardarYCompartirTexto(`${nombre}.gpx`, construirGPXPuntos(puntos, origen), "application/gpx+xml");
-  } else {
+  } else if (formato === "kml") {
     await guardarYCompartirTexto(`${nombre}.kml`, construirKMLPuntos(puntos, origen), "application/vnd.google-earth.kml+xml");
+  } else {
+    // El shapefile en sí son 4 archivos (ver shapefile.ts) — se entrega
+    // como un único .zip, que es lo que de verdad se puede compartir/abrir
+    // como "un archivo" desde la hoja de compartir nativa.
+    const zip = await construirShapefilePuntosZip(puntos, origen, nombre);
+    await guardarYCompartirBinario(`${nombre}.zip`, zip, "application/zip");
   }
 }
