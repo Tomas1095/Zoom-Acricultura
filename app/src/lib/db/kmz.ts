@@ -9,7 +9,7 @@ export async function guardarGrillaGenerada(loteId: string, grilla: GrillaGenera
     .update({
       hectareas: grilla.hectareas,
       ha_por_punto: haPorPunto,
-      perimetro: grilla.perimetroXY,
+      perimetro: grilla.piezas,
       tiene_grilla: true,
     })
     .eq("id", loteId);

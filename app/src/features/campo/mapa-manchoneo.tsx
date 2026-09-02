@@ -5,7 +5,7 @@ import { runOnJS } from "react-native-reanimated";
 import Svg, { Line, Polygon } from "react-native-svg";
 
 import { calcularCeldasDensidad, type RangoDensidad } from "@/lib/geo/densidad";
-import { puntoEnPoligono, type XY } from "@/lib/geo/geometria";
+import { puntoEnAlgunPoligono, type XY } from "@/lib/geo/geometria";
 import { colors } from "@/theme/colors";
 
 const PAD = 18;
@@ -27,7 +27,8 @@ export interface PuntoDensidadManchoneo {
 }
 
 interface MapaManchoneoProps {
-  perimetro: XY[];
+  /** Una lista de vértices por pieza de terreno — ver Lote["perimetro"]. */
+  perimetro: XY[][];
   manchones: XY[][];
   // Mapa de densidad de fondo (mismo cálculo que MapaDensidad) — el usuario
   // necesita ver dónde está parado el manchón respecto de la densidad real,
@@ -72,8 +73,9 @@ export function MapaManchoneo({
   onEditarVertice,
 }: MapaManchoneoProps) {
   const { toPx, escala } = useMemo(() => {
-    const xs = perimetro.map((p) => p.x);
-    const ys = perimetro.map((p) => p.y);
+    const todosLosVertices = perimetro.flat();
+    const xs = todosLosVertices.map((p) => p.x);
+    const ys = todosLosVertices.map((p) => p.y);
     const minX = xs.length > 0 ? Math.min(...xs) : 0;
     const minY = ys.length > 0 ? Math.min(...ys) : 0;
     const spanX = Math.max(1, (xs.length > 0 ? Math.max(...xs) : 0) - minX);
@@ -82,7 +84,7 @@ export function MapaManchoneo({
     return { escala, toPx: (x: number, y: number) => ({ left: PAD + (x - minX) * escala, top: PAD + (y - minY) * escala }) };
   }, [perimetro, ancho, alto]);
 
-  const perimetroPx = perimetro.map((v) => toPx(v.x, v.y));
+  const piezasPx = perimetro.map((pieza) => pieza.map((v) => toPx(v.x, v.y)));
 
   const celdas = useMemo(() => {
     try {
@@ -148,12 +150,22 @@ export function MapaManchoneo({
             />
           ))}
 
-          {perimetroPx.map((a, i) => {
-            const b = perimetroPx[(i + 1) % perimetroPx.length];
-            return (
-              <Line key={`lado-${i}`} x1={a.left} y1={a.top} x2={b.left} y2={b.top} stroke={colors.primaryDark} strokeWidth={2} />
-            );
-          })}
+          {piezasPx.map((piezaPx, pi) =>
+            piezaPx.map((a, i) => {
+              const b = piezaPx[(i + 1) % piezaPx.length];
+              return (
+                <Line
+                  key={`lado-${pi}-${i}`}
+                  x1={a.left}
+                  y1={a.top}
+                  x2={b.left}
+                  y2={b.top}
+                  stroke={colors.primaryDark}
+                  strokeWidth={2}
+                />
+              );
+            })
+          )}
         </Svg>
 
         {editable &&
@@ -182,7 +194,7 @@ interface VerticeArrastrableProps {
   manchonIndex: number;
   verticeIndex: number;
   escala: number;
-  perimetro: XY[];
+  perimetro: XY[][];
   toPx: (x: number, y: number) => { left: number; top: number };
   onEnVivo: (manchonIndex: number, verticeIndex: number, nuevo: XY) => void;
   onCommit: (manchonIndex: number, verticeIndex: number, nuevo: XY) => void;
@@ -220,7 +232,7 @@ function VerticeArrastrable({
     // el vértice se queda en la última posición válida en vez de seguir a
     // la fuerza al dedo, así que no hace falta "rebotar" ni recortar nada,
     // el próximo micro-movimiento simplemente sigue probando desde acá.
-    if (!puntoEnPoligono(candidato.x, candidato.y, perimetro)) return;
+    if (!puntoEnAlgunPoligono(candidato.x, candidato.y, perimetro)) return;
     acumRef.current = candidato;
     onEnVivo(manchonIndex, verticeIndex, candidato);
   }

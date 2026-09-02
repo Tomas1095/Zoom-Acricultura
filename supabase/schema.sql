@@ -110,7 +110,7 @@ create table lotes (
   hectareas numeric,
   ha_por_punto numeric not null default 1.5,
   campana_actual text not null default '25/26',
-  perimetro jsonb not null default '[]'::jsonb, -- [{x,y}, ...] metros relativos al centro
+  perimetro jsonb not null default '[]'::jsonb, -- [[{x,y}, ...], ...] una lista de vértices por pieza de terreno (casi siempre una sola pieza), metros relativos al centro
   tiene_grilla boolean not null default false,
   created_at timestamptz not null default now()
 );

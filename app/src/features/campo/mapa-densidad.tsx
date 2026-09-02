@@ -34,7 +34,8 @@ export interface PuntoDensidad {
 
 interface MapaDensidadProps {
   puntos: PuntoDensidad[];
-  perimetro: XY[];
+  /** Una lista de vértices por pieza de terreno — ver Lote["perimetro"]. */
+  perimetro: XY[][];
   rangos: RangoDensidad[];
   nivelColores: readonly string[];
   /** Encabezado de la leyenda ("Nº BB/m²" / "Nº Babosas/m²"). */
@@ -78,8 +79,9 @@ export function MapaDensidad({
   const [satelitalOk, setSatelitalOk] = useState(true);
 
   const { toPx, escala, minX, minY, offX, offY } = useMemo(() => {
-    const todasX = puntos.map((p) => p.x).concat(perimetro.map((v) => v.x));
-    const todasY = puntos.map((p) => p.y).concat(perimetro.map((v) => v.y));
+    const todosLosVertices = perimetro.flat();
+    const todasX = puntos.map((p) => p.x).concat(todosLosVertices.map((v) => v.x));
+    const todasY = puntos.map((p) => p.y).concat(todosLosVertices.map((v) => v.y));
     const minX = todasX.length > 0 ? Math.min(...todasX) : 0;
     const minY = todasY.length > 0 ? Math.min(...todasY) : 0;
     const spanX = Math.max(1, (todasX.length > 0 ? Math.max(...todasX) : 0) - minX);
@@ -117,7 +119,7 @@ export function MapaDensidad({
     }
   }, [puntos, perimetro, rangos]);
 
-  const perimetroPx = perimetro.map((v) => toPx(v.x, v.y));
+  const piezasPx = perimetro.map((pieza) => pieza.map((v) => toPx(v.x, v.y)));
   const escalaBarra = elegirEscalaBarra(escala);
   const escalaGraduada = useMemo(
     () => graduarEscalaBarra(escalaBarra.metros, escalaBarra.px),
@@ -155,20 +157,22 @@ export function MapaDensidad({
           />
         ))}
 
-        {perimetroPx.map((a, i) => {
-          const b = perimetroPx[(i + 1) % perimetroPx.length];
-          return (
-            <Line
-              key={`lado-${i}`}
-              x1={a.left}
-              y1={a.top}
-              x2={b.left}
-              y2={b.top}
-              stroke={colorPerimetro}
-              strokeWidth={2}
-            />
-          );
-        })}
+        {piezasPx.map((piezaPx, pi) =>
+          piezaPx.map((a, i) => {
+            const b = piezaPx[(i + 1) % piezaPx.length];
+            return (
+              <Line
+                key={`lado-${pi}-${i}`}
+                x1={a.left}
+                y1={a.top}
+                x2={b.left}
+                y2={b.top}
+                stroke={colorPerimetro}
+                strokeWidth={2}
+              />
+            );
+          })
+        )}
       </Svg>
 
       {/* Título — arriba, centrado (con lugar reservado a la derecha para

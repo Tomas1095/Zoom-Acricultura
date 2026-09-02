@@ -13,7 +13,7 @@
 // que generó la grilla real (ver `generarGrillaDesdePerimetro` en
 // geometria.ts: `Math.sqrt(haPorPunto * 10000)`).
 
-import { areaPoligonoM2, puntoEnPoligono, type XY } from "./geometria";
+import { areaPoligonoM2, puntoEnAlgunPoligono, type XY } from "./geometria";
 
 // Los dos umbrales dejan afuera la primera categoría de cada mapa de
 // densidad (ver RANGOS_BABOSA/RANGOS_BICHO en lib/geo/densidad.ts) — a
@@ -109,18 +109,21 @@ function proyectarEnSegmento(p: XY, a: XY, b: XY): XY {
  * proyección exacta sobre ese lado. Hace falta para "pegar" el contorno
  * calculado al borde real (ver snapABorde) — con solo la distancia a los
  * vértices no alcanza, el punto más cercano casi siempre cae en el medio
- * de un lado, no justo en una esquina. */
-function distanciaAPerimetro(p: XY, perimetro: XY[]): { dist: number; proyeccion: XY } {
+ * de un lado, no justo en una esquina. Recibe TODAS las piezas del lote:
+ * el borde más cercano puede estar en cualquiera de ellas. */
+function distanciaAPerimetro(p: XY, piezas: XY[][]): { dist: number; proyeccion: XY } {
   let mejorDist = Infinity;
   let mejorProy = p;
-  for (let i = 0; i < perimetro.length; i++) {
-    const a = perimetro[i];
-    const b = perimetro[(i + 1) % perimetro.length];
-    const proy = proyectarEnSegmento(p, a, b);
-    const d = Math.hypot(p.x - proy.x, p.y - proy.y);
-    if (d < mejorDist) {
-      mejorDist = d;
-      mejorProy = proy;
+  for (const perimetro of piezas) {
+    for (let i = 0; i < perimetro.length; i++) {
+      const a = perimetro[i];
+      const b = perimetro[(i + 1) % perimetro.length];
+      const proy = proyectarEnSegmento(p, a, b);
+      const d = Math.hypot(p.x - proy.x, p.y - proy.y);
+      if (d < mejorDist) {
+        mejorDist = d;
+        mejorProy = proy;
+      }
     }
   }
   return { dist: mejorDist, proyeccion: mejorProy };
@@ -134,9 +137,9 @@ function distanciaAPerimetro(p: XY, perimetro: XY[]): { dist: number; proyeccion
  * proyectar, se vuelve a sacar los vértices que quedaron colineales o
  * duplicados (mismo criterio que al final de trazarContornoEscalera) — el
  * snap normalmente colapsa varios escalones en un solo segmento recto. */
-function snapABorde(loop: XY[], perimetro: XY[], tolerancia: number): XY[] {
+function snapABorde(loop: XY[], piezas: XY[][], tolerancia: number): XY[] {
   const snapeado = loop.map((v) => {
-    const { dist, proyeccion } = distanciaAPerimetro(v, perimetro);
+    const { dist, proyeccion } = distanciaAPerimetro(v, piezas);
     return dist <= tolerancia ? proyeccion : v;
   });
   const n = snapeado.length;
@@ -208,24 +211,35 @@ export interface ZonaAplicacionResultado {
  * `calcularZonaAplicacion`. Trabaja en un marco rotado, alineado a la
  * orientación real de las líneas de muestreo, para que el contorno tenga
  * bordes rectos en el mismo sentido que la grilla (nada de diagonales
- * sueltas), y después vuelve al plano x,y original. */
+ * sueltas), y después vuelve al plano x,y original.
+ *
+ * `piezas` es una lista de piezas de terreno (casi siempre una sola; más de
+ * una si el campo tiene lotes no contiguos, ver geometria.ts). El
+ * rasterizado ya separa solo las celdas que caen DENTRO DE ALGUNA pieza
+ * (`puntoEnAlgunPoligono`) — el hueco entre piezas separadas nunca queda
+ * marcado, así que el "componentes conexas" de más abajo (pensado
+ * originalmente para separar sectores lejanos DENTRO de un mismo lote) ya
+ * separa solo también, sin cambios, un manchón que caiga en una pieza de
+ * uno que caiga en otra. */
 export function calcularZonaAplicacion(
   estaciones: EstacionAplicacion[],
   umbral: number,
-  perimetro: XY[],
+  piezas: XY[][],
   spacingM: number
 ): ZonaAplicacionResultado {
   const seleccionadas = estacionesSeleccionadas(estaciones, umbral, spacingM);
-  if (estaciones.length === 0 || perimetro.length < 3) {
+  const piezasValidas = piezas.filter((pz) => pz.length >= 3);
+  if (estaciones.length === 0 || piezasValidas.length === 0) {
     return { manchones: [], haIncluidas: 0, seleccionadas };
   }
 
   const theta = anguloGrilla(estaciones);
   const estacionesR = estaciones.map((e) => ({ ...e, ...rotarPunto(e.x, e.y, -theta) }));
-  const perimetroR = perimetro.map((v) => rotarPunto(v.x, v.y, -theta));
+  const piezasR = piezasValidas.map((pz) => pz.map((v) => rotarPunto(v.x, v.y, -theta)));
+  const perimetroRCompleto = piezasR.flat();
 
-  const us = perimetroR.map((v) => v.x);
-  const vs = perimetroR.map((v) => v.y);
+  const us = perimetroRCompleto.map((v) => v.x);
+  const vs = perimetroRCompleto.map((v) => v.y);
   const minU = Math.min(...us) - FRANJA_PROTECCION_M;
   const maxU = Math.max(...us) + FRANJA_PROTECCION_M;
   const minV = Math.min(...vs) - FRANJA_PROTECCION_M;
@@ -241,7 +255,7 @@ export function calcularZonaAplicacion(
     for (let ri = 0; ri < nRows; ri++) {
       const cu = minU + ci * RASTER_RES_M + RASTER_RES_M / 2;
       const cv = minV + ri * RASTER_RES_M + RASTER_RES_M / 2;
-      if (!puntoEnPoligono(cu, cv, perimetroR)) continue;
+      if (!puntoEnAlgunPoligono(cu, cv, piezasR)) continue;
       const incluida = estacionesR.some(
         (e) => seleccionadas.has(e.id) && Math.max(Math.abs(cu - e.x), Math.abs(cv - e.y)) <= radioTotal
       );
@@ -286,8 +300,8 @@ export function calcularZonaAplicacion(
       const enUV = loopUV.map((v) => ({ x: minU + v.x, y: minV + v.y }));
       // Pega al borde real del lote los tramos que ya quedaron pegados
       // contra él (ver snapABorde) — antes de rotar de vuelta, en el mismo
-      // marco rotado que perimetroR.
-      const snapeado = snapABorde(enUV, perimetroR, TOLERANCIA_SNAP_BORDE_M);
+      // marco rotado que piezasR.
+      const snapeado = snapABorde(enUV, piezasR, TOLERANCIA_SNAP_BORDE_M);
       const enXY = snapeado.map((v) => rotarPunto(v.x, v.y, theta));
       manchones.push(enXY);
     }

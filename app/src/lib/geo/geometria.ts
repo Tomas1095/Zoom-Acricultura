@@ -71,6 +71,34 @@ export function puntoEnPoligono(x: number, y: number, poly: XY[]): boolean {
   return dentro;
 }
 
+/** Igual que `puntoEnPoligono`, pero para un lote de varias piezas no
+ * contiguas (ver `generarGrillaDesdePerimetro`): adentro si cae dentro de
+ * CUALQUIERA de las piezas — un lote de este tipo no es un solo contorno,
+ * es la unión de sus piezas. */
+export function puntoEnAlgunPoligono(x: number, y: number, piezas: XY[][]): boolean {
+  return piezas.some((pieza) => puntoEnPoligono(x, y, pieza));
+}
+
+/** Centro (promedio simple de vértices) de la pieza más cercana a `p` — se
+ * usa como respaldo cuando un punto no cae justo adentro de ninguna pieza
+ * por un error de redondeo de punto flotante (ver `calcularCeldasDensidad`
+ * en densidad.ts): en vez de descartarlo, se lo asigna a la pieza más
+ * próxima. */
+export function indicePiezaMasCercana(p: XY, piezas: XY[][]): number {
+  let mejor = 0;
+  let mejorDist = Infinity;
+  piezas.forEach((pieza, i) => {
+    const cx = pieza.reduce((s, v) => s + v.x, 0) / pieza.length;
+    const cy = pieza.reduce((s, v) => s + v.y, 0) / pieza.length;
+    const dist = Math.hypot(p.x - cx, p.y - cy);
+    if (dist < mejorDist) {
+      mejorDist = dist;
+      mejor = i;
+    }
+  });
+  return mejor;
+}
+
 function rotar(p: XY, theta: number): XY {
   const c = Math.cos(theta);
   const s = Math.sin(theta);
@@ -154,76 +182,106 @@ export interface PuntoGrillaGenerado {
 
 export interface GrillaGenerada {
   puntos: PuntoGrillaGenerado[];
-  perimetroXY: XY[];
+  /** Una o más piezas de terreno — casi siempre una sola; más de una si el
+   * campo está compuesto por lotes no contiguos (ver
+   * `generarGrillaDesdePerimetro`). */
+  piezas: XY[][];
   hectareas: number;
 }
 
-/** Genera la grilla de muestreo real a partir del perímetro del KMZ:
- * 1. Centro = promedio de los vértices, se usa como origen local (no hace
- *    falta guardarlo: cada punto ya sale con su lat/lon real).
- * 2. Rota el polígono para alinear su borde más largo con el eje horizontal
- *    — cada "línea" de puntos queda paralela a ese lado.
- * 3. Por cada línea calcula dónde entra y sale el perímetro real (no la
- *    caja que lo envuelve) y reparte los puntos espaciados
- *    `sqrt(haPorPunto * 10000)` metros (misma fórmula que
- *    `generarGrillaSintetica` del prototipo), arrancando cada línea y cada
- *    tramo exacto a espaciado/2 del borde de entrada.
- * 4. Numera "línea.punto" por fila, en el orden en que se generaron. */
-export function generarGrillaDesdePerimetro(perimetroEntrada: LatLon[], haPorPunto: number): GrillaGenerada {
-  const perimetro = [...perimetroEntrada];
-  const primero = perimetro[0];
-  const ultimo = perimetro[perimetro.length - 1];
-  if (perimetro.length > 1 && Math.abs(primero.lat - ultimo.lat) < 1e-9 && Math.abs(primero.lon - ultimo.lon) < 1e-9) {
-    perimetro.pop(); // el KML suele cerrar el anillo repitiendo el primer vértice al final
+/** Prepara UNA pieza del perímetro para trabajar en metros: saca el vértice
+ * de cierre repetido (si lo hay) y valida que tenga al menos 3 vértices
+ * reales. */
+function limpiarPieza(piezaEntrada: LatLon[]): LatLon[] {
+  const pieza = [...piezaEntrada];
+  const primero = pieza[0];
+  const ultimo = pieza[pieza.length - 1];
+  if (pieza.length > 1 && Math.abs(primero.lat - ultimo.lat) < 1e-9 && Math.abs(primero.lon - ultimo.lon) < 1e-9) {
+    pieza.pop(); // el KML suele cerrar el anillo repitiendo el primer vértice al final
   }
-  if (perimetro.length < 3) {
-    throw new Error("El KMZ no contiene un polígono válido (hacen falta al menos 3 vértices).");
+  return pieza;
+}
+
+/** Genera la grilla de muestreo real a partir del perímetro del KMZ, que
+ * puede venir en una o más "piezas" — un campo compuesto por varios lotes
+ * NO contiguos (sin borde compartido, cada uno un `<Polygon>` separado
+ * dentro de un `<MultiGeometry>`, ver parsear-kmz.ts). Cada pieza se siembra
+ * de forma completamente independiente, como si fuera su propio lote chico:
+ * 1. Un único origen local (centro = promedio de TODOS los vértices de
+ *    TODAS las piezas) para que las piezas queden en el mismo plano x,y,
+ *    comparable entre sí (mapa, densidad, etc.) — no cambia ningún lat/lon
+ *    real, es solo el punto de referencia de la conversión a metros.
+ * 2. Por cada pieza: rota para alinear SU PROPIO borde más largo con el eje
+ *    horizontal (cada pieza puede estar "parada" en un ángulo distinto —
+ *    no tendría sentido forzarlas todas al mismo ángulo), arma sus líneas
+ *    de muestreo con el mismo criterio de siempre (`tramosDeFila`, para
+ *    que una pieza cóncava tipo "L" también funcione bien), y NUNCA deja
+ *    que una línea salga de esa pieza hacia otra: una persona no puede
+ *    caminar una línea que salte entre dos lotes separados en el campo.
+ * 3. La numeración de línea sigue corrida entre piezas (pieza 1: líneas
+ *    1..n, pieza 2: líneas n+1..m, …) — mismo criterio simple que ya usaba
+ *    esto para una sola pieza, ahora sin cortar a cero entre una pieza y la
+ *    siguiente.
+ * 4. Hectáreas = suma de las de cada pieza (shoelace, una por una). */
+export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunto: number): GrillaGenerada {
+  const piezasLimpias = piezasEntrada.map(limpiarPieza).filter((p) => p.length >= 3);
+  if (piezasLimpias.length === 0) {
+    throw new Error("El KMZ no contiene ningún polígono válido (hacen falta al menos 3 vértices por pieza).");
   }
 
+  const todosLosVertices = piezasLimpias.flat();
   const origen: LatLon = {
-    lat: perimetro.reduce((s, p) => s + p.lat, 0) / perimetro.length,
-    lon: perimetro.reduce((s, p) => s + p.lon, 0) / perimetro.length,
+    lat: todosLosVertices.reduce((s, p) => s + p.lat, 0) / todosLosVertices.length,
+    lon: todosLosVertices.reduce((s, p) => s + p.lon, 0) / todosLosVertices.length,
   };
-  const perimetroXY = perimetro.map((p) => latLonAXY(origen, p));
-  const hectareas = areaPoligonoM2(perimetroXY) / 10000;
-
-  const angulo = anguloBordeMasLargo(perimetroXY);
-  const rotado = perimetroXY.map((p) => rotar(p, -angulo));
-  const vs = rotado.map((p) => p.y);
-  const minV = Math.min(...vs);
-  const maxV = Math.max(...vs);
 
   const espaciado = Math.sqrt(haPorPunto * 10000);
+  const piezas: XY[][] = [];
   const puntos: PuntoGrillaGenerado[] = [];
+  let hectareas = 0;
   let linea = 0;
-  // La primera línea (paralela al lado más largo del lote) queda exacta a
-  // espaciado/2 del borde real de entrada. Las siguientes van sumando el
-  // espaciado pedido tal cual, sin ajustarlo — así la cantidad de puntos
-  // sigue de cerca a hectareas/haPorPunto (la última línea puede quedar
-  // más cerca o más lejos del borde opuesto, la forma del lote manda).
-  for (const v of espaciarDesdeInicio(minV, maxV, espaciado)) {
-    // Dónde entra y sale el perímetro real en esta fila (puede haber más de
-    // un tramo si el lote tiene una forma cóncava, tipo "L" o con una
-    // entrada) — reparte los puntos dentro de cada tramo, no de la caja
-    // que envuelve a todo el lote.
-    const tramos = tramosDeFila(v, rotado);
-    const filaXY: XY[] = [];
-    for (const [inicio, fin] of tramos) {
-      for (const u of espaciarDesdeInicio(inicio, fin, espaciado)) {
-        filaXY.push(rotar({ x: u, y: v }, angulo)); // vuelve al plano x,y original (sin rotar)
+
+  for (const pieza of piezasLimpias) {
+    const piezaXY = pieza.map((p) => latLonAXY(origen, p));
+    piezas.push(piezaXY);
+    hectareas += areaPoligonoM2(piezaXY) / 10000;
+
+    const angulo = anguloBordeMasLargo(piezaXY);
+    const rotado = piezaXY.map((p) => rotar(p, -angulo));
+    const vs = rotado.map((p) => p.y);
+    const minV = Math.min(...vs);
+    const maxV = Math.max(...vs);
+
+    // La primera línea de CADA pieza (paralela al lado más largo de esa
+    // pieza) queda exacta a espaciado/2 del borde real de entrada. Las
+    // siguientes van sumando el espaciado pedido tal cual, sin ajustarlo —
+    // así la cantidad de puntos sigue de cerca a hectareas/haPorPunto (la
+    // última línea puede quedar más cerca o más lejos del borde opuesto,
+    // la forma de la pieza manda).
+    for (const v of espaciarDesdeInicio(minV, maxV, espaciado)) {
+      // Dónde entra y sale el perímetro real de ESTA pieza en esta fila
+      // (puede haber más de un tramo si la pieza tiene una forma cóncava,
+      // tipo "L" o con una entrada) — reparte los puntos dentro de cada
+      // tramo, no de la caja que envuelve a la pieza.
+      const tramos = tramosDeFila(v, rotado);
+      const filaXY: XY[] = [];
+      for (const [inicio, fin] of tramos) {
+        for (const u of espaciarDesdeInicio(inicio, fin, espaciado)) {
+          filaXY.push(rotar({ x: u, y: v }, angulo)); // vuelve al plano x,y original (sin rotar)
+        }
       }
+      if (filaXY.length === 0) continue;
+      linea += 1;
+      filaXY.forEach((p, i) => {
+        const { lat, lon } = xyALatLon(origen, p);
+        puntos.push({ linea, puntoNum: i + 1, lat, lon, x: p.x, y: p.y });
+      });
     }
-    if (filaXY.length === 0) continue;
-    linea += 1;
-    filaXY.forEach((p, i) => {
-      const { lat, lon } = xyALatLon(origen, p);
-      puntos.push({ linea, puntoNum: i + 1, lat, lon, x: p.x, y: p.y });
-    });
   }
 
   if (puntos.length === 0) {
     throw new Error("No se generó ningún punto de muestreo — probá con menos hectáreas por punto.");
   }
 
-  return { puntos, perimetroXY, hectareas };
+  return { puntos, piezas, hectareas };
 }

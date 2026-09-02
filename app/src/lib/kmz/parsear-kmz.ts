@@ -4,24 +4,6 @@ import { XMLParser } from "fast-xml-parser";
 
 import type { LatLon } from "@/lib/geo/geometria";
 
-/** Busca recursivamente cualquier nodo `coordinates` dentro del árbol KML ya
- * parseado. No asumimos una estructura fija (Document > Folder > Placemark
- * > Polygon > outerBoundaryIs > LinearRing > coordinates) porque distintos
- * programas (Google Earth, QGIS, etc.) anidan distinto — juntamos todos los
- * candidatos y nos quedamos con el que tiene más vértices, que en la
- * práctica es el perímetro del lote (los demás suelen ser puntos sueltos o
- * líneas cortas). */
-function buscarCoordenadas(nodo: unknown, resultados: string[] = []): string[] {
-  if (nodo == null || typeof nodo !== "object") return resultados;
-  const obj = nodo as Record<string, unknown>;
-  if (typeof obj.coordinates === "string") resultados.push(obj.coordinates);
-  for (const valor of Object.values(obj)) {
-    if (Array.isArray(valor)) valor.forEach((v) => buscarCoordenadas(v, resultados));
-    else if (typeof valor === "object") buscarCoordenadas(valor, resultados);
-  }
-  return resultados;
-}
-
 function parsearTuplasCoordenadas(texto: string): LatLon[] {
   return texto
     .trim()
@@ -31,6 +13,50 @@ function parsearTuplasCoordenadas(texto: string): LatLon[] {
       return { lat, lon };
     })
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+}
+
+/** Saca el anillo exterior de un nodo `<Polygon>` ya parseado —
+ * `outerBoundaryIs > LinearRing > coordinates`. Ignora agujeros
+ * (`innerBoundaryIs`), igual que la versión anterior de este parser: ningún
+ * lote real usado hasta ahora tuvo un agujero adentro, y sumar soporte para
+ * eso sin un caso real para probarlo es más riesgo que beneficio. */
+function anilloExteriorDePoligono(poligono: unknown): LatLon[] | null {
+  if (poligono == null || typeof poligono !== "object") return null;
+  const coords = (poligono as any)?.outerBoundaryIs?.LinearRing?.coordinates;
+  if (typeof coords !== "string") return null;
+  const puntos = parsearTuplasCoordenadas(coords);
+  return puntos.length >= 3 ? puntos : null;
+}
+
+/** Busca recursivamente todos los `<Polygon>` del árbol KML ya parseado —
+ * a diferencia de la versión anterior (que juntaba CUALQUIER nodo
+ * `coordinates` del archivo entero y se quedaba con el de más vértices),
+ * esto apunta específicamente al tag `Polygon`, así que no confunde el
+ * perímetro real con otra geometría suelta que pueda traer el archivo
+ * (una marca, un ícono, un `gx:Track`, etc.).
+ *
+ * Soporta que un mismo `Placemark` agrupe varios lotes no contiguos en un
+ * único `<MultiGeometry>` con varios `<Polygon>` adentro (caso real: un
+ * "campo" compuesto por lotes separados entre sí) — cada `Polygon`
+ * encontrado, esté suelto o dentro de un `MultiGeometry`, es una "pieza"
+ * de terreno independiente. `fast-xml-parser` devuelve un objeto si hay un
+ * solo `Polygon` bajo el mismo padre, o un array si hay varios — se
+ * normalizan los dos casos acá. */
+function buscarPoligonos(nodo: unknown, resultados: LatLon[][] = []): LatLon[][] {
+  if (nodo == null || typeof nodo !== "object") return resultados;
+  const obj = nodo as Record<string, unknown>;
+  if ("Polygon" in obj) {
+    const candidatos = Array.isArray(obj.Polygon) ? obj.Polygon : [obj.Polygon];
+    for (const candidato of candidatos) {
+      const anillo = anilloExteriorDePoligono(candidato);
+      if (anillo) resultados.push(anillo);
+    }
+  }
+  for (const valor of Object.values(obj)) {
+    if (Array.isArray(valor)) valor.forEach((v) => buscarPoligonos(v, resultados));
+    else if (typeof valor === "object") buscarPoligonos(valor, resultados);
+  }
+  return resultados;
 }
 
 /** Abre el selector de archivos del sistema para elegir un .kmz/.kml. Devuelve
@@ -55,8 +81,14 @@ export async function elegirArchivoKmz(): Promise<File | null> {
 }
 
 /** Descomprime el KMZ (o lee el KML directo si no viene zipeado) y devuelve
- * el perímetro del lote como lista de {lat, lon} en orden. */
-export async function extraerPerimetroDeArchivo(archivo: File): Promise<LatLon[]> {
+ * el perímetro del campo/lote como una o más "piezas" — lista de vértices
+ * {lat, lon} en orden, una por cada `<Polygon>` real encontrado. Casi
+ * siempre es una sola pieza; puede haber varias si el campo está compuesto
+ * por lotes no contiguos agrupados en un `<MultiGeometry>` (ver
+ * `buscarPoligonos`). Nunca cae en silencio a datos de ejemplo: si algo
+ * sale mal, tira un error con mensaje claro para que se muestre en
+ * pantalla (ver subir-kmz.tsx). */
+export async function extraerPerimetroDeArchivo(archivo: File): Promise<LatLon[][]> {
   const esKmz = archivo.name.toLowerCase().endsWith(".kmz");
   let xml: string;
 
@@ -73,13 +105,10 @@ export async function extraerPerimetroDeArchivo(archivo: File): Promise<LatLon[]
   }
 
   const arbol = new XMLParser({ ignoreAttributes: false }).parse(xml);
-  const candidatos = buscarCoordenadas(arbol)
-    .map(parsearTuplasCoordenadas)
-    .filter((c) => c.length >= 3);
+  const piezas = buscarPoligonos(arbol);
 
-  if (candidatos.length === 0) {
+  if (piezas.length === 0) {
     throw new Error("No se encontró ningún polígono dentro del archivo.");
   }
-  candidatos.sort((a, b) => b.length - a.length);
-  return candidatos[0];
+  return piezas;
 }

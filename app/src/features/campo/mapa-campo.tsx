@@ -43,7 +43,10 @@ export interface PuntoMapa {
 
 interface MapaCampoProps {
   puntos: PuntoMapa[];
-  perimetro: XY[];
+  /** Una lista de vértices por pieza de terreno — casi siempre una sola
+   * pieza; más de una si el lote es en realidad un campo compuesto por
+   * varios lotes no contiguos (ver Lote["perimetro"] en types/domain.ts). */
+  perimetro: XY[][];
   miPos: XY | null;
   puntoCercanoId: string | null;
   enRango: boolean;
@@ -113,8 +116,9 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   ref
 ) {
   const bounds = useMemo(() => {
-    const xs = perimetro.map((p) => p.x);
-    const ys = perimetro.map((p) => p.y);
+    const todosLosVertices = perimetro.flat();
+    const xs = todosLosVertices.map((p) => p.x);
+    const ys = todosLosVertices.map((p) => p.y);
     return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
   }, [perimetro]);
   const spanX = Math.max(1, bounds.maxX - bounds.minX);
@@ -315,24 +319,31 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     transform: [{ rotate: `${heading + (rotacion.value * 180) / Math.PI}deg` }],
   }));
 
-  const perimetroPx = perimetro.map((p) => toPx(p.x, p.y));
-  // El relleno usa Path (M...L...Z) armado a mano con las mismas
-  // coordenadas — sirve para el área sombreada, pero el CONTORNO (lo que
-  // de verdad se está evaluando acá) se dibuja aparte, como líneas sueltas
-  // (ver más abajo): con datos reales de un lote real, tanto Polygon como
-  // Path (como un solo trazo con stroke) dejaban alguna arista sin
-  // dibujar — un bug de esta versión de react-native-svg al armar una
-  // figura de varios segmentos de una sola vez. Una <Line> por lado,
-  // cada una con sus 4 números sueltos (nada de texto para parsear), es
-  // lo más básico que se puede pedirle a la librería — si esto también
-  // falla, el problema no está en cómo se arma la figura.
-  const perimetroPath =
-    perimetroPx.length > 0
-      ? `M ${perimetroPx[0].left},${perimetroPx[0].top} L ${perimetroPx
+  // Una lista de puntos-en-pantalla por pieza (ver `perimetro` — casi
+  // siempre una sola pieza, más de una en un campo con lotes no
+  // contiguos).
+  const piezasPx = perimetro.map((pieza) => pieza.map((p) => toPx(p.x, p.y)));
+  // El relleno usa Path (M...L...Z, uno por pieza, todo en el mismo `d`)
+  // armado a mano con las mismas coordenadas — sirve para el área
+  // sombreada, pero el CONTORNO (lo que de verdad se está evaluando acá)
+  // se dibuja aparte, como líneas sueltas (ver más abajo): con datos
+  // reales de un lote real, tanto Polygon como Path (como un solo trazo
+  // con stroke) dejaban alguna arista sin dibujar — un bug de esta
+  // versión de react-native-svg al armar una figura de varios segmentos
+  // de una sola vez. Una <Line> por lado, cada una con sus 4 números
+  // sueltos (nada de texto para parsear), es lo más básico que se puede
+  // pedirle a la librería — si esto también falla, el problema no está en
+  // cómo se arma la figura.
+  const perimetroPath = piezasPx
+    .filter((pieza) => pieza.length > 0)
+    .map(
+      (pieza) =>
+        `M ${pieza[0].left},${pieza[0].top} L ${pieza
           .slice(1)
           .map((p) => `${p.left},${p.top}`)
           .join(" L ")} Z`
-      : "";
+    )
+    .join(" ");
 
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
   // Mientras se está marcando el recorrido (no una vez confirmado — ver
@@ -374,23 +385,27 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             {!pantallaCompleta && <Path d={perimetroPath} fill="rgba(59,143,92,0.08)" stroke="none" />}
             {/* Vista general: el contorno con <Line> anda bien acá (lote
                 chico, sin la rotación grande de seguir rumbo) — se deja
-                como estaba. */}
+                como estaba. Un loop por pieza (el `(i+1) % length` de
+                adentro cierra CADA pieza sobre sí misma, nunca salta de
+                una pieza a la siguiente). */}
             {!pantallaCompleta &&
-              perimetroPx.map((a, i) => {
-                const b = perimetroPx[(i + 1) % perimetroPx.length];
-                return (
-                  <Line
-                    key={`lado-${i}`}
-                    x1={a.left}
-                    y1={a.top}
-                    x2={b.left}
-                    y2={b.top}
-                    stroke={colors.primary}
-                    strokeWidth={1.5}
-                    strokeDasharray="4 3"
-                  />
-                );
-              })}
+              piezasPx.map((piezaPx, pi) =>
+                piezaPx.map((a, i) => {
+                  const b = piezaPx[(i + 1) % piezaPx.length];
+                  return (
+                    <Line
+                      key={`lado-${pi}-${i}`}
+                      x1={a.left}
+                      y1={a.top}
+                      x2={b.left}
+                      y2={b.top}
+                      stroke={colors.primary}
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
+                    />
+                  );
+                })
+              )}
 
             {/* Recorrido personal — vista general nomás (en modo trabajo se
                 dibuja con vistas comunes más abajo, mismo motivo que el
@@ -426,28 +441,30 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               puntos, "Yo", los marcadores de prueba), así que el contorno
               pasa a usar el mismo mecanismo. */}
           {pantallaCompleta &&
-            perimetroPx.map((a, i) => {
-              const b = perimetroPx[(i + 1) % perimetroPx.length];
-              const dx = b.left - a.left;
-              const dy = b.top - a.top;
-              const longitud = Math.hypot(dx, dy);
-              const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
-              const grosor = 2.5;
-              return (
-                <View
-                  key={`lado-${i}`}
-                  style={{
-                    position: "absolute",
-                    left: (a.left + b.left) / 2 - longitud / 2,
-                    top: (a.top + b.top) / 2 - grosor / 2,
-                    width: longitud,
-                    height: grosor,
-                    backgroundColor: colors.primary,
-                    transform: [{ rotate: `${angulo}deg` }],
-                  }}
-                />
-              );
-            })}
+            piezasPx.map((piezaPx, pi) =>
+              piezaPx.map((a, i) => {
+                const b = piezaPx[(i + 1) % piezaPx.length];
+                const dx = b.left - a.left;
+                const dy = b.top - a.top;
+                const longitud = Math.hypot(dx, dy);
+                const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
+                const grosor = 2.5;
+                return (
+                  <View
+                    key={`lado-${pi}-${i}`}
+                    style={{
+                      position: "absolute",
+                      left: (a.left + b.left) / 2 - longitud / 2,
+                      top: (a.top + b.top) / 2 - grosor / 2,
+                      width: longitud,
+                      height: grosor,
+                      backgroundColor: colors.primary,
+                      transform: [{ rotate: `${angulo}deg` }],
+                    }}
+                  />
+                );
+              })
+            )}
 
           {/* Recorrido personal en modo trabajo — de solo lectura (se marca
               y edita siempre desde vista general), mismas vistas comunes

@@ -10,6 +10,18 @@ export function filaAEstablecimiento(f: any): Establecimiento {
   return { id: f.id, clienteId: f.cliente_id, nombre: f.nombre };
 }
 
+/** El perímetro pasó de ser una sola lista de vértices (`PuntoGeo[]`) a una
+ * lista de piezas (`PuntoGeo[][]`, ver domain.ts) para soportar campos con
+ * lotes no contiguos — pero lotes ya generados ANTES de este cambio tienen
+ * guardado el formato viejo en la base. Se detecta mirando el primer
+ * elemento: si tiene `x`/`y` directo, es el formato viejo (una sola pieza
+ * "plana") y se envuelve en un array; si ya es un array, es el formato
+ * nuevo tal cual. */
+function normalizarPerimetro(valor: any): PuntoGeo[][] {
+  if (!Array.isArray(valor) || valor.length === 0) return [];
+  return Array.isArray(valor[0]) ? (valor as PuntoGeo[][]) : [valor as PuntoGeo[]];
+}
+
 export function filaALote(f: any): Lote {
   return {
     id: f.id,
@@ -19,7 +31,7 @@ export function filaALote(f: any): Lote {
     hectareas: f.hectareas,
     haPorPunto: f.ha_por_punto,
     campanaActual: f.campana_actual,
-    perimetro: (f.perimetro ?? []) as PuntoGeo[],
+    perimetro: normalizarPerimetro(f.perimetro),
     tieneGrilla: f.tiene_grilla,
   };
 }

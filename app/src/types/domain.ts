@@ -74,7 +74,11 @@ export interface Lote {
   hectareas: number;
   haPorPunto: number;
   campanaActual: string; // "25/26"
-  perimetro: PuntoGeo[]; // vértices reales del KMZ, en metros relativos al centro
+  // Vértices reales del KMZ, en metros relativos al centro — una lista por
+  // pieza de terreno. Casi siempre una sola pieza; más de una si el campo
+  // está compuesto por lotes no contiguos agrupados en un mismo KMZ (ver
+  // lib/kmz/parsear-kmz.ts).
+  perimetro: PuntoGeo[][];
   tieneGrilla: boolean;
 }
 

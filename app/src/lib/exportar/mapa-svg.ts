@@ -47,7 +47,7 @@ export interface PuntoDensidadSvg {
  * liso, igual que antes. */
 export function construirMapaDensidadHtml(
   puntos: PuntoDensidadSvg[],
-  perimetro: XY[],
+  perimetro: XY[][],
   rangos: RangoDensidad[],
   nivelColores: readonly string[],
   etiquetaLeyenda: string,
@@ -55,8 +55,9 @@ export function construirMapaDensidadHtml(
   alto: number,
   origen?: LatLon | null
 ): string {
-  const todasX = puntos.map((p) => p.x).concat(perimetro.map((v) => v.x));
-  const todasY = puntos.map((p) => p.y).concat(perimetro.map((v) => v.y));
+  const todosLosVertices = perimetro.flat();
+  const todasX = puntos.map((p) => p.x).concat(todosLosVertices.map((v) => v.x));
+  const todasY = puntos.map((p) => p.y).concat(todosLosVertices.map((v) => v.y));
   const minX = todasX.length > 0 ? Math.min(...todasX) : 0;
   const minY = todasY.length > 0 ? Math.min(...todasY) : 0;
   const spanX = Math.max(1, (todasX.length > 0 ? Math.max(...todasX) : 0) - minX);
@@ -96,12 +97,16 @@ export function construirMapaDensidadHtml(
     )
     .join("");
 
-  const perimetroPx = perimetro.map((v) => toPx(v.x, v.y));
-  const lados = perimetroPx
-    .map((a, i) => {
-      const b = perimetroPx[(i + 1) % perimetroPx.length];
-      return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="${colorPerimetro}" stroke-width="2" />`;
-    })
+  const piezasPx = perimetro.map((pieza) => pieza.map((v) => toPx(v.x, v.y)));
+  const lados = piezasPx
+    .map((piezaPx) =>
+      piezaPx
+        .map((a, i) => {
+          const b = piezaPx[(i + 1) % piezaPx.length];
+          return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="${colorPerimetro}" stroke-width="2" />`;
+        })
+        .join("")
+    )
     .join("");
 
   const svg = `<svg width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}" style="position:absolute;top:0;left:0;" xmlns="http://www.w3.org/2000/svg">${poligonos}${lados}</svg>`;

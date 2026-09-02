@@ -9,7 +9,7 @@
 // prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
-import type { XY } from "./geometria";
+import { indicePiezaMasCercana, puntoEnPoligono, type XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
 
@@ -154,16 +154,27 @@ export interface CeldaDensidad {
 
 /** Calcula, para cada punto de muestreo, su celda de Voronoi recortada al
  * perímetro real del lote (no a la caja que lo envuelve) — portado de
- * `resultadoCeldas` en DensidadView del prototipo. */
+ * `resultadoCeldas` en DensidadView del prototipo.
+ *
+ * `piezas` es una lista de piezas de terreno (casi siempre una sola; más de
+ * una si el campo tiene lotes no contiguos, ver geometria.ts). El Voronoi
+ * se calcula UNA vez sobre todos los puntos juntos (son sitios reales, da
+ * igual en qué pieza estén), pero cada celda se recorta solo contra el
+ * casco convexo de SU PROPIA pieza — nunca contra el casco de otra, ni
+ * contra uno global que abarque todas: con piezas separadas, un casco
+ * convexo global "rellenaría" el hueco vacío entre ellas con celdas de
+ * densidad que no corresponden a ningún terreno real. */
 export function calcularCeldasDensidad(
   puntos: Array<{ id: string; x: number; y: number; valor: number }>,
-  perimetro: XY[],
+  piezas: XY[][],
   rangos: RangoDensidad[]
 ): CeldaDensidad[] {
-  if (puntos.length === 0 || perimetro.length < 3) return [];
+  const piezasValidas = piezas.filter((pz) => pz.length >= 3);
+  if (puntos.length === 0 || piezasValidas.length === 0) return [];
 
-  const xs = puntos.map((p) => p.x).concat(perimetro.map((v) => v.x));
-  const ys = puntos.map((p) => p.y).concat(perimetro.map((v) => v.y));
+  const perimetroCompleto = piezasValidas.flat();
+  const xs = puntos.map((p) => p.x).concat(perimetroCompleto.map((v) => v.x));
+  const ys = puntos.map((p) => p.y).concat(perimetroCompleto.map((v) => v.y));
   const minX = Math.min(...xs);
   const minY = Math.min(...ys);
   const maxX = Math.max(...xs);
@@ -176,13 +187,18 @@ export function calcularCeldasDensidad(
   );
   const pad = 200; // margen generoso en metros — evita celdas mal recortadas en el borde del bounds
   const voronoi = delaunay.voronoi([minX - pad, minY - pad, maxX + pad, maxY + pad]);
-  const hullClip: Tupla[] = cascoConvexo(perimetro).map((v) => [v.x, v.y]);
+  const hullsPorPieza: Tupla[][] = piezasValidas.map((pz) => cascoConvexo(pz).map((v): Tupla => [v.x, v.y]));
 
   const celdas: CeldaDensidad[] = [];
   puntos.forEach((p, i) => {
     const cell = voronoi.cellPolygon(i);
     if (!cell) return;
-    const recortada = clipPoligonoConvexo(cell as Tupla[], hullClip);
+    // A qué pieza pertenece este punto — normalmente cae adentro de una
+    // sola; si por un empate/redondeo no cae claramente adentro de
+    // ninguna, se usa la pieza más cercana en vez de descartarlo.
+    let indicePieza = piezasValidas.findIndex((pz) => puntoEnPoligono(p.x, p.y, pz));
+    if (indicePieza === -1) indicePieza = indicePiezaMasCercana(p, piezasValidas);
+    const recortada = clipPoligonoConvexo(cell as Tupla[], hullsPorPieza[indicePieza]);
     if (recortada.length < 3) return;
     celdas.push({
       id: p.id,
