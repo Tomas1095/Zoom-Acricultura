@@ -80,17 +80,46 @@ export default function LoginScreen() {
       return;
     }
     setCargando(true);
+    const mailNormalizado = mail.trim().toLowerCase();
     const { error: signUpError } = await supabase.auth.signUp({
-      email: mail.trim().toLowerCase(),
+      email: mailNormalizado,
       password,
     });
     if (signUpError) {
-      setCargando(false);
-      Alert.alert("No se pudo crear la cuenta", signUpError.message);
-      return;
+      // La fila de `usuarios` recién se crea más abajo, al canjear el
+      // código (ver usar_invitacion en schema.sql) — NO al hacer signUp.
+      // Entonces si alguien ya intentó unirse antes y el canje falló
+      // después (código mal escrito, vencido, etc.), le queda una cuenta
+      // de Supabase Auth creada pero sin ningún usuario/comunidad — un
+      // reintento con el mismo mail choca acá con "already registered" y,
+      // sin esto, la persona queda trabada para siempre (ni puede volver a
+      // unirse, ni "Iniciar sesión" la lleva a ningún lado, porque tampoco
+      // tiene un usuario todavía). Antes de rendirnos, probamos iniciar
+      // sesión con lo que acaba de escribir — si es realmente un reintento
+      // (mismo mail Y contraseña), sigue de largo y canjea el código como
+      // si el signUp de arriba hubiera funcionado.
+      if (signUpError.message.toLowerCase().includes("already registered")) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: mailNormalizado,
+          password,
+        });
+        if (signInError) {
+          setCargando(false);
+          Alert.alert(
+            "Ya existe una cuenta con ese mail",
+            "Si ya te habías unido antes, iniciá sesión en vez de unirte con código de nuevo (o restablecé tu contraseña si no la recordás)."
+          );
+          return;
+        }
+      } else {
+        setCargando(false);
+        Alert.alert("No se pudo crear la cuenta", signUpError.message);
+        return;
+      }
     }
-    // Con la sesión ya activa (signUp deja logueado si la confirmación de mail
-    // está desactivada en el proyecto), canjeamos el código atómicamente.
+    // Con la sesión ya activa (signUp la deja logueada si la confirmación de
+    // mail está desactivada en el proyecto — o signInWithPassword, arriba,
+    // en el caso de un reintento), canjeamos el código atómicamente.
     const { error: rpcError } = await supabase.rpc("usar_invitacion", {
       p_codigo: codigo.trim().toUpperCase(),
       p_nombre: nombre.trim(),
@@ -116,14 +145,34 @@ export default function LoginScreen() {
       return;
     }
     setCargando(true);
+    const mailNormalizado = mail.trim().toLowerCase();
     const { error: signUpError } = await supabase.auth.signUp({
-      email: mail.trim().toLowerCase(),
+      email: mailNormalizado,
       password,
     });
     if (signUpError) {
-      setCargando(false);
-      Alert.alert("No se pudo crear la cuenta", signUpError.message);
-      return;
+      // Mismo caso que en unirseConCodigo (ver el comentario ahí): la fila
+      // de `usuarios` recién se crea al pedir la comunidad, no en el
+      // signUp — un reintento con el mismo mail choca acá con "already
+      // registered" si el primer intento falló después del signUp.
+      if (signUpError.message.toLowerCase().includes("already registered")) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: mailNormalizado,
+          password,
+        });
+        if (signInError) {
+          setCargando(false);
+          Alert.alert(
+            "Ya existe una cuenta con ese mail",
+            "Si ya habías pedido una comunidad antes, iniciá sesión en vez de volver a pedirla (o restablecé tu contraseña si no la recordás)."
+          );
+          return;
+        }
+      } else {
+        setCargando(false);
+        Alert.alert("No se pudo crear la cuenta", signUpError.message);
+        return;
+      }
     }
     try {
       await solicitarComunidad(nombreComunidad, nombre);
