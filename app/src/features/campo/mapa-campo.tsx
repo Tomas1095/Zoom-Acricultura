@@ -17,9 +17,9 @@ const ZOOM_MAX = 2.5;
 // ZOOM_MAX tal cual). Bastante más alto que ZOOM_MAX: a pedido del
 // usuario, con puntos muy juntos (grilla densa, o varias piezas cerca
 // unas de otras) hace falta poder acercar mucho más para separarlos —
-// junto con el "contra-escalado" de cada punto (ver estiloContraEscalaPunto
-// más abajo), que evita que los círculos y la numeración se agranden con
-// el zoom y se sigan tapando entre sí.
+// junto con el tamaño real (recalculado en cada `zoomAsentado`, ver más
+// abajo) de cada punto, que evita que los círculos y la numeración se
+// agranden 1 a 1 con el zoom y se sigan tapando entre sí.
 const ZOOM_MAX_VISTA_GENERAL = 9;
 
 // Niveles fijos de zoom para modo trabajo — botones +/- en vez de pellizcar
@@ -146,8 +146,35 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     return { left: MAP_PAD + (xm - bounds.minX) * baseScale, top: MAP_PAD + (ym - bounds.minY) * baseScale };
   }
 
-  const tamPunto = pantallaCompleta ? 24 : 18;
-  const tamFuente = pantallaCompleta ? 11 : 8.5;
+  // Espejo en React state del zoom ya asentado (no el que se mueve en vivo
+  // mientras pellizcás — ver `scale`, más abajo, junto al resto de los
+  // gestos) — un `useAnimatedStyle` no sirve acá porque lo que hace falta
+  // es que React vuelva a RENDERIZAR el círculo/número a su tamaño real
+  // nuevo (ver tamPunto/tamFuente, justo abajo), no que les aplique un
+  // transform de más. Mientras estás pellizcando el círculo/número quedan
+  // con el tamaño del último zoom ya asentado (un poco estirados por el
+  // zoom en vivo, nada distinto de cualquier foto que agrandás con dos
+  // dedos) — apenas soltás, éste se actualiza (ver pinch.onEnd) y quedan
+  // nítidos de nuevo.
+  const [zoomAsentado, setZoomAsentado] = useState(1);
+
+  // Tamaño REAL (no un transform) del círculo/número — ver `zoomAsentado`
+  // más arriba, que es la razón de todo esto: si el zoom del pellizco crece
+  // (hasta 9x) y el tamaño se ajusta con un transform de Reanimated en vez
+  // de con esto, react-native-svg/Text dibujan el círculo/número UNA vez a
+  // su tamaño base y esa imagen ya dibujada es la que se estira con el
+  // zoom — así, cuanto más lejos esté el zoom de 1x, más se nota que es
+  // una imagen estirada, no algo dibujado de nuevo a upa una resolución
+  // más alta (mismo motivo por el que pasaba esto tanto con vistas nativas
+  // como con SVG — cualquiera de las dos termina siendo una imagen ya
+  // dibujada por dentro). Achicando el tamaño REAL en la misma proporción
+  // en que el zoom lo va a agrandar (tamBase*factor/zoom), lo que
+  // react-native-svg/Text terminan dibujando siempre es del tamaño final
+  // real en pantalla — nítido a cualquier zoom.
+  const zoomEfectivo = pantallaCompleta ? 1 : zoomAsentado;
+  const factorCrecimiento = Math.sqrt(zoomEfectivo); // crece, pero más lento que el zoom — mismo criterio de siempre
+  const tamPunto = pantallaCompleta ? 24 : (18 * factorCrecimiento) / zoomEfectivo;
+  const tamFuente = pantallaCompleta ? 11 : (8.5 * factorCrecimiento) / zoomEfectivo;
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
@@ -193,6 +220,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     indiceZoomRef.current = NIVEL_ZOOM_INICIAL;
     setInteractuado(false);
     onInteraccion?.(false);
+    setZoomAsentado(1);
   }
 
   function irANivelZoom(indice: number) {
@@ -244,6 +272,11 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
       "worklet";
       savedScale.value = scale.value;
       runOnJS(avisarInteraccion)();
+      // Recién ACÁ (al soltar, no en cada frame del pellizco) se
+      // actualiza el zoom asentado — ver el comentario de `zoomAsentado`
+      // más arriba, es lo que dispara volver a dibujar el círculo/número
+      // nítidos a su tamaño real nuevo.
+      runOnJS(setZoomAsentado)(scale.value);
     });
 
   const pan = Gesture.Pan()
@@ -301,37 +334,19 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     ],
   }));
 
-  // Contra-rotación (para que la numeración de cada punto se lea siempre en
-  // horizontal, gire lo que gire el mapa) + contra-escala PARCIAL SOLO en
-  // vista general — a propósito NO cancela la escala del todo: si el
-  // círculo quedara con el mismo tamaño de siempre pasara lo que pasara
-  // con el zoom, acercar con el pellizco no serviría para nada (ver el
-  // primer intento de esto: separa los puntos entre sí pero cada uno
-  // sigue tan chico e ilegible como antes de acercar). Achicando la
-  // contra-escala con la raíz cuadrada en vez de 1/scale entero, el
-  // círculo/número SÍ crece al acercar (más legible), pero más lento que
-  // la separación entre puntos (que crece con la escala entera) — así
-  // ambas cosas mejoran juntas: separa los puntos que estaban encimados Y
-  // se pueden leer mejor de cerca. En modo trabajo la escala sigue
-  // agrandando la etiqueta 1 a 1 con el zoom como siempre (a propósito,
-  // para leer caminando, con menos puntos por pantalla que en vista
-  // general). Un solo estilo animado reutilizado en todas las etiquetas
-  // (no se puede llamar useAnimatedStyle adentro del .map() de abajo, así
-  // que va una vez acá arriba).
-  const estiloContraTransformEtiqueta = useAnimatedStyle(() => {
+  // Contra-rotación, para que la numeración de cada punto se lea siempre en
+  // horizontal, gire lo que gire el mapa — un solo estilo animado
+  // reutilizado en todas las etiquetas (no se puede llamar
+  // useAnimatedStyle adentro del .map() de abajo, así que va una vez acá
+  // arriba). Ya NO contra-escala acá (antes sí) — ver el comentario de
+  // `zoomAsentado`/tamPunto más arriba: el tamaño real de cada círculo/
+  // número ahora se resuelve con un valor real (que react-native-svg/Text
+  // dibujan nítido) en vez de con un transform, que es lo que los
+  // pixelaba. La rotación no tiene ese problema (rotar no pixela, solo
+  // estirar/agrandar), así que sigue con Reanimated como siempre, en vivo.
+  const estiloContraRotacionEtiqueta = useAnimatedStyle(() => {
     "worklet";
-    return {
-      transform: [{ rotateZ: `${-rotacion.value}rad` }, { scale: pantallaCompleta ? 1 : 1 / Math.sqrt(scale.value) }],
-    };
-  });
-
-  // Contra-escala del círculo de cada punto — mismo motivo y mismo truco
-  // que la etiqueta de arriba (ver estiloContraTransformEtiqueta), pero
-  // sin rotación (un círculo se ve igual gire lo que gire). Solo activo en
-  // vista general.
-  const estiloContraEscalaPunto = useAnimatedStyle(() => {
-    "worklet";
-    return { transform: [{ scale: pantallaCompleta ? 1 : 1 / Math.sqrt(scale.value) }] };
+    return { transform: [{ rotateZ: `${-rotacion.value}rad` }] };
   });
 
   // Solo modo trabajo: el marcador "Yo" está fuera del grupo que
@@ -563,15 +578,15 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                 ]}
               >
                 {/* El círculo va en una vista aparte (adentro del área de
-                    toque, que mantiene su tamaño/posición real siempre)
-                    para poder contra-escalarlo en vista general — ver
-                    estiloContraEscalaPunto: sin esto, acercar con el
+                    toque, que mantiene su tamaño/posición real siempre) —
+                    en vista general, `tamPunto` ya viene achicado en
+                    proporción inversa al zoom asentado (ver el comentario
+                    de tamPunto/tamFuente más arriba), así que acá no hace
+                    falta ningún transform de más: sin eso, acercar con el
                     pellizco agranda el círculo tanto como separa los
                     puntos entre sí, y con una grilla densa terminan
                     tapándose igual por más zoom que se haga. */}
-                <Animated.View
-                  style={[styles.puntoCirculo, { width: tamPunto, height: tamPunto }, estiloContraEscalaPunto]}
-                >
+                <View style={[styles.puntoCirculo, { width: tamPunto, height: tamPunto }]}>
                   {pantallaCompleta ? (
                     // Modo trabajo: vista nativa de siempre, sin cambios —
                     // acá el zoom es a lo sumo 2.5x (botones +/-, no
@@ -616,14 +631,14 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                       {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
                     </>
                   )}
-                </Animated.View>
+                </View>
                 {pantallaCompleta ? (
                   <Animated.Text
                     numberOfLines={1}
                     style={[
                       styles.puntoLabel,
                       { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                      estiloContraTransformEtiqueta,
+                      estiloContraRotacionEtiqueta,
                     ]}
                   >
                     {p.id}
@@ -631,11 +646,12 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                 ) : (
                   // Mismo motivo que el círculo de arriba: el número
                   // dibujado con SVG (en vez de <Text>) no se pixela con
-                  // el zoom de vista general.
+                  // el zoom de vista general — `tamFuente` ya viene
+                  // achicado en proporción inversa al zoom asentado.
                   <Animated.View
                     style={[
                       { position: "absolute", width: 40, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                      estiloContraTransformEtiqueta,
+                      estiloContraRotacionEtiqueta,
                     ]}
                   >
                     <Svg width={40} height={tamFuente * 1.6} pointerEvents="none">
@@ -712,8 +728,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   // El área de toque (`punto`, arriba) mantiene el tamaño/posición real
-  // siempre; este círculo visual va adentro y es al que se le aplica la
-  // contra-escala en vista general (ver estiloContraEscalaPunto).
+  // siempre; este círculo visual va adentro, ya con el tamaño achicado en
+  // proporción inversa al zoom (ver tamPunto, más arriba).
   puntoCirculo: {
     alignItems: "center",
     justifyContent: "center",
