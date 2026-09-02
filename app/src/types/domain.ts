@@ -85,6 +85,11 @@ export interface Lote {
 export interface Punto {
   id: string;
   loteId: string;
+  /** A qué pieza de terreno pertenece (0 si el lote es una sola pieza).
+   * `linea` reinicia en 1 en cada pieza, así que dos puntos de piezas
+   * distintas pueden tener la misma (linea, puntoNum) — para identificar
+   * un punto sin ambigüedad hace falta esta columna también. */
+  pieza: number;
   linea: number;
   puntoNum: number;
   lat: number;

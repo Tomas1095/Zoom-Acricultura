@@ -3,7 +3,17 @@ import { inferirOrigenDesdePuntos, type LatLon } from "@/lib/geo/geometria";
 import type { Carga, Punto } from "@/types/domain";
 
 function filaAPunto(f: any): Punto {
-  return { id: f.id, loteId: f.lote_id, linea: f.linea, puntoNum: f.punto_num, lat: f.lat, lon: f.lon, x: f.x, y: f.y };
+  return {
+    id: f.id,
+    loteId: f.lote_id,
+    pieza: f.pieza,
+    linea: f.linea,
+    puntoNum: f.punto_num,
+    lat: f.lat,
+    lon: f.lon,
+    x: f.x,
+    y: f.y,
+  };
 }
 
 function filaACarga(f: any): Carga {
@@ -30,7 +40,13 @@ function filaACarga(f: any): Carga {
 }
 
 export async function fetchPuntosDeLote(loteId: string): Promise<Punto[]> {
-  const { data, error } = await supabase.from("puntos").select("*").eq("lote_id", loteId).order("linea").order("punto_num");
+  const { data, error } = await supabase
+    .from("puntos")
+    .select("*")
+    .eq("lote_id", loteId)
+    .order("pieza")
+    .order("linea")
+    .order("punto_num");
   if (error) throw error;
   return (data ?? []).map(filaAPunto);
 }

@@ -12,6 +12,15 @@ const MAP_PAD = 26; // px de margen alrededor de la grilla
 const MAP_SCALE_MAX = 3.2; // px por metro, a zoom 1x
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 2.5;
+// Techo del pellizcar en VISTA GENERAL únicamente (el pinch de ahí abajo,
+// no los botones +/- de modo trabajo — ver NIVELES_ZOOM, que sigue usando
+// ZOOM_MAX tal cual). Bastante más alto que ZOOM_MAX: a pedido del
+// usuario, con puntos muy juntos (grilla densa, o varias piezas cerca
+// unas de otras) hace falta poder acercar mucho más para separarlos —
+// junto con el "contra-escalado" de cada punto (ver estiloContraEscalaPunto
+// más abajo), que evita que los círculos y la numeración se agranden con
+// el zoom y se sigan tapando entre sí.
+const ZOOM_MAX_VISTA_GENERAL = 9;
 
 // Niveles fijos de zoom para modo trabajo — botones +/- en vez de pellizcar
 // con los dedos (como un GPS de mano tipo Garmin eTrex, que tiene dos
@@ -35,7 +44,17 @@ const NIVELES_ZOOM = [0.04, 0.07, 0.15, 0.25, 0.4, 0.6, 0.8, 1, 1.3, 1.6, 2, ZOO
 const NIVEL_ZOOM_INICIAL = NIVELES_ZOOM.indexOf(1);
 
 export interface PuntoMapa {
+  /** Identidad real del punto — única en TODO el lote (clave de React,
+   * de qué punto se tocó/toca `onTapPunto`, del recorrido personal y de
+   * `puntoCercanoId`). Como `linea` reinicia en 1 en cada pieza (ver
+   * geometria.ts), esto NO puede ser solo "linea.puntoNum" — dos piezas
+   * pueden compartir esos números. Quien arma este objeto debe incluir la
+   * pieza acá (p.ej. `${p.pieza}.${p.linea}.${p.puntoNum}`). */
   id: string;
+  /** Lo que efectivamente se ve dibujado en el mapa junto al punto —
+   * "linea.puntoNum" sin la pieza, a propósito: cada pieza tiene que
+   * verse numerada como si fuera su propio lote chico. */
+  etiqueta: string;
   x: number;
   y: number;
   confirmado: boolean;
@@ -229,7 +248,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     .onUpdate((e) => {
       "worklet";
       const nuevo = savedScale.value * e.scale;
-      scale.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nuevo));
+      scale.value = Math.min(ZOOM_MAX_VISTA_GENERAL, Math.max(ZOOM_MIN, nuevo));
     })
     .onEnd(() => {
       "worklet";
@@ -292,13 +311,30 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     ],
   }));
 
-  // Contra-rotación para que la numeración de cada punto se lea siempre en
-  // horizontal, gire lo que gire el mapa — un solo estilo animado
-  // reutilizado en todas las etiquetas (no se puede llamar useAnimatedStyle
-  // adentro del .map() de abajo, así que va una vez acá arriba).
-  const estiloContraRotacionEtiqueta = useAnimatedStyle(() => ({
-    transform: [{ rotateZ: `${-rotacion.value}rad` }],
-  }));
+  // Contra-rotación (para que la numeración de cada punto se lea siempre en
+  // horizontal, gire lo que gire el mapa) + contra-escala SOLO en vista
+  // general (para que la etiqueta no se agrande al acercar y siga
+  // legible/no se solape con las vecinas — ver estiloContraEscalaPunto,
+  // mismo motivo). En modo trabajo la escala sigue agrandando la etiqueta
+  // con el zoom como siempre (a propósito, para leer caminando). Un solo
+  // estilo animado reutilizado en todas las etiquetas (no se puede llamar
+  // useAnimatedStyle adentro del .map() de abajo, así que va una vez acá
+  // arriba).
+  const estiloContraTransformEtiqueta = useAnimatedStyle(() => {
+    "worklet";
+    return {
+      transform: [{ rotateZ: `${-rotacion.value}rad` }, { scale: pantallaCompleta ? 1 : 1 / scale.value }],
+    };
+  });
+
+  // Contra-escala del círculo de cada punto — mismo motivo y mismo truco
+  // que la etiqueta de arriba (ver estiloContraTransformEtiqueta), pero
+  // sin rotación (un círculo se ve igual gire lo que gire). Solo activo en
+  // vista general.
+  const estiloContraEscalaPunto = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ scale: pantallaCompleta ? 1 : 1 / scale.value }] };
+  });
 
   // Solo modo trabajo: el marcador "Yo" está fuera del grupo que
   // gira/escala/arrastra (ver JSX), pero necesita moverse CON el arrastre
@@ -520,26 +556,44 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                   {
                     width: tamPunto,
                     height: tamPunto,
-                    borderRadius: tamPunto / 2,
                     left: pos.left - tamPunto / 2,
                     top: pos.top - tamPunto / 2,
-                    backgroundColor: marcadoEnRuta ? colors.info : p.confirmado ? colorFillCompleto : colors.surface,
-                    borderColor: marcadoEnRuta ? colors.info : p.confirmado ? colorBorderCompleto : colorBorderPendiente,
-                    borderWidth: pantallaCompleta ? 3 : 2,
                     shadowOpacity: cercano && enRango ? 1 : 0,
                   },
                 ]}
               >
-                {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                {/* El círculo va en una vista aparte (adentro del área de
+                    toque, que mantiene su tamaño/posición real siempre)
+                    para poder contra-escalarlo en vista general — ver
+                    estiloContraEscalaPunto: sin esto, acercar con el
+                    pellizco agranda el círculo tanto como separa los
+                    puntos entre sí, y con una grilla densa terminan
+                    tapándose igual por más zoom que se haga. */}
+                <Animated.View
+                  style={[
+                    styles.puntoCirculo,
+                    {
+                      width: tamPunto,
+                      height: tamPunto,
+                      borderRadius: tamPunto / 2,
+                      backgroundColor: marcadoEnRuta ? colors.info : p.confirmado ? colorFillCompleto : colors.surface,
+                      borderColor: marcadoEnRuta ? colors.info : p.confirmado ? colorBorderCompleto : colorBorderPendiente,
+                      borderWidth: pantallaCompleta ? 3 : 2,
+                    },
+                    estiloContraEscalaPunto,
+                  ]}
+                >
+                  {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                </Animated.View>
                 <Animated.Text
                   numberOfLines={1}
                   style={[
                     styles.puntoLabel,
                     { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                    estiloContraRotacionEtiqueta,
+                    estiloContraTransformEtiqueta,
                   ]}
                 >
-                  {p.id}
+                  {p.etiqueta}
                 </Animated.Text>
               </Pressable>
             );
@@ -599,6 +653,13 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 0 },
     elevation: 3,
+  },
+  // El área de toque (`punto`, arriba) mantiene el tamaño/posición real
+  // siempre; este círculo visual va adentro y es al que se le aplica la
+  // contra-escala en vista general (ver estiloContraEscalaPunto).
+  puntoCirculo: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   puntoLabel: {
     position: "absolute",

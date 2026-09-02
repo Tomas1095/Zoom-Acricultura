@@ -39,7 +39,10 @@ export default function ModoTrabajoScreen() {
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>
       puntos.map((p) => ({
-        id: `${p.linea}.${p.puntoNum}`,
+        // Única en el lote (ver el comentario en PuntoMapa) — el texto que
+        // se ve en el mapa es `etiqueta`, sin la pieza.
+        id: `${p.pieza}.${p.linea}.${p.puntoNum}`,
+        etiqueta: `${p.linea}.${p.puntoNum}`,
         x: p.x,
         y: p.y,
         confirmado: cargas.get(p.id)?.confirmado ?? false,
@@ -71,7 +74,14 @@ export default function ModoTrabajoScreen() {
     );
   }
 
+  // Texto que se muestra en la tarjeta ("Punto 1.1") — sin la pieza.
   const etiquetaCercano = puntoCercano ? `${puntoCercano.punto.linea}.${puntoCercano.punto.puntoNum}` : null;
+  // Identidad real, para que `MapaCampo` resalte el punto correcto aunque
+  // otra pieza tenga la misma "linea.puntoNum" (ver el comentario en
+  // PuntoMapa, mapa-campo.tsx).
+  const idCercano = puntoCercano
+    ? `${puntoCercano.punto.pieza}.${puntoCercano.punto.linea}.${puntoCercano.punto.puntoNum}`
+    : null;
 
   return (
     <View style={styles.container}>
@@ -80,7 +90,7 @@ export default function ModoTrabajoScreen() {
         puntos={puntosMapa}
         perimetro={lote.perimetro}
         miPos={gps.posicion}
-        puntoCercanoId={etiquetaCercano}
+        puntoCercanoId={idCercano}
         enRango={enRango}
         heading={gps.heading}
         pantallaCompleta

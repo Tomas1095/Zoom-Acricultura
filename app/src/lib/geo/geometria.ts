@@ -172,6 +172,11 @@ function tramosDeFila(v: number, poly: XY[]): Array<[number, number]> {
 }
 
 export interface PuntoGrillaGenerado {
+  /** A qué pieza pertenece — solo para que `db/kmz.ts` la guarde junto al
+   * punto y `linea` pueda reiniciar en 1 en cada pieza sin chocar con la
+   * de otra (ver `unique (lote_id, pieza, linea, punto_num)` en
+   * schema.sql). El resto de la app nunca necesita leerla. */
+  pieza: number;
   linea: number;
   puntoNum: number;
   lat: number;
@@ -218,10 +223,14 @@ function limpiarPieza(piezaEntrada: LatLon[]): LatLon[] {
  *    que una pieza cóncava tipo "L" también funcione bien), y NUNCA deja
  *    que una línea salga de esa pieza hacia otra: una persona no puede
  *    caminar una línea que salte entre dos lotes separados en el campo.
- * 3. La numeración de línea sigue corrida entre piezas (pieza 1: líneas
- *    1..n, pieza 2: líneas n+1..m, …) — mismo criterio simple que ya usaba
- *    esto para una sola pieza, ahora sin cortar a cero entre una pieza y la
- *    siguiente.
+ * 3. La numeración de línea reinicia en 1 en cada pieza — cada pieza es un
+ *    lote físicamente separado del resto, así que a pedido del usuario se
+ *    numera como si fuera su propio lote chico ("1.1, 1.2, 1.3…" en cada
+ *    una, no siguiendo corrida desde la pieza anterior). Como esto puede
+ *    hacer que dos piezas tengan las dos una "línea 1", cada punto también
+ *    lleva marcado a qué pieza pertenece (ver `pieza` en
+ *    PuntoGrillaGenerado) — así `linea` sigue siendo única DENTRO de su
+ *    pieza aunque se repita entre piezas distintas.
  * 4. Hectáreas = suma de las de cada pieza (shoelace, una por una). */
 export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunto: number): GrillaGenerada {
   const piezasLimpias = piezasEntrada.map(limpiarPieza).filter((p) => p.length >= 3);
@@ -239,9 +248,9 @@ export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunt
   const piezas: XY[][] = [];
   const puntos: PuntoGrillaGenerado[] = [];
   let hectareas = 0;
-  let linea = 0;
 
-  for (const pieza of piezasLimpias) {
+  for (const [indicePieza, pieza] of piezasLimpias.entries()) {
+    let linea = 0; // reinicia en cada pieza, ver el comentario de arriba
     const piezaXY = pieza.map((p) => latLonAXY(origen, p));
     piezas.push(piezaXY);
     hectareas += areaPoligonoM2(piezaXY) / 10000;
@@ -274,7 +283,7 @@ export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunt
       linea += 1;
       filaXY.forEach((p, i) => {
         const { lat, lon } = xyALatLon(origen, p);
-        puntos.push({ linea, puntoNum: i + 1, lat, lon, x: p.x, y: p.y });
+        puntos.push({ pieza: indicePieza, linea, puntoNum: i + 1, lat, lon, x: p.x, y: p.y });
       });
     }
   }
