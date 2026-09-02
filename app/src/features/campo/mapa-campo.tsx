@@ -168,13 +168,19 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // más alta (mismo motivo por el que pasaba esto tanto con vistas nativas
   // como con SVG — cualquiera de las dos termina siendo una imagen ya
   // dibujada por dentro). Achicando el tamaño REAL en la misma proporción
-  // en que el zoom lo va a agrandar (tamBase*factor/zoom), lo que
-  // react-native-svg/Text terminan dibujando siempre es del tamaño final
-  // real en pantalla — nítido a cualquier zoom.
+  // en que el zoom lo va a agrandar (tamBase/zoom), lo que react-native-
+  // svg/Text terminan dibujando siempre es del tamaño final real en
+  // pantalla — nítido a cualquier zoom.
+  //
+  // A propósito el tamaño en pantalla queda CONSTANTE (no crece nada con
+  // el zoom, ni siquiera despacio como en un primer intento) — pedido
+  // original del usuario: el pellizco es para separar puntos muy juntos
+  // entre sí, no para agrandarlos; si además crecen, con una grilla densa
+  // (como la real, +100 puntos) terminan viéndose grandes y pisándose
+  // entre ellos igual, aunque estén más separados.
   const zoomEfectivo = pantallaCompleta ? 1 : zoomAsentado;
-  const factorCrecimiento = Math.sqrt(zoomEfectivo); // crece, pero más lento que el zoom — mismo criterio de siempre
-  const tamPunto = pantallaCompleta ? 24 : (18 * factorCrecimiento) / zoomEfectivo;
-  const tamFuente = pantallaCompleta ? 11 : (8.5 * factorCrecimiento) / zoomEfectivo;
+  const tamPunto = pantallaCompleta ? 24 : 18 / zoomEfectivo;
+  const tamFuente = pantallaCompleta ? 11 : 8.5 / zoomEfectivo;
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
@@ -564,7 +570,15 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               <Pressable
                 key={p.id}
                 disabled={!tocable}
-                hitSlop={10}
+                // Antes tenía hitSlop 10 (un área de toque invisible bastante
+                // más grande que el círculo) — con una grilla densa de
+                // verdad (100+ puntos, como la real) esa área extra de
+                // puntos vecinos se solapaba, y terminabas abriendo el punto
+                // de al lado en vez del que tocaste. Bajado a un margen
+                // chico, casi nada más que un poco de tolerancia para el
+                // dedo, no una zona invisible que se meta en el círculo de
+                // al lado.
+                hitSlop={3}
                 onPress={() => (marcandoRuta ? onTogglePuntoRuta?.(p.id) : onTapPunto(p.id))}
                 style={[
                   styles.punto,
