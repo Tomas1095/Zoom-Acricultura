@@ -196,8 +196,10 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // Fondo claro en los dos modos (no oscuro en pantalla completa como en
   // una primera versión) — así que la etiqueta necesita un color oscuro
   // legible sobre claro en ambos casos, no el hueso que se pensó para
-  // fondo oscuro.
-  const colorEtiqueta = colors.textMuted;
+  // fondo oscuro. `colors.text` (casi negro), no `textMuted` (un marrón
+  // apagado) — a pedido del usuario, para que el número resalte más,
+  // sobre todo a zoom alto donde queda chico.
+  const colorEtiqueta = colors.text;
 
   // ---- Gestos: pinch (zoom, solo vista general) + pan (arrastrar) +
   // rotación con 2 dedos ----

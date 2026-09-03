@@ -9,8 +9,8 @@
 // mano.
 //
 // El recorte contra el perímetro respeta piezas cóncavas (p.ej. un
-// entrante para excluir un pivote de riego) triangulando la pieza en vez
-// de usar su casco convexo — ver el comentario de `calcularCeldasDensidad`.
+// entrante para excluir un pivote de riego) sin partir cada celda en
+// fragmentos — ver el comentario de `calcularCeldasDensidad`.
 //
 // La imagen satelital de fondo va aparte, en lib/geo/satelital.ts (Esri
 // World Imagery, gratuita, sin API key — mismo servicio que ya usaba el
@@ -18,7 +18,7 @@
 // prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
-import { areaPoligonoM2, cascoConvexo, indicePiezaMasCercana, puntoEnPoligono, triangularPoligono, type XY } from "./geometria";
+import { indicePiezaMasCercana, puntoEnPoligono, type XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
 
@@ -130,13 +130,6 @@ export interface CeldaDensidad {
   nivel: number; // índice en NIVEL_COLORES / rangos
 }
 
-// Margen de tolerancia al comparar el área del casco convexo de una pieza
-// contra su área real — por debajo de esto se la trata como convexa (usa
-// el casco entero como un solo recorte, un poco más liviano) en vez de
-// triangularla; por arriba, es cóncava de verdad (ver el comentario de
-// `calcularCeldasDensidad`) y hace falta triangularla para recortar bien.
-const TOLERANCIA_CONVEXIDAD = 1.02;
-
 /** Calcula, para cada punto de muestreo, su celda de Voronoi ("el área más
  * cercana a este punto que a cualquier otro" — mismo criterio que la
  * herramienta "Voronoi Map" de Geostatistical Analyst en ArcGIS, que es la
@@ -153,17 +146,22 @@ const TOLERANCIA_CONVEXIDAD = 1.02;
  * vacío entre ellas con celdas de densidad que no corresponden a ningún
  * terreno real.
  *
- * El recorte en sí se hace contra el casco convexo de la pieza SOLO
- * cuando la pieza ya es (casi) convexa — es más liviano y da el mismo
- * resultado. Si la pieza es cóncava de verdad (p.ej. tiene un entrante
- * dejado a propósito para excluir un pivote de riego, caso real de un
- * usuario), usar el casco la "rellenaría" con una línea recta y el mapa
- * terminaría coloreando encima de esa zona excluida — para eso se
- * triangula la pieza entera (ver triangularPoligono) y se recorta la
- * celda contra cada triángulo por separado, así el resultado sí respeta
- * el entrante. Una celda puede así partirse en más de un fragmento —
- * todos comparten el mismo punto de origen (mismo color/valor), solo
- * cambia el id para que cada uno tenga una key propia. */
+ * El recorte se hace con Sutherland-Hodgman (`clipPoligonoConvexo`), que
+ * solo exige que el polígono de RECORTE (el segundo argumento) sea
+ * convexo — el que se recorta (el primero) puede ser cualquier polígono
+ * simple, cóncavo incluido. Antes se pasaba la celda de Voronoi como
+ * primer argumento (para recortarla contra la pieza), así que si la pieza
+ * era cóncava de verdad (p.ej. tiene un entrante dejado a propósito para
+ * excluir un pivote de riego, caso real de un usuario) hacía falta
+ * triangular la pieza entera y recortar la celda contra cada triángulo
+ * por separado — eso partía cada celda en varios fragmentos, cada uno
+ * dibujado con su propio borde, y esas costuras internas eran justo lo
+ * que se veía como huecos/mal relleno en el mapa. Dando vuelta el orden
+ * —recortar la PIEZA (que puede ser cóncava, no importa) contra la CELDA
+ * (que siempre es convexa, por definición de un diagrama de Voronoi)— el
+ * resultado es un solo polígono por punto, sin triangular nada y sin
+ * costuras de más, y el entrante cóncavo se sigue respetando igual (la
+ * pieza cóncava recortada nunca invade la zona excluida). */
 export function calcularCeldasDensidad(
   puntos: Array<{ id: string; x: number; y: number; valor: number }>,
   piezas: XY[][],
@@ -188,12 +186,7 @@ export function calcularCeldasDensidad(
   const pad = 200; // margen generoso en metros — evita celdas mal recortadas en el borde del bounds
   const voronoi = delaunay.voronoi([minX - pad, minY - pad, maxX + pad, maxY + pad]);
 
-  const recortesPorPieza: Tupla[][][] = piezasValidas.map((pz) => {
-    const hull = cascoConvexo(pz);
-    const esConvexa = areaPoligonoM2(hull) <= areaPoligonoM2(pz) * TOLERANCIA_CONVEXIDAD;
-    const aTuplas = (poligonos: XY[][]) => poligonos.map((t) => t.map((v): Tupla => [v.x, v.y]));
-    return esConvexa ? aTuplas([hull]) : aTuplas(triangularPoligono(pz));
-  });
+  const piezasTuplas: Tupla[][] = piezasValidas.map((pz) => pz.map((v): Tupla => [v.x, v.y]));
 
   const celdas: CeldaDensidad[] = [];
   puntos.forEach((p, i) => {
@@ -204,17 +197,14 @@ export function calcularCeldasDensidad(
     // ninguna, se usa la pieza más cercana en vez de descartarlo.
     let indicePieza = piezasValidas.findIndex((pz) => puntoEnPoligono(p.x, p.y, pz));
     if (indicePieza === -1) indicePieza = indicePiezaMasCercana(p, piezasValidas);
-    const celdaVoronoi = celda as Tupla[];
 
-    recortesPorPieza[indicePieza].forEach((recorte, r) => {
-      const recortada = clipPoligonoConvexo(celdaVoronoi, recorte);
-      if (recortada.length < 3) return;
-      celdas.push({
-        id: `${p.id}-${r}`,
-        poligono: recortada.map(([x, y]) => ({ x, y })),
-        valorM2: p.valor,
-        nivel: clasificarNivel(p.valor, rangos),
-      });
+    const recortada = clipPoligonoConvexo(piezasTuplas[indicePieza], celda as Tupla[]);
+    if (recortada.length < 3) return;
+    celdas.push({
+      id: p.id,
+      poligono: recortada.map(([x, y]) => ({ x, y })),
+      valorM2: p.valor,
+      nivel: clasificarNivel(p.valor, rangos),
     });
   });
   return celdas;
