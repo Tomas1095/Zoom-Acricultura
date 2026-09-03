@@ -36,10 +36,6 @@ interface MapaDensidadProps {
   puntos: PuntoDensidad[];
   /** Una lista de vértices por pieza de terreno — ver Lote["perimetro"]. */
   perimetro: XY[][];
-  /** El espaciado real entre puntos de la grilla (ver Lote["haPorPunto"]) —
-   * hace falta para armar el cuadriculado de la densidad del mismo
-   * tamaño real que separa a los puntos entre sí (ver calcularCeldasDensidad). */
-  haPorPunto: number;
   rangos: RangoDensidad[];
   nivelColores: readonly string[];
   /** Encabezado de la leyenda ("Nº BB/m²" / "Nº Babosas/m²"). */
@@ -57,11 +53,10 @@ interface MapaDensidadProps {
  * prototipo, con la imagen satelital de fondo (Esri World Imagery,
  * gratuita — ver `lib/geo/satelital.ts`). A diferencia de `MapaCampo` en
  * modo trabajo, esta vista nunca rota ni escala con gestos — es una foto
- * fija — así que las celdas del cuadriculado (ver calcularCeldasDensidad
+ * fija — así que las celdas (Voronoi de verdad, ver calcularCeldasDensidad
  * en lib/geo/densidad.ts) se dibujan con `<Polygon>` de react-native-svg
- * sin problema (el bug de renderizado que encontramos era
- * específico de transforms de rotación grandes de Reanimated, que acá no
- * existen).
+ * sin problema (el bug de renderizado que encontramos era específico de
+ * transforms de rotación grandes de Reanimated, que acá no existen).
  *
  * Título, rosa de los vientos, leyenda, escala y atribución van TODOS
  * adentro del rectángulo del mapa (superpuestos a la foto) — como pidió el
@@ -74,7 +69,6 @@ interface MapaDensidadProps {
 export function MapaDensidad({
   puntos,
   perimetro,
-  haPorPunto,
   rangos,
   nivelColores,
   etiquetaLeyenda,
@@ -119,11 +113,11 @@ export function MapaDensidad({
 
   const celdas = useMemo(() => {
     try {
-      return calcularCeldasDensidad(puntos, perimetro, rangos, haPorPunto);
+      return calcularCeldasDensidad(puntos, perimetro, rangos);
     } catch {
       return []; // igual que el prototipo: si algo falla, se muestra el mapa vacío en vez de romper la pantalla
     }
-  }, [puntos, perimetro, rangos, haPorPunto]);
+  }, [puntos, perimetro, rangos]);
 
   const piezasPx = perimetro.map((pieza) => pieza.map((v) => toPx(v.x, v.y)));
   const escalaBarra = elegirEscalaBarra(escala);

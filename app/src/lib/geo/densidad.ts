@@ -1,17 +1,24 @@
-// Mapa de densidad poblacional — portado de `DensidadView` del prototipo,
-// pero con las celdas rearmadas a pedido del usuario: un cuadriculado
-// regular (mismo tamaño que el espaciado real entre puntos, alineado con
-// las líneas de la grilla) en vez de un diagrama de Voronoi — así se ve
-// igual que los mapas que él arma en ArcGIS. Cada celda es un cuadrado
-// centrado en su punto, recortado al perímetro real del lote, coloreado
-// según el conteo de ese punto llevado a m².
+// Mapa de densidad poblacional — portado de `DensidadView` del prototipo:
+// un diagrama de Voronoi (cada celda es "el área más cercana a este punto
+// que a cualquier otro"), recortado al perímetro real del lote. Es el
+// mismo criterio que usa la herramienta "Voronoi Map" de Geostatistical
+// Analyst en ArcGIS, que es la que el usuario usa para sus informes
+// reales — con puntos en una grilla bien regular (como los suyos), un
+// Voronoi da celdas que se ven cuadradas, así que el resultado ya
+// coincide con lo que él espera sin tener que armar un cuadriculado a
+// mano.
+//
+// El recorte contra el perímetro respeta piezas cóncavas (p.ej. un
+// entrante para excluir un pivote de riego) triangulando la pieza en vez
+// de usar su casco convexo — ver el comentario de `calcularCeldasDensidad`.
 //
 // La imagen satelital de fondo va aparte, en lib/geo/satelital.ts (Esri
 // World Imagery, gratuita, sin API key — mismo servicio que ya usaba el
 // prototipo). No se porta `maxVal` (llegaba como prop a DensidadView del
 // prototipo pero nunca se usaba ahí).
 
-import { anguloBordeMasLargo, areaPoligonoM2, cascoConvexo, indicePiezaMasCercana, puntoEnPoligono, rotar, triangularPoligono, type XY } from "./geometria";
+import { Delaunay } from "d3-delaunay";
+import { areaPoligonoM2, cascoConvexo, indicePiezaMasCercana, puntoEnPoligono, triangularPoligono, type XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
 
@@ -130,18 +137,21 @@ export interface CeldaDensidad {
 // `calcularCeldasDensidad`) y hace falta triangularla para recortar bien.
 const TOLERANCIA_CONVEXIDAD = 1.02;
 
-/** Calcula, para cada punto de muestreo, un cuadrado del tamaño real del
- * espaciado entre puntos (mismo `haPorPunto` con el que se sembró la
- * grilla, ver geometria.ts), centrado en el punto y alineado con las
- * líneas reales de la grilla (no con el norte) — recortado al perímetro
- * real del lote. A pedido explícito del usuario: quiere que se vea como
- * el cuadriculado regular de sus informes de ArcGIS, no como las celdas
- * orgánicas de un diagrama de Voronoi (lo que se portó primero del
- * prototipo).
+/** Calcula, para cada punto de muestreo, su celda de Voronoi ("el área más
+ * cercana a este punto que a cualquier otro" — mismo criterio que la
+ * herramienta "Voronoi Map" de Geostatistical Analyst en ArcGIS, que es la
+ * que usa el usuario para sus informes reales) recortada al perímetro real
+ * del lote, sin dejar huecos — portado de `resultadoCeldas` en
+ * DensidadView del prototipo.
  *
  * `piezas` es una lista de piezas de terreno (casi siempre una sola; más de
- * una si el campo tiene lotes no contiguos, ver geometria.ts) — cada
- * cuadrado se recorta solo contra SU PROPIA pieza, nunca contra otra.
+ * una si el campo tiene lotes no contiguos, ver geometria.ts). El Voronoi
+ * se calcula UNA vez sobre todos los puntos juntos (son sitios reales, da
+ * igual en qué pieza estén), pero cada celda se recorta solo contra SU
+ * PROPIA pieza — nunca contra otra, ni contra una global que abarque
+ * todas: con piezas separadas, un recorte global "rellenaría" el hueco
+ * vacío entre ellas con celdas de densidad que no corresponden a ningún
+ * terreno real.
  *
  * El recorte en sí se hace contra el casco convexo de la pieza SOLO
  * cuando la pieza ya es (casi) convexa — es más liviano y da el mismo
@@ -149,32 +159,34 @@ const TOLERANCIA_CONVEXIDAD = 1.02;
  * dejado a propósito para excluir un pivote de riego, caso real de un
  * usuario), usar el casco la "rellenaría" con una línea recta y el mapa
  * terminaría coloreando encima de esa zona excluida — para eso se
- * triangula la pieza entera (ver triangularPoligono) y se recorta el
- * cuadrado contra cada triángulo por separado, así el resultado sí
- * respeta el entrante. Un cuadrado puede así partirse en más de un
- * fragmento — todos comparten el mismo punto de origen (mismo color/
- * valor), solo cambia el id para que cada uno tenga una key propia.
- *
- * Nota: como cada fila/tramo de la grilla arranca su propio espaciado
- * desde el borde real de esa fila (ver generarGrillaDesdePerimetro), en
- * un lote con una forma muy irregular los cuadrados de filas vecinas
- * podrían no calzar perfecto entre sí (una costura chica) — en la
- * inmensa mayoría de los lotes reales no se nota. */
+ * triangula la pieza entera (ver triangularPoligono) y se recorta la
+ * celda contra cada triángulo por separado, así el resultado sí respeta
+ * el entrante. Una celda puede así partirse en más de un fragmento —
+ * todos comparten el mismo punto de origen (mismo color/valor), solo
+ * cambia el id para que cada uno tenga una key propia. */
 export function calcularCeldasDensidad(
   puntos: Array<{ id: string; x: number; y: number; valor: number }>,
   piezas: XY[][],
-  rangos: RangoDensidad[],
-  haPorPunto: number
+  rangos: RangoDensidad[]
 ): CeldaDensidad[] {
   const piezasValidas = piezas.filter((pz) => pz.length >= 3);
   if (puntos.length === 0 || piezasValidas.length === 0) return [];
 
-  // Mismo ángulo compartido que usó generarGrillaDesdePerimetro para
-  // sembrar la grilla — el lado más largo del casco convexo de TODOS los
-  // vértices juntos, no de cada pieza por separado.
-  const angulo = anguloBordeMasLargo(cascoConvexo(piezasValidas.flat()));
-  const espaciado = Math.sqrt(Math.max(haPorPunto, 0.01) * 10000);
-  const mitad = espaciado / 2;
+  const perimetroCompleto = piezasValidas.flat();
+  const xs = puntos.map((p) => p.x).concat(perimetroCompleto.map((v) => v.x));
+  const ys = puntos.map((p) => p.y).concat(perimetroCompleto.map((v) => v.y));
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+
+  const delaunay = Delaunay.from(
+    puntos,
+    (p) => p.x,
+    (p) => p.y
+  );
+  const pad = 200; // margen generoso en metros — evita celdas mal recortadas en el borde del bounds
+  const voronoi = delaunay.voronoi([minX - pad, minY - pad, maxX + pad, maxY + pad]);
 
   const recortesPorPieza: Tupla[][][] = piezasValidas.map((pz) => {
     const hull = cascoConvexo(pz);
@@ -184,29 +196,18 @@ export function calcularCeldasDensidad(
   });
 
   const celdas: CeldaDensidad[] = [];
-  puntos.forEach((p) => {
+  puntos.forEach((p, i) => {
+    const celda = voronoi.cellPolygon(i);
+    if (!celda) return;
     // A qué pieza pertenece este punto — normalmente cae adentro de una
     // sola; si por un empate/redondeo no cae claramente adentro de
     // ninguna, se usa la pieza más cercana en vez de descartarlo.
     let indicePieza = piezasValidas.findIndex((pz) => puntoEnPoligono(p.x, p.y, pz));
     if (indicePieza === -1) indicePieza = indicePiezaMasCercana(p, piezasValidas);
-
-    // El cuadrado se arma en el plano rotado (donde queda perfectamente
-    // alineado a los ejes, fácil de calcular) y recién después cada
-    // vértice se rota de vuelta al plano real — mismo truco que usa
-    // generarGrillaDesdePerimetro para sembrar la grilla.
-    const centro = rotar({ x: p.x, y: p.y }, -angulo);
-    const cuadrado: Tupla[] = [
-      { x: centro.x - mitad, y: centro.y - mitad },
-      { x: centro.x + mitad, y: centro.y - mitad },
-      { x: centro.x + mitad, y: centro.y + mitad },
-      { x: centro.x - mitad, y: centro.y + mitad },
-    ]
-      .map((v) => rotar(v, angulo))
-      .map((v): Tupla => [v.x, v.y]);
+    const celdaVoronoi = celda as Tupla[];
 
     recortesPorPieza[indicePieza].forEach((recorte, r) => {
-      const recortada = clipPoligonoConvexo(cuadrado, recorte);
+      const recortada = clipPoligonoConvexo(celdaVoronoi, recorte);
       if (recortada.length < 3) return;
       celdas.push({
         id: `${p.id}-${r}`,

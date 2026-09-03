@@ -117,7 +117,6 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
               <MapaDensidad
                 puntos={puntosDensidad}
                 perimetro={lote.perimetro}
-                haPorPunto={lote.haPorPunto}
                 rangos={rangos}
                 nivelColores={NIVEL_COLORES}
                 etiquetaLeyenda={etiqueta}

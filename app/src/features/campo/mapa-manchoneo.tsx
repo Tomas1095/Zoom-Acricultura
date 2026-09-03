@@ -34,11 +34,6 @@ interface MapaManchoneoProps {
   // necesita ver dónde está parado el manchón respecto de la densidad real,
   // no solo el contorno solo contra un fondo vacío.
   puntosDensidad: PuntoDensidadManchoneo[];
-  /** El espaciado real entre puntos de la grilla (ver Lote["haPorPunto"]) —
-   * hace falta para armar el cuadriculado de la densidad de fondo del
-   * mismo tamaño real que separa a los puntos entre sí (ver
-   * calcularCeldasDensidad). */
-  haPorPunto: number;
   rangos: RangoDensidad[];
   nivelColores: readonly string[];
   ancho: number;
@@ -70,7 +65,6 @@ export function MapaManchoneo({
   perimetro,
   manchones,
   puntosDensidad,
-  haPorPunto,
   rangos,
   nivelColores,
   ancho,
@@ -94,11 +88,11 @@ export function MapaManchoneo({
 
   const celdas = useMemo(() => {
     try {
-      return calcularCeldasDensidad(puntosDensidad, perimetro, rangos, haPorPunto);
+      return calcularCeldasDensidad(puntosDensidad, perimetro, rangos);
     } catch {
       return [];
     }
-  }, [puntosDensidad, perimetro, rangos, haPorPunto]);
+  }, [puntosDensidad, perimetro, rangos]);
 
   // Vista previa en vivo del vértice que se está arrastrando ahora mismo —
   // vive ACÁ (no en salidas-view.tsx) a propósito: mientras dura el
