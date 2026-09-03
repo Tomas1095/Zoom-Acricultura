@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import Svg, { Circle, Line, Path, Text as SvgText } from "react-native-svg";
+import Svg, { Line, Path } from "react-native-svg";
 import { Check, Navigation } from "lucide-react-native";
 
 import type { XY } from "@/lib/geo/geometria";
@@ -612,89 +612,53 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     falta ningún transform de más: sin eso, acercar con el
                     pellizco agranda el círculo tanto como separa los
                     puntos entre sí, y con una grilla densa terminan
-                    tapándose igual por más zoom que se haga. */}
+                    tapándose igual por más zoom que se haga.
+
+                    Vista nativa (borderRadius/backgroundColor/borderWidth),
+                    no SVG, en los dos modos — se había probado con SVG acá
+                    (pensando que así se evitaba el pixelado del zoom), pero
+                    esta librería de SVG ya tenía un bug conocido de
+                    renderizado con rotaciones grandes (ver el contorno del
+                    lote, más abajo, que por eso tampoco usa SVG en modo
+                    trabajo) — y vista general TAMBIÉN se puede rotar con
+                    dos dedos, no solo pellizcar. Una vista nativa con
+                    borderRadius no tiene ese problema (son propiedades que
+                    dibuja el sistema directo, no una imagen que se pueda
+                    corromper con la rotación) — y ya sin la sombra puesta
+                    de más (ver estilo `punto`, arriba) tampoco se pixela
+                    con el zoom, así que no hacía falta el SVG para nada. */}
                 <View style={[styles.puntoCirculo, { width: tamPunto, height: tamPunto }]}>
-                  {pantallaCompleta ? (
-                    // Modo trabajo: vista nativa de siempre, sin cambios —
-                    // acá el zoom es a lo sumo 2.5x (botones +/-, no
-                    // pellizco) y nunca se notó pixelado; de paso evita el
-                    // bug ya conocido de esta librería de SVG con la
-                    // rotación grande de seguir rumbo (ver el contorno del
-                    // lote, más abajo).
-                    <View
-                      style={{
-                        width: tamPunto,
-                        height: tamPunto,
-                        borderRadius: tamPunto / 2,
-                        backgroundColor: colorFondo,
-                        borderColor: colorBorde,
-                        borderWidth: 3,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
-                    </View>
-                  ) : (
-                    <>
-                      {/* Vista general: el círculo se dibuja con SVG en vez
-                          de con una vista nativa (borderRadius/borderWidth)
-                          — a diferencia de esa, un círculo de SVG se ve
-                          nítido sin importar cuánto zoom se le aplique
-                          (mismo motivo por el que el contorno del lote, más
-                          abajo, tampoco se pixela nunca). Acá el zoom llega
-                          hasta 9x (ver ZOOM_MAX_VISTA_GENERAL), suficiente
-                          para que una vista nativa se note bien pixelada. */}
-                      <Svg width={tamPunto} height={tamPunto} style={{ position: "absolute" }} pointerEvents="none">
-                        <Circle
-                          cx={tamPunto / 2}
-                          cy={tamPunto / 2}
-                          r={tamPunto / 2 - 1}
-                          fill={colorFondo}
-                          stroke={colorBorde}
-                          strokeWidth={2}
-                        />
-                      </Svg>
-                      {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
-                    </>
-                  )}
+                  <View
+                    style={{
+                      width: tamPunto,
+                      height: tamPunto,
+                      borderRadius: tamPunto / 2,
+                      backgroundColor: colorFondo,
+                      borderColor: colorBorde,
+                      borderWidth: pantallaCompleta ? 3 : 2,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                  </View>
                 </View>
-                {pantallaCompleta ? (
-                  <Animated.Text
-                    numberOfLines={1}
-                    style={[
-                      styles.puntoLabel,
-                      { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                      estiloContraRotacionEtiqueta,
-                    ]}
-                  >
-                    {p.id}
-                  </Animated.Text>
-                ) : (
-                  // Mismo motivo que el círculo de arriba: el número
-                  // dibujado con SVG (en vez de <Text>) no se pixela con
-                  // el zoom de vista general — `tamFuente` ya viene
-                  // achicado en proporción inversa al zoom asentado.
-                  <Animated.View
-                    style={[
-                      { position: "absolute", width: 40, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                      estiloContraRotacionEtiqueta,
-                    ]}
-                  >
-                    <Svg width={40} height={tamFuente * 1.6} pointerEvents="none">
-                      <SvgText
-                        x={20}
-                        y={tamFuente * 1.15}
-                        fontSize={tamFuente}
-                        fontWeight="700"
-                        fill={colorEtiqueta}
-                        textAnchor="middle"
-                      >
-                        {p.id}
-                      </SvgText>
-                    </Svg>
-                  </Animated.View>
-                )}
+                {/* Mismo motivo que el círculo de arriba: vista nativa
+                    (Text), no SVG — ya sin la sombra puesta de más, un
+                    <Text> no se pixela con el zoom de vista general
+                    (`tamFuente` ya viene achicado en proporción inversa al
+                    zoom asentado), y de paso evita el bug de SVG con la
+                    rotación de dos dedos, que vista general también tiene. */}
+                <Animated.Text
+                  numberOfLines={1}
+                  style={[
+                    styles.puntoLabel,
+                    { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
+                    estiloContraRotacionEtiqueta,
+                  ]}
+                >
+                  {p.id}
+                </Animated.Text>
               </Pressable>
             );
           })}
@@ -727,6 +691,18 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           </Animated.View>
         </Animated.View>
       )}
+
+      {/* Solo vista general (ahí es donde se pellizca para hacer zoom) —
+          a pedido del usuario, para poder mandar una captura y que del
+          otro lado se sepa exactamente a qué zoom está sacada, sin tener
+          que adivinar. Va AFUERA del grupo con el transform animado (ver
+          GestureDetector, más arriba) a propósito, para que quede fijo en
+          la esquina en vez de girar/moverse con el mapa. */}
+      {!pantallaCompleta && (
+        <View style={styles.zoomBadge}>
+          <Text style={styles.zoomBadgeTexto}>{Math.round(zoomAsentado * 100)}%</Text>
+        </View>
+      )}
     </View>
   );
 });
@@ -745,6 +721,16 @@ const styles = StyleSheet.create({
   // Modo trabajo: mismo fondo claro que vista general, pero de borde a
   // borde (sin recuadro ni radio, ya que ocupa toda la pantalla).
   contenedorPantallaCompleta: { backgroundColor: colors.background },
+  zoomBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(27,46,31,0.65)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  zoomBadgeTexto: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
   punto: {
     position: "absolute",
     alignItems: "center",
