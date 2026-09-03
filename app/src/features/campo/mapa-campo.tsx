@@ -587,8 +587,21 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     height: tamPunto,
                     left: pos.left - tamPunto / 2,
                     top: pos.top - tamPunto / 2,
-                    shadowOpacity: cercano && enRango ? 1 : 0,
                   },
+                  // La sombra (shadowColor/Radius/Offset/elevation) antes
+                  // estaba siempre puesta en TODOS los puntos, solo con
+                  // shadowOpacity en 0 para que no se viera en los que no
+                  // corresponde — pero iOS arma la sombra igual (aunque
+                  // quede invisible) para cualquier vista que tenga esas
+                  // propiedades. Con una grilla densa de verdad (100+
+                  // puntos) eso es una sombra de más por punto, en TODOS a
+                  // la vez, adentro del grupo que se pellizca para hacer
+                  // zoom — buen sospechoso de por qué el círculo/número se
+                  // seguía viendo pixelado incluso después de sacar SVG y
+                  // el tamaño real. Ahora la sombra directamente no se
+                  // arma (ni las propiedades están puestas) salvo en el
+                  // único punto que de verdad la necesita.
+                  cercano && enRango ? styles.puntoConSombra : null,
                 ]}
               >
                 {/* El círculo va en una vista aparte (adentro del área de
@@ -736,9 +749,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     alignItems: "center",
     justifyContent: "center",
+  },
+  // Solo para el punto más cercano dentro de rango (ver el comentario en
+  // el JSX) — nunca puesto en el resto de los puntos.
+  puntoConSombra: {
     shadowColor: colors.primary,
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
     elevation: 3,
   },
   // El área de toque (`punto`, arriba) mantiene el tamaño/posición real
