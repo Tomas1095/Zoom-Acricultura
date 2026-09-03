@@ -168,7 +168,7 @@ export function MapaDensidad({
                 x2={b.left}
                 y2={b.top}
                 stroke={colorPerimetro}
-                strokeWidth={1}
+                strokeWidth={0.5}
               />
             );
           })

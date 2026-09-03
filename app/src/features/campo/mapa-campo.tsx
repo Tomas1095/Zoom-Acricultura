@@ -585,15 +585,19 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               <Pressable
                 key={p.id}
                 disabled={!tocable}
-                // Antes tenía hitSlop 10 (un área de toque invisible bastante
-                // más grande que el círculo) — con una grilla densa de
-                // verdad (100+ puntos, como la real) esa área extra de
-                // puntos vecinos se solapaba, y terminabas abriendo el punto
-                // de al lado en vez del que tocaste. Bajado a un margen
-                // chico, casi nada más que un poco de tolerancia para el
-                // dedo, no una zona invisible que se meta en el círculo de
-                // al lado.
-                hitSlop={3}
+                // Antes tenía hitSlop 10, después 3 (un área de toque
+                // invisible más grande que el círculo) — con una grilla
+                // densa de verdad (100+ puntos, como la real) esa área
+                // extra de puntos vecinos se solapaba, y terminabas
+                // abriendo el punto de al lado en vez del que tocaste, sobre
+                // todo a poco zoom (círculos más chicos, más juntos entre
+                // sí en pantalla). En 0 el área de toque es EXACTAMENTE el
+                // círculo visible — nada de margen invisible que se meta en
+                // el círculo de al lado — así que ya no puede haber
+                // ambigüedad salvo que los círculos se toquen entre sí de
+                // verdad en pantalla, y ahí lo que corresponde es acercar
+                // más con el pellizco (para eso está), no adivinar cuál.
+                hitSlop={0}
                 onPress={() => (marcandoRuta ? onTogglePuntoRuta?.(p.id) : onTapPunto(p.id))}
                 style={[
                   styles.punto,

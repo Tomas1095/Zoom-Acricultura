@@ -161,7 +161,7 @@ export function MapaManchoneo({
                   x2={b.left}
                   y2={b.top}
                   stroke={colors.primaryDark}
-                  strokeWidth={1}
+                  strokeWidth={0.5}
                 />
               );
             })

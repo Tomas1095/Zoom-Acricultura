@@ -103,7 +103,7 @@ export function construirMapaDensidadHtml(
       piezaPx
         .map((a, i) => {
           const b = piezaPx[(i + 1) % piezaPx.length];
-          return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="${colorPerimetro}" stroke-width="1" />`;
+          return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="${colorPerimetro}" stroke-width="0.5" />`;
         })
         .join("")
     )

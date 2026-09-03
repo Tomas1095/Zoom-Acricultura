@@ -548,7 +548,14 @@ export default function PuntoScreen() {
 
       {alturaTeclado > 0 && (
         <View style={[styles.barraFlotante, { bottom: alturaTeclado + MARGEN_TECLADO }]}>
-          <Pressable style={styles.botonListoFlotante} onPress={() => Keyboard.dismiss()}>
+          {/* onPressIn, no onPress: con un TextInput enfocado, en iOS el
+              primer toque sobre OTRO elemento a veces se lo "come" el
+              sistema al resignar el foco del input (blur nativo) antes de
+              que React llegue a disparar el onPress — recién el segundo
+              toque funciona bien. onPressIn dispara apenas el dedo toca,
+              sin esperar ese round-trip, así que ya no hace falta tocar
+              dos veces para que se esconda el teclado. */}
+          <Pressable style={styles.botonListoFlotante} onPressIn={() => Keyboard.dismiss()}>
             <Text style={styles.botonListoFlotanteTexto}>Listo</Text>
           </Pressable>
         </View>
