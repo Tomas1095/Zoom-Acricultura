@@ -200,7 +200,11 @@ function areaConSigno(poly: XY[]): number {
   return area / 2;
 }
 
-function rotar(p: XY, theta: number): XY {
+/** Rota un punto `theta` radianes alrededor del origen — exportada porque
+ * también la usa `densidad.ts` para alinear las celdas del mapa de
+ * densidad con el mismo ángulo con el que se sembró la grilla (ver
+ * `calcularCeldasDensidad`), no con el norte. */
+export function rotar(p: XY, theta: number): XY {
   const c = Math.cos(theta);
   const s = Math.sin(theta);
   return { x: p.x * c - p.y * s, y: p.x * s + p.y * c };
@@ -222,8 +226,11 @@ export function areaPoligonoM2(poly: XY[]): number {
 
 /** Ángulo del borde más largo del polígono — alineamos la grilla a ese eje
  * para que las líneas de muestreo sigan el lado más largo del lote en vez
- * de ir siempre norte-sur, sin importar cómo esté "parado" el polígono. */
-function anguloBordeMasLargo(poly: XY[]): number {
+ * de ir siempre norte-sur, sin importar cómo esté "parado" el polígono.
+ * Exportada porque `densidad.ts` la vuelve a calcular (mismo casco
+ * convexo, mismo ángulo) para alinear las celdas del mapa de densidad
+ * con las líneas reales de la grilla. */
+export function anguloBordeMasLargo(poly: XY[]): number {
   let mejorLongitud = -1;
   let mejorAngulo = 0;
   for (let i = 0; i < poly.length; i++) {

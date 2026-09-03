@@ -40,14 +40,15 @@ export interface PuntoDensidadSvg {
   valor: number;
 }
 
-/** Arma el mapa completo (SVG del Voronoi + contorno, con título/rosa de
- * los vientos/leyenda/escala superpuestos como HTML) — un solo bloque listo
- * para pegar en el HTML del informe. `origen` es opcional: sin él (o sin
- * señal en el momento de generar el PDF) el mapa queda sobre fondo claro
- * liso, igual que antes. */
+/** Arma el mapa completo (SVG del cuadriculado de densidad + contorno, con
+ * título/rosa de los vientos/leyenda/escala superpuestos como HTML) — un
+ * solo bloque listo para pegar en el HTML del informe. `origen` es
+ * opcional: sin él (o sin señal en el momento de generar el PDF) el mapa
+ * queda sobre fondo claro liso, igual que antes. */
 export function construirMapaDensidadHtml(
   puntos: PuntoDensidadSvg[],
   perimetro: XY[][],
+  haPorPunto: number,
   rangos: RangoDensidad[],
   nivelColores: readonly string[],
   etiquetaLeyenda: string,
@@ -85,7 +86,7 @@ export function construirMapaDensidadHtml(
 
   let celdas: ReturnType<typeof calcularCeldasDensidad> = [];
   try {
-    celdas = calcularCeldasDensidad(puntos, perimetro, rangos);
+    celdas = calcularCeldasDensidad(puntos, perimetro, rangos, haPorPunto);
   } catch {
     celdas = [];
   }

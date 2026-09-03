@@ -430,6 +430,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           mapaBichoHtml: construirMapaDensidadHtml(
             puntosDensidadBicho,
             lote.perimetro,
+            lote.haPorPunto,
             rangosDe("bicho"),
             NIVEL_COLORES,
             "Nº BB/m²",
@@ -440,6 +441,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
           mapaBabosaHtml: construirMapaDensidadHtml(
             puntosDensidadBabosa,
             lote.perimetro,
+            lote.haPorPunto,
             rangosDe("babosa"),
             NIVEL_COLORES,
             "Nº Babosas/m²",
@@ -549,6 +551,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                   titulo="Resultado Monitoreo de Bichos Bolita"
                   puntos={puntosDensidadBicho}
                   perimetro={lote.perimetro}
+                  haPorPunto={lote.haPorPunto}
                   plaga="bicho"
                   origen={origenDensidad}
                   ancho={anchoCardMapas}
@@ -558,6 +561,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                   titulo="Resultado Monitoreo de Babosas"
                   puntos={puntosDensidadBabosa}
                   perimetro={lote.perimetro}
+                  haPorPunto={lote.haPorPunto}
                   plaga="babosa"
                   origen={origenDensidad}
                   ancho={anchoCardMapas}
@@ -695,6 +699,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                 perimetro={lote.perimetro}
                 manchones={manchonesActivos}
                 puntosDensidad={manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa}
+                haPorPunto={lote.haPorPunto}
                 rangos={rangosDe(manchoneoPlaga)}
                 nivelColores={NIVEL_COLORES}
                 ancho={320}
@@ -813,6 +818,7 @@ interface MapaInformeConLeyendaProps {
   titulo: string;
   puntos: Array<{ id: string; x: number; y: number; valor: number }>;
   perimetro: Lote["perimetro"];
+  haPorPunto: number;
   plaga: "bicho" | "babosa";
   origen: ReturnType<typeof inferirOrigenDesdePuntos> | null;
   ancho: number;
@@ -826,7 +832,7 @@ interface MapaInformeConLeyendaProps {
  * mapa-svg.ts), sin tener que ir a otra pestaña. `ancho` viene medido en
  * vivo del card real (ver onLayoutCardMapas más arriba), no achicado a
  * mano — así usa todo el lugar disponible en vez de apretar todo adentro. */
-function MapaInformeConLeyenda({ titulo, puntos, perimetro, plaga, origen, ancho, alto }: MapaInformeConLeyendaProps) {
+function MapaInformeConLeyenda({ titulo, puntos, perimetro, haPorPunto, plaga, origen, ancho, alto }: MapaInformeConLeyendaProps) {
   const rangos = rangosDe(plaga);
   const etiqueta = plaga === "bicho" ? "Nº BB/m²" : "Nº Babosas/m²";
   return (
@@ -836,6 +842,7 @@ function MapaInformeConLeyenda({ titulo, puntos, perimetro, plaga, origen, ancho
         <MapaDensidad
           puntos={puntos}
           perimetro={perimetro}
+          haPorPunto={haPorPunto}
           rangos={rangos}
           nivelColores={NIVEL_COLORES}
           etiquetaLeyenda={etiqueta}
