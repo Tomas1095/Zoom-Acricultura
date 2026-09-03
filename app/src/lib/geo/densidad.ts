@@ -18,6 +18,7 @@
 // prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
+import { intersection as interseccionPoligonos } from "polygon-clipping";
 import { indicePiezaMasCercana, puntoEnPoligono, type XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
@@ -73,56 +74,6 @@ export function clasificarNivel(valorM2: number, rangos: RangoDensidad[]): numbe
 
 type Tupla = [number, number];
 
-/** Sutherland-Hodgman: recorta un polígono contra un polígono convexo (el
- * casco real del lote) — portado tal cual del prototipo. */
-export function clipPoligonoConvexo(sujeto: Tupla[], clip: Tupla[]): Tupla[] {
-  let area = 0;
-  for (let i = 0; i < clip.length; i++) {
-    const a = clip[i];
-    const b = clip[(i + 1) % clip.length];
-    area += a[0] * b[1] - b[0] * a[1];
-  }
-  const sentido = area >= 0 ? 1 : -1;
-
-  let output = sujeto;
-  for (let i = 0; i < clip.length; i++) {
-    if (output.length === 0) break;
-    const cA = clip[i];
-    const cB = clip[(i + 1) % clip.length];
-    const dentro = (p: Tupla) =>
-      sentido * ((cB[0] - cA[0]) * (p[1] - cA[1]) - (cB[1] - cA[1]) * (p[0] - cA[0])) >= 0;
-    const inter = (p1: Tupla, p2: Tupla): Tupla => {
-      const x1 = cA[0],
-        y1 = cA[1],
-        x2 = cB[0],
-        y2 = cB[1];
-      const x3 = p1[0],
-        y3 = p1[1],
-        x4 = p2[0],
-        y4 = p2[1];
-      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-      if (denom === 0) return p2;
-      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-      return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
-    };
-    const input = output;
-    output = [];
-    for (let j = 0; j < input.length; j++) {
-      const cur = input[j];
-      const prev = input[(j - 1 + input.length) % input.length];
-      const curIn = dentro(cur);
-      const prevIn = dentro(prev);
-      if (curIn) {
-        if (!prevIn) output.push(inter(prev, cur));
-        output.push(cur);
-      } else if (prevIn) {
-        output.push(inter(prev, cur));
-      }
-    }
-  }
-  return output;
-}
-
 export interface CeldaDensidad {
   id: string;
   poligono: XY[]; // en el mismo plano x,y (metros) que puntos y perímetro
@@ -146,22 +97,23 @@ export interface CeldaDensidad {
  * vacío entre ellas con celdas de densidad que no corresponden a ningún
  * terreno real.
  *
- * El recorte se hace con Sutherland-Hodgman (`clipPoligonoConvexo`), que
- * solo exige que el polígono de RECORTE (el segundo argumento) sea
- * convexo — el que se recorta (el primero) puede ser cualquier polígono
- * simple, cóncavo incluido. Antes se pasaba la celda de Voronoi como
- * primer argumento (para recortarla contra la pieza), así que si la pieza
- * era cóncava de verdad (p.ej. tiene un entrante dejado a propósito para
- * excluir un pivote de riego, caso real de un usuario) hacía falta
- * triangular la pieza entera y recortar la celda contra cada triángulo
- * por separado — eso partía cada celda en varios fragmentos, cada uno
- * dibujado con su propio borde, y esas costuras internas eran justo lo
- * que se veía como huecos/mal relleno en el mapa. Dando vuelta el orden
- * —recortar la PIEZA (que puede ser cóncava, no importa) contra la CELDA
- * (que siempre es convexa, por definición de un diagrama de Voronoi)— el
- * resultado es un solo polígono por punto, sin triangular nada y sin
- * costuras de más, y el entrante cóncavo se sigue respetando igual (la
- * pieza cóncava recortada nunca invade la zona excluida). */
+ * El recorte usa `polygon-clipping` (algoritmo Martinez-Rueda-Feito, la
+ * misma familia que usan QGIS/ArcGIS por dentro para esto) en vez de un
+ * Sutherland-Hodgman casero — se probaron DOS variantes propias antes de
+ * esta (recortar la celda contra la pieza triangulada, y al revés,
+ * recortar la pieza cóncava directo contra la celda) y las dos fallaban
+ * justo cerca de un entrante cóncavo (p.ej. el hueco dejado a propósito
+ * para excluir un pivote de riego, caso real de un usuario): Sutherland-
+ * Hodgman solo da un resultado correcto si el polígono de recorte es
+ * convexo Y el recortado nunca queda partido en más de un pedazo al
+ * cortarlo — cerca de un entrante eso deja de cumplirse (el corte puede
+ * partir la celda en dos o más regiones separadas), y el algoritmo casero
+ * arma un solo polígono igual, con bordes que se cruzan entre sí — eso es
+ * lo que se veía como huecos/triángulos sueltos en el mapa. Una librería
+ * de boolean ops de polígonos como esta calcula la intersección real
+ * (celda de Voronoi ∩ pieza) sin esa limitación, devolviendo la cantidad
+ * de polígonos simples que corresponda (normalmente 1; excepcionalmente
+ * más de 1 si una celda queda genuinamente partida por un entrante). */
 export function calcularCeldasDensidad(
   puntos: Array<{ id: string; x: number; y: number; valor: number }>,
   piezas: XY[][],
@@ -186,7 +138,11 @@ export function calcularCeldasDensidad(
   const pad = 200; // margen generoso en metros — evita celdas mal recortadas en el borde del bounds
   const voronoi = delaunay.voronoi([minX - pad, minY - pad, maxX + pad, maxY + pad]);
 
-  const piezasTuplas: Tupla[][] = piezasValidas.map((pz) => pz.map((v): Tupla => [v.x, v.y]));
+  // Formato que espera polygon-clipping: un Polygon es una lista de
+  // anillos (Ring[]), el primero el contorno exterior — acá siempre un
+  // solo anillo, sin agujeros propios (los agujeros del lote, si los hay,
+  // ya vienen resueltos como el "entrante" de la pieza misma).
+  const piezasPoly: Tupla[][][] = piezasValidas.map((pz) => [pz.map((v): Tupla => [v.x, v.y])]);
 
   const celdas: CeldaDensidad[] = [];
   puntos.forEach((p, i) => {
@@ -198,13 +154,17 @@ export function calcularCeldasDensidad(
     let indicePieza = piezasValidas.findIndex((pz) => puntoEnPoligono(p.x, p.y, pz));
     if (indicePieza === -1) indicePieza = indicePiezaMasCercana(p, piezasValidas);
 
-    const recortada = clipPoligonoConvexo(piezasTuplas[indicePieza], celda as Tupla[]);
-    if (recortada.length < 3) return;
-    celdas.push({
-      id: p.id,
-      poligono: recortada.map(([x, y]) => ({ x, y })),
-      valorM2: p.valor,
-      nivel: clasificarNivel(p.valor, rangos),
+    const celdaPoly: Tupla[][] = [celda as Tupla[]];
+    const interseccion = interseccionPoligonos(celdaPoly, piezasPoly[indicePieza]);
+    interseccion.forEach((poligono, r) => {
+      const anilloExterior = poligono[0]; // sin agujeros propios en este caso, ver arriba
+      if (!anilloExterior || anilloExterior.length < 3) return;
+      celdas.push({
+        id: interseccion.length > 1 ? `${p.id}-${r}` : p.id,
+        poligono: anilloExterior.map(([x, y]) => ({ x, y })),
+        valorM2: p.valor,
+        nivel: clasificarNivel(p.valor, rangos),
+      });
     });
   });
   return celdas;
