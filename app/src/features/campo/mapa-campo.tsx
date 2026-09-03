@@ -172,15 +172,24 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // svg/Text terminan dibujando siempre es del tamaño final real en
   // pantalla — nítido a cualquier zoom.
   //
-  // A propósito el tamaño en pantalla queda CONSTANTE (no crece nada con
-  // el zoom, ni siquiera despacio como en un primer intento) — pedido
-  // original del usuario: el pellizco es para separar puntos muy juntos
-  // entre sí, no para agrandarlos; si además crecen, con una grilla densa
-  // (como la real, +100 puntos) terminan viéndose grandes y pisándose
-  // entre ellos igual, aunque estén más separados.
+  // El tamaño en pantalla crece con el zoom, pero AMORTIGUADO (no 1 a 1):
+  // a zoom bajo casi no se nota, a zoom alto sí crece bastante — así en
+  // una grilla densa recién separada (zoom bajo) los puntos no se
+  // agrandan tanto como para pisarse entre ellos de nuevo, pero en un
+  // pellizco fuerte (varios cientos por ciento, campos grandes) el número
+  // sigue siendo chico en TÉRMINOS RELATIVOS y se vuelve difícil de leer
+  // si se lo deja fijo — el usuario lo pidió así después de confirmar que
+  // ya no se pixela ni se ve estirado a ningún zoom.
+  // CRECIMIENTO_ZOOM (exponente) controla cuánto: 0 = tamaño constante
+  // (lo de antes), 1 = crece exactamente proporcional al zoom (por eso
+  // haría falta un tamaño real MENOR cuanto más lejos esté el zoom de 1x,
+  // para terminar en el tamaño final ya amortiguado — de ahí el exponente
+  // `1 - CRECIMIENTO_ZOOM` en vez de dividir directo por zoomEfectivo).
+  const CRECIMIENTO_ZOOM = 0.35;
   const zoomEfectivo = pantallaCompleta ? 1 : zoomAsentado;
-  const tamPunto = pantallaCompleta ? 24 : 18 / zoomEfectivo;
-  const tamFuente = pantallaCompleta ? 11 : 8.5 / zoomEfectivo;
+  const amortiguador = Math.pow(zoomEfectivo, 1 - CRECIMIENTO_ZOOM);
+  const tamPunto = pantallaCompleta ? 24 : 18 / amortiguador;
+  const tamFuente = pantallaCompleta ? 11 : 8.5 / amortiguador;
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
@@ -606,13 +615,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               >
                 {/* El círculo va en una vista aparte (adentro del área de
                     toque, que mantiene su tamaño/posición real siempre) —
-                    en vista general, `tamPunto` ya viene achicado en
-                    proporción inversa al zoom asentado (ver el comentario
-                    de tamPunto/tamFuente más arriba), así que acá no hace
-                    falta ningún transform de más: sin eso, acercar con el
-                    pellizco agranda el círculo tanto como separa los
-                    puntos entre sí, y con una grilla densa terminan
-                    tapándose igual por más zoom que se haga.
+                    en vista general, `tamPunto` ya viene ajustado (amortiguado,
+                    no 1 a 1) contra el zoom asentado (ver el comentario de
+                    tamPunto/tamFuente más arriba), así que acá no hace falta
+                    ningún transform de más: sin eso, acercar con el pellizco
+                    agranda el círculo tanto como separa los puntos entre sí,
+                    y con una grilla densa terminan tapándose igual por más
+                    zoom que se haga.
 
                     Vista nativa (borderRadius/backgroundColor/borderWidth),
                     no SVG, en los dos modos — se había probado con SVG acá
@@ -646,7 +655,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                 {/* Mismo motivo que el círculo de arriba: vista nativa
                     (Text), no SVG — ya sin la sombra puesta de más, un
                     <Text> no se pixela con el zoom de vista general
-                    (`tamFuente` ya viene achicado en proporción inversa al
+                    (`tamFuente` ya viene ajustado, amortiguado, contra el
                     zoom asentado), y de paso evita el bug de SVG con la
                     rotación de dos dedos, que vista general también tiene. */}
                 <Animated.Text
@@ -746,8 +755,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   // El área de toque (`punto`, arriba) mantiene el tamaño/posición real
-  // siempre; este círculo visual va adentro, ya con el tamaño achicado en
-  // proporción inversa al zoom (ver tamPunto, más arriba).
+  // siempre; este círculo visual va adentro, ya con el tamaño ajustado
+  // (amortiguado) contra el zoom (ver tamPunto, más arriba).
   puntoCirculo: {
     alignItems: "center",
     justifyContent: "center",
