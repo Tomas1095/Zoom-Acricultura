@@ -18,6 +18,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { solicitarComunidad } from "@/lib/db/comunidades";
+import { commitDelBuild } from "@/lib/version";
 import { ZoomLogo } from "@/components/zoom-logo";
 import { colors } from "@/theme/colors";
 
@@ -47,6 +48,7 @@ const TITULOS: Record<Modo, string> = {
 export default function LoginScreen() {
   const { session, usuario, comunidad, refrescarUsuario } = useAuth();
   const insets = useSafeAreaInsets();
+  const commit = commitDelBuild();
   const [modo, setModo] = useState<Modo>("ingresar");
   const [mail, setMail] = useState("");
   const [password, setPassword] = useState("");
@@ -391,6 +393,12 @@ export default function LoginScreen() {
                 <Text style={styles.volverLinkTexto}>← Volver</Text>
               </Pressable>
             )}
+
+            {/* Para poder confirmar de un vistazo qué build tiene instalado
+                alguien, sin depender de memoria/fecha de una conversación —
+                ver lib/version.ts. `null` en un build local (npx expo
+                start), donde no aplica ningún commit "del build". */}
+            {commit && <Text style={styles.version}>v{commit}</Text>}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -458,4 +466,5 @@ const styles = StyleSheet.create({
   botonUnirseTexto: { color: colors.warning, fontWeight: "700", fontSize: 13 },
   volverLink: { alignItems: "center", paddingVertical: 6 },
   volverLinkTexto: { color: colors.accentGoldMuted, fontWeight: "600", fontSize: 13 },
+  version: { textAlign: "center", color: colors.textMuted, fontSize: 10, marginTop: 4 },
 });
