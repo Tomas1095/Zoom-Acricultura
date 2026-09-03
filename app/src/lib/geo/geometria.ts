@@ -359,6 +359,23 @@ export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunt
   const minV = Math.min(...vs);
   const maxV = Math.max(...vs);
 
+  // Columnas (posiciones en u) COMPARTIDAS por toda la grilla, calculadas
+  // una sola vez sobre el ancho total — a propósito, en vez de que cada
+  // fila arranque su propio espaciado desde su propio borde izquierdo
+  // (`tramos[0]`). Con un lote que no es un rectángulo perfecto (casi
+  // ningún lote real lo es) ese borde se corre un poco de una fila a la
+  // siguiente, así que las columnas quedaban desalineadas entre filas —
+  // el resultado seguía siendo una grilla con el espaciado real pedido,
+  // pero las celdas de Voronoi de vista general/densidad salían
+  // hexagonales en vez de cuadradas por TODA la grilla (no solo cerca de
+  // un borde irregular), porque los puntos de filas vecinas no quedaban
+  // uno debajo del otro. Generando las columnas una vez y filtrando cuáles
+  // caen adentro de cada tramo, todas las filas comparten la misma malla.
+  const us = piezasRotadas.flat().map((p) => p.x);
+  const minU = Math.min(...us);
+  const maxU = Math.max(...us);
+  const columnas = espaciarDesdeInicio(minU, maxU, espaciado);
+
   const puntos: PuntoGrillaGenerado[] = [];
   let linea = 0;
   for (const v of espaciarDesdeInicio(minV, maxV, espaciado)) {
@@ -373,7 +390,7 @@ export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunt
     linea += 1;
     let puntoNum = 0;
     for (const [inicio, fin] of tramos) {
-      for (const u of espaciarDesdeInicio(inicio, fin, espaciado)) {
+      for (const u of columnas.filter((u) => u >= inicio && u <= fin)) {
         puntoNum += 1; // sigue corrido de un tramo (pieza) al siguiente, no se reinicia
         const p = rotar({ x: u, y: v }, angulo); // vuelve al plano x,y original (sin rotar)
         const { lat, lon } = xyALatLon(origen, p);
