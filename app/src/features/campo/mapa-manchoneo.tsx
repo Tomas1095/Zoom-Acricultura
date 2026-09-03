@@ -133,7 +133,7 @@ export function MapaManchoneo({
               points={c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
               fill={nivelColores[c.nivel]}
               stroke={colors.surface}
-              strokeWidth={0.5}
+              strokeWidth={0.25}
             />
           ))}
 
@@ -161,7 +161,7 @@ export function MapaManchoneo({
                   x2={b.left}
                   y2={b.top}
                   stroke={colors.primaryDark}
-                  strokeWidth={2}
+                  strokeWidth={1}
                 />
               );
             })

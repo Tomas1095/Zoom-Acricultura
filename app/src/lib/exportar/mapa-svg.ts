@@ -93,7 +93,7 @@ export function construirMapaDensidadHtml(
   const poligonos = celdas
     .map(
       (c) =>
-        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="#FFFFFF" stroke-width="0.5" />`
+        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="#FFFFFF" stroke-width="0.25" />`
     )
     .join("");
 
@@ -103,7 +103,7 @@ export function construirMapaDensidadHtml(
       piezaPx
         .map((a, i) => {
           const b = piezaPx[(i + 1) % piezaPx.length];
-          return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="${colorPerimetro}" stroke-width="2" />`;
+          return `<line x1="${a.left}" y1="${a.top}" x2="${b.left}" y2="${b.top}" stroke="${colorPerimetro}" stroke-width="1" />`;
         })
         .join("")
     )

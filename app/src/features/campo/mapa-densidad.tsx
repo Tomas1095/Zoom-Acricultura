@@ -153,7 +153,7 @@ export function MapaDensidad({
             points={c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
             fill={nivelColores[c.nivel]}
             stroke={colors.surface}
-            strokeWidth={0.5}
+            strokeWidth={0.25}
           />
         ))}
 
@@ -168,7 +168,7 @@ export function MapaDensidad({
                 x2={b.left}
                 y2={b.top}
                 stroke={colorPerimetro}
-                strokeWidth={2}
+                strokeWidth={1}
               />
             );
           })
