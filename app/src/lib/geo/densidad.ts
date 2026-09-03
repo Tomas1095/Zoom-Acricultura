@@ -18,8 +18,8 @@
 // prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
-import { intersection as interseccionPoligonos } from "polygon-clipping";
-import { indicePiezaMasCercana, puntoEnPoligono, type XY } from "./geometria";
+import { intersection as interseccionPoligonos, union as unionPoligonos } from "polygon-clipping";
+import type { XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
 
@@ -89,13 +89,21 @@ export interface CeldaDensidad {
  * DensidadView del prototipo.
  *
  * `piezas` es una lista de piezas de terreno (casi siempre una sola; más de
- * una si el campo tiene lotes no contiguos, ver geometria.ts). El Voronoi
- * se calcula UNA vez sobre todos los puntos juntos (son sitios reales, da
- * igual en qué pieza estén), pero cada celda se recorta solo contra SU
- * PROPIA pieza — nunca contra otra, ni contra una global que abarque
- * todas: con piezas separadas, un recorte global "rellenaría" el hueco
- * vacío entre ellas con celdas de densidad que no corresponden a ningún
- * terreno real.
+ * una si el campo tiene partes no contiguas — separadas por un camino, una
+ * cortina de árboles, un arroyo, etc. — ver geometria.ts). El Voronoi se
+ * calcula UNA vez sobre todos los puntos juntos (son sitios reales, da
+ * igual en qué pieza estén), y cada celda se recorta contra la UNIÓN de
+ * TODAS las piezas juntas, no solo contra la propia — a propósito: un
+ * punto de muestreo pegado al borde de su pieza, con otra pieza justo al
+ * lado (caso real de un usuario, con el lote partido en varias piezas por
+ * los deslindes del KMZ), tiene que poder "pintar" un poco de esa pieza
+ * vecina también si ella no tiene puntos propios ahí cerca — si no, esa
+ * franja queda para siempre sin color aunque sea parte del mismo lote.
+ * Como el Voronoi de cada punto ya está naturalmente acotado por sus
+ * vecinos más cercanos (y, en el borde exterior del conjunto de puntos,
+ * por el margen `pad` de abajo), esto no "rellena" agujeros lejanos de
+ * verdad — solo dejaba sin pintar franjas que en la práctica están pegadas
+ * a puntos con datos reales.
  *
  * El recorte usa `polygon-clipping` (algoritmo Martinez-Rueda-Feito, la
  * misma familia que usan QGIS/ArcGIS por dentro para esto) en vez de un
@@ -113,7 +121,27 @@ export interface CeldaDensidad {
  * de boolean ops de polígonos como esta calcula la intersección real
  * (celda de Voronoi ∩ pieza) sin esa limitación, devolviendo la cantidad
  * de polígonos simples que corresponda (normalmente 1; excepcionalmente
- * más de 1 si una celda queda genuinamente partida por un entrante). */
+ * más de 1 si una celda queda genuinamente partida por un entrante).
+ *
+ * Como el recorte va contra la unión de todas las piezas (ver arriba), un
+ * punto de "borde" (sin otro punto de un lado que lo frene) podría
+ * terminar derramando color sobre una pieza realmente lejana y sin
+ * relación (un lote distinto, del otro lado del padding de más abajo) —
+ * para evitar eso, cada celda además se recorta contra un círculo
+ * centrado en el punto, con radio proporcional a la distancia a su vecino
+ * más cercano (ver `FACTOR_RADIO_MAXIMO`): así solo puede "asomar" a una
+ * pieza vecina pegada de verdad, nunca a una lejana. */
+const FACTOR_RADIO_MAXIMO = 1.5;
+
+function circulo(cx: number, cy: number, r: number, lados = 24): Tupla[] {
+  const pts: Tupla[] = [];
+  for (let i = 0; i < lados; i++) {
+    const a = (i / lados) * Math.PI * 2;
+    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return pts;
+}
+
 export function calcularCeldasDensidad(
   puntos: Array<{ id: string; x: number; y: number; valor: number }>,
   piezas: XY[][],
@@ -141,21 +169,31 @@ export function calcularCeldasDensidad(
   // Formato que espera polygon-clipping: un Polygon es una lista de
   // anillos (Ring[]), el primero el contorno exterior — acá siempre un
   // solo anillo, sin agujeros propios (los agujeros del lote, si los hay,
-  // ya vienen resueltos como el "entrante" de la pieza misma).
+  // ya vienen resueltos como el "entrante" de la pieza misma). Unión de
+  // TODAS las piezas en un solo MultiPolygon — ver el comentario de arriba
+  // sobre por qué el recorte va contra esto y no contra la pieza de cada
+  // punto en particular.
   const piezasPoly: Tupla[][][] = piezasValidas.map((pz) => [pz.map((v): Tupla => [v.x, v.y])]);
+  const piezasUnion = unionPoligonos(piezasPoly[0], ...piezasPoly.slice(1));
 
   const celdas: CeldaDensidad[] = [];
   puntos.forEach((p, i) => {
     const celda = voronoi.cellPolygon(i);
     if (!celda) return;
-    // A qué pieza pertenece este punto — normalmente cae adentro de una
-    // sola; si por un empate/redondeo no cae claramente adentro de
-    // ninguna, se usa la pieza más cercana en vez de descartarlo.
-    let indicePieza = piezasValidas.findIndex((pz) => puntoEnPoligono(p.x, p.y, pz));
-    if (indicePieza === -1) indicePieza = indicePiezaMasCercana(p, piezasValidas);
+
+    // Distancia al vecino Delaunay más cercano — el propio triangulado ya
+    // conecta a cada punto con su vecino más próximo, así que no hace
+    // falta comparar contra TODOS los demás puntos.
+    let dVecino = Infinity;
+    for (const j of delaunay.neighbors(i)) {
+      const d = Math.hypot(p.x - puntos[j].x, p.y - puntos[j].y);
+      if (d < dVecino) dVecino = d;
+    }
 
     const celdaPoly: Tupla[][] = [celda as Tupla[]];
-    const interseccion = interseccionPoligonos(celdaPoly, piezasPoly[indicePieza]);
+    const interseccion = Number.isFinite(dVecino)
+      ? interseccionPoligonos(celdaPoly, piezasUnion, [circulo(p.x, p.y, dVecino * FACTOR_RADIO_MAXIMO)])
+      : interseccionPoligonos(celdaPoly, piezasUnion);
     interseccion.forEach((poligono, r) => {
       const anilloExterior = poligono[0]; // sin agujeros propios en este caso, ver arriba
       if (!anilloExterior || anilloExterior.length < 3) return;
