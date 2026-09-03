@@ -214,9 +214,11 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // pausar el useEffect de seguirRumbo de abajo.
   const [interactuado, setInteractuado] = useState(false);
   // Índice actual dentro de NIVELES_ZOOM (solo modo trabajo, con los
-  // botones +/-) — no hace falta que sea reactivo, solo lo lee acercar()/
-  // alejar()/restablecer().
+  // botones +/-) — el ref alcanzaba para que acercar()/alejar()/
+  // restablecer() supieran en qué nivel están, pero el badge de zoom (ver
+  // más abajo) necesita un state en paralelo para poder mostrarlo.
   const indiceZoomRef = useRef(NIVEL_ZOOM_INICIAL);
+  const [nivelZoomIndex, setNivelZoomIndex] = useState(NIVEL_ZOOM_INICIAL);
 
   function avisarInteraccion() {
     setInteractuado(true);
@@ -233,6 +235,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     rotacion.value = withTiming(0);
     savedRotacion.value = 0;
     indiceZoomRef.current = NIVEL_ZOOM_INICIAL;
+    setNivelZoomIndex(NIVEL_ZOOM_INICIAL);
     setInteractuado(false);
     onInteraccion?.(false);
     setZoomAsentado(1);
@@ -241,6 +244,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   function irANivelZoom(indice: number) {
     const clamped = Math.max(0, Math.min(NIVELES_ZOOM.length - 1, indice));
     indiceZoomRef.current = clamped;
+    setNivelZoomIndex(clamped);
     const nuevaEscala = NIVELES_ZOOM[clamped];
     scale.value = withTiming(nuevaEscala);
     savedScale.value = nuevaEscala;
@@ -701,17 +705,22 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
         </Animated.View>
       )}
 
-      {/* Solo vista general (ahí es donde se pellizca para hacer zoom) —
-          a pedido del usuario, para poder mandar una captura y que del
-          otro lado se sepa exactamente a qué zoom está sacada, sin tener
-          que adivinar. Va AFUERA del grupo con el transform animado (ver
-          GestureDetector, más arriba) a propósito, para que quede fijo en
-          la esquina en vez de girar/moverse con el mapa. */}
-      {!pantallaCompleta && (
-        <View style={styles.zoomBadge}>
-          <Text style={styles.zoomBadgeTexto}>{Math.round(zoomAsentado * 100)}%</Text>
-        </View>
-      )}
+      {/* A pedido del usuario, para poder mandar una captura y que del otro
+          lado se sepa exactamente a qué zoom está sacada, sin tener que
+          adivinar — en los dos modos, no solo vista general. Va AFUERA del
+          grupo con el transform animado (ver GestureDetector, más arriba)
+          a propósito, para que quede fijo en la esquina en vez de girar/
+          moverse con el mapa.
+          OJO: el % de un modo no es comparable 1 a 1 contra el del otro —
+          cada uno es relativo a su propia escala base (`baseScale`, más
+          arriba), que ya arranca distinta entre modo trabajo y vista
+          general (ahí ya empieza más acercada, pensada para leer los
+          puntos caminando). */}
+      <View style={styles.zoomBadge}>
+        <Text style={styles.zoomBadgeTexto}>
+          {Math.round((pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado) * 100)}%
+        </Text>
+      </View>
     </View>
   );
 });
