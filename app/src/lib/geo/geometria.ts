@@ -133,6 +133,73 @@ export function cascoConvexo(pts: XY[]): XY[] {
   return lower.concat(upper);
 }
 
+function cruzVectorial(o: XY, a: XY, b: XY): number {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+function puntoEnTriangulo(p: XY, a: XY, b: XY, c: XY): boolean {
+  const d1 = cruzVectorial(a, b, p);
+  const d2 = cruzVectorial(b, c, p);
+  const d3 = cruzVectorial(c, a, p);
+  const tieneNeg = d1 < 0 || d2 < 0 || d3 < 0;
+  const tienePos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(tieneNeg && tienePos);
+}
+
+/** Triangula un polígono simple (sin agujeros, puede ser cóncavo) por el
+ * método de "oreja" (ear clipping) — cada triángulo resultante es
+ * convexo. Se usa para recortar el mapa de densidad contra el contorno
+ * REAL de una pieza (ver `calcularCeldasDensidad` en densidad.ts) en vez
+ * de contra su casco convexo: Sutherland-Hodgman (el recorte que ya usa
+ * esa función) solo da un resultado correcto contra un recorte convexo,
+ * así que una pieza cóncava (p.ej. con un entrante dejado a propósito
+ * para excluir un pivote de riego) hay que partirla en triángulos
+ * primero — cada uno se recorta por separado y despierta bien el hueco,
+ * en vez de que el casco convexo lo "puentee" con una línea recta y
+ * termine coloreando encima de una zona que no es parte del lote. */
+export function triangularPoligono(polyEntrada: XY[]): XY[][] {
+  if (polyEntrada.length < 3) return [];
+  if (polyEntrada.length === 3) return [polyEntrada];
+
+  // Ear clipping necesita orden antihorario (área con signo positivo).
+  let poly = areaConSigno(polyEntrada) < 0 ? [...polyEntrada].reverse() : [...polyEntrada];
+  const triangulos: XY[][] = [];
+  let guardia = poly.length * poly.length; // corta cualquier caso raro (polígono mal formado) en vez de colgarse
+
+  while (poly.length > 3 && guardia-- > 0) {
+    let recortada = false;
+    for (let i = 0; i < poly.length; i++) {
+      const iPrev = (i - 1 + poly.length) % poly.length;
+      const iNext = (i + 1) % poly.length;
+      const prev = poly[iPrev];
+      const cur = poly[i];
+      const next = poly[iNext];
+      if (cruzVectorial(prev, cur, next) <= 0) continue; // reflejo (cóncavo acá) — no es una "oreja"
+
+      const otros = poly.filter((_, j) => j !== iPrev && j !== i && j !== iNext);
+      if (otros.some((p) => puntoEnTriangulo(p, prev, cur, next))) continue; // otro vértice cae adentro — no vale
+
+      triangulos.push([prev, cur, next]);
+      poly = poly.filter((_, j) => j !== i);
+      recortada = true;
+      break;
+    }
+    if (!recortada) break; // polígono degenerado/autointersectado — nos quedamos con lo ya triangulado
+  }
+  if (poly.length === 3) triangulos.push(poly);
+  return triangulos;
+}
+
+function areaConSigno(poly: XY[]): number {
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    area += a.x * b.y - b.x * a.y;
+  }
+  return area / 2;
+}
+
 function rotar(p: XY, theta: number): XY {
   const c = Math.cos(theta);
   const s = Math.sin(theta);
