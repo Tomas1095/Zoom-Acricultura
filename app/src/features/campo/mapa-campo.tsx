@@ -721,8 +721,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           cada uno es relativo a su propia escala base (`baseScale`, más
           arriba), que ya arranca distinta entre modo trabajo y vista
           general (ahí ya empieza más acercada, pensada para leer los
-          puntos caminando). */}
-      <View style={styles.zoomBadge}>
+          puntos caminando).
+          En modo trabajo, pegado justo arriba del control +/- de zoom (no
+          en la esquina como en vista general) — a pedido del usuario, para
+          que quede claro que el % es DE ESE control. El control (rocker)
+          vive en modo-trabajo.tsx, no acá — mismo right:16 y mismo
+          top:"50%" como referencia para quedar alineado con él, con un
+          translateY que lo deja pegado justo arriba de su borde superior
+          (rocker: 88px de alto centrado con translateY:-44 — ver
+          modo-trabajo.tsx, styles.rockerZoom). */}
+      <View style={[styles.zoomBadge, pantallaCompleta && styles.zoomBadgeModoTrabajo]}>
         <Text style={styles.zoomBadgeTexto}>
           {Math.round((pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado) * 100)}%
         </Text>
@@ -754,6 +762,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
+  // Ver el comentario largo en el JSX — reemplaza top/right de arriba
+  // para quedar pegado justo arriba del rocker de +/- en modo trabajo.
+  zoomBadgeModoTrabajo: { top: "50%", right: 16, transform: [{ translateY: -72 }] },
   zoomBadgeTexto: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
   punto: {
     position: "absolute",
