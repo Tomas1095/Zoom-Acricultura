@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { forwardRef, useMemo, useState } from "react";
 import { Image, Text, View } from "react-native";
 import Svg, { Line, Polygon } from "react-native-svg";
 
@@ -65,17 +65,17 @@ interface MapaDensidadProps {
  * graduada abajo a la derecha — mismo estilo que los informes reales,
  * hechos en ArcGIS). Por eso ya no trae fondo/borde propio: el mapa en sí
  * ES el recuadro completo, ResultadosView/SalidasView solo le dan el
- * tamaño. */
-export function MapaDensidad({
-  puntos,
-  perimetro,
-  rangos,
-  nivelColores,
-  etiquetaLeyenda,
-  ancho,
-  alto,
-  origen,
-}: MapaDensidadProps) {
+ * tamaño.
+ *
+ * `ref` (forwardRef) apunta al `View` raíz — sirve para capturarlo como
+ * PNG con `react-native-view-shot` (ver "Exportar PNG" en
+ * resultados-view.tsx), así lo que se exporta es exactamente el
+ * rectángulo del mapa, sin el marco/padding de la pantalla que lo
+ * contiene. */
+export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDensidad(
+  { puntos, perimetro, rangos, nivelColores, etiquetaLeyenda, ancho, alto, origen },
+  ref
+) {
   const [satelitalOk, setSatelitalOk] = useState(true);
 
   const { toPx, escala, minX, minY, offX, offY } = useMemo(() => {
@@ -137,7 +137,7 @@ export function MapaDensidad({
     : {};
 
   return (
-    <View style={{ width: ancho, height: alto, overflow: "hidden" }}>
+    <View ref={ref} style={{ width: ancho, height: alto, overflow: "hidden" }} collapsable={false}>
       {satUrl && satelitalOk && (
         <Image
           source={{ uri: satUrl }}
@@ -255,7 +255,7 @@ export function MapaDensidad({
       )}
     </View>
   );
-}
+});
 
 // Espacio, adentro de estRosaWrap, reservado para las letras N/S/E/O
 // alrededor del dibujo de la rosa de los vientos.

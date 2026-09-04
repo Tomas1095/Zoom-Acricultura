@@ -118,7 +118,9 @@ export function LoteTabs({ lote, establecimientoNombre, onLoteActualizado }: Lot
             onCampanaCerrada={onLoteActualizado}
           />
         )}
-        {tab === "resultados" && <ResultadosView lote={lote} campanaViendo={campanaViendo} />}
+        {tab === "resultados" && (
+          <ResultadosView lote={lote} establecimientoNombre={establecimientoNombre} campanaViendo={campanaViendo} />
+        )}
         {tab === "salidas" && (
           <SalidasView lote={lote} establecimientoNombre={establecimientoNombre} campanaViendo={campanaViendo} />
         )}

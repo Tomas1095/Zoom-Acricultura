@@ -1,9 +1,16 @@
-// Exportar los manchones de la zona de aplicación a GPX/KML — portado del
+// Exportar los manchones de la zona de aplicación a GPX/KMZ — portado del
 // prototipo (`exportarGPX`/`exportarKML`), para llevarlos a un GPS de mano
 // real o abrirlos en Google Earth / apps de agricultura de precisión.
+//
+// KMZ en vez de KML puro (a pedido del usuario) — es lo mismo, solo que
+// comprimido: pesa menos y es el formato que usa Google Earth por default
+// al exportar, así que abre más directo sin que nadie tenga que pensar en
+// cuál de los dos es. `construirKML` queda expuesta igual (algún consumo
+// futuro que prefiera el KML sin comprimir).
 
+import JSZip from "jszip";
 import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
-import { guardarYCompartirTexto, sanitizarNombreArchivo } from "./archivo";
+import { guardarYCompartirBinario, guardarYCompartirTexto, sanitizarNombreArchivo } from "./archivo";
 import { escapeXml } from "./xml";
 
 // Namespace GPX 1.1 estándar (topografix) — sin esto algunos programas más
@@ -70,4 +77,25 @@ export async function exportarKML(
 ): Promise<void> {
   const kml = construirKML(manchones, nombreLote, origen, prefijo);
   await guardarYCompartirTexto(`${sanitizarNombreArchivo(nombreArchivo)}.kml`, kml, "application/vnd.google-earth.kml+xml");
+}
+
+/** Un KML no necesita más que comprimirse tal cual (con el nombre interno
+ * "doc.kml", la convención que usa Google Earth) para ser un KMZ válido —
+ * ver el comentario del encabezado. */
+export async function construirKMZDesdeKML(kml: string): Promise<Uint8Array> {
+  const zip = new JSZip();
+  zip.file("doc.kml", kml);
+  return zip.generateAsync({ type: "uint8array" });
+}
+
+export async function exportarKMZ(
+  manchones: XY[][],
+  nombreLote: string,
+  origen: LatLon,
+  nombreArchivo: string,
+  prefijo: string
+): Promise<void> {
+  const kml = construirKML(manchones, nombreLote, origen, prefijo);
+  const kmz = await construirKMZDesdeKML(kml);
+  await guardarYCompartirBinario(`${sanitizarNombreArchivo(nombreArchivo)}.kmz`, kmz, "application/vnd.google-earth.kmz");
 }

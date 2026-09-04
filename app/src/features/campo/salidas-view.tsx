@@ -20,7 +20,7 @@ import {
   type EstacionAplicacion,
 } from "@/lib/geo/zona-aplicacion";
 import { inferirOrigenDesdePuntos, type XY } from "@/lib/geo/geometria";
-import { NIVEL_COLORES, rangosDe } from "@/lib/geo/densidad";
+import { calcularCeldasDensidad, NIVEL_COLORES, rangosDe } from "@/lib/geo/densidad";
 import { resumenPlaga, resumenPresencias, textoSituacion } from "@/lib/informe/situacion";
 import {
   construirInformeHtml,
@@ -32,7 +32,8 @@ import {
   type ZonaCebo,
 } from "@/lib/exportar/informe";
 import { construirMapaDensidadHtml } from "@/lib/exportar/mapa-svg";
-import { exportarGPX, exportarKML } from "@/lib/exportar/manchones";
+import { exportarGPX, exportarKMZ } from "@/lib/exportar/manchones";
+import { exportarKMZManchonYMapa } from "@/lib/exportar/manchon-mapa-kmz";
 import { construirDatosHtml, exportarDatosPdf } from "@/lib/exportar/datos";
 import { formatearHectareas } from "@/lib/format";
 import type { Lote } from "@/types/domain";
@@ -66,7 +67,7 @@ type SubTab = "informe" | "manchoneo" | "datos";
 // "pdfDatos" además de "pdf" — son dos PDF distintos (informe técnico vs.
 // la tabla de datos cruda), cada uno con su propio nombre por defecto y su
 // propio armador de HTML (ver nombreDefaultExport/confirmarExport).
-type PedidoExport = "pdf" | "pdfDatos" | "gpx" | "kml" | null;
+type PedidoExport = "pdf" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null;
 
 interface SalidasViewProps {
   lote: Lote;
@@ -273,7 +274,9 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     setZonas((zs) => zs.filter((z) => z.id !== id));
   }
 
-  const [exportando, setExportando] = useState<"pdf" | "pdfDatos" | "gpx" | "kml" | null>(null);
+  const [exportando, setExportando] = useState<"pdf" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null>(null);
+  // Desplegable de "Exportar Manchón" (GPX / KMZ) — ver el botón más abajo.
+  const [menuManchonAbierto, setMenuManchonAbierto] = useState(false);
   // Qué exportación se está por hacer — mientras no sea null, el modal de
   // nombre está abierto, prellenado con el nombre por defecto de esa
   // exportación puntual (ver nombreDefaultExport). El nombre final lo
@@ -328,6 +331,21 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   const unidadActiva = manchoneoPlaga === "bicho" ? "bichos bolita/m²" : "babosas/m²";
   const etiquetaActiva = manchoneoPlaga === "bicho" ? "Bicho bolita" : "Babosas";
   const prefijoExportActivo = manchoneoPlaga === "bicho" ? "BB" : "BAB";
+
+  // Celdas del mapa de densidad de la plaga activa — solo hace falta para
+  // "Exportar Manchón + Mapa" (ver exportarKMZManchonYMapa), no se
+  // muestran en pantalla acá (eso lo dibuja MapaManchoneo por su cuenta).
+  const celdasManchoneoActivo = useMemo(() => {
+    try {
+      return calcularCeldasDensidad(
+        manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa,
+        lote.perimetro,
+        rangosDe(manchoneoPlaga)
+      );
+    } catch {
+      return [];
+    }
+  }, [manchoneoPlaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]);
 
   // Manchones/hectáreas que de verdad se muestran, exportan, etc.: el
   // cálculo automático tal cual, salvo que la persona ya haya editado un
@@ -409,7 +427,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
     // criterio "es castellano" que ya usa el resto de la app. Sin la
     // palabra "Lote" (a pedido del usuario).
     const superficie = haActivas.toFixed(1).replace(".", ",");
-    return `${prefijoExportActivo} ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""} ${superficie} Ha`;
+    const sufijo = pedido === "kmzMapa" ? " + Mapa" : "";
+    return `${prefijoExportActivo}${sufijo} ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""} ${superficie} Ha`;
   }
 
   async function confirmarExport(valores: Record<string, string>) {
@@ -459,10 +478,20 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
       } else {
         const origen = inferirOrigenDesdePuntos(puntos);
         if (pedido === "gpx") await exportarGPX(manchonesActivos, lote.nombre, origen, valores.nombre, prefijoExportActivo);
-        else await exportarKML(manchonesActivos, lote.nombre, origen, valores.nombre, prefijoExportActivo);
+        else if (pedido === "kmz") await exportarKMZ(manchonesActivos, lote.nombre, origen, valores.nombre, prefijoExportActivo);
+        else
+          await exportarKMZManchonYMapa(
+            manchonesActivos,
+            celdasManchoneoActivo,
+            NIVEL_COLORES,
+            lote.nombre,
+            origen,
+            valores.nombre,
+            prefijoExportActivo
+          );
       }
     } catch (e: any) {
-      const etiquetaError = pedido === "pdfDatos" ? "PDF" : pedido.toUpperCase();
+      const etiquetaError = pedido === "pdfDatos" ? "PDF" : pedido === "kmzMapa" ? "KMZ" : pedido.toUpperCase();
       Alert.alert(`No se pudo exportar el ${etiquetaError}`, e.message ?? String(e));
     } finally {
       setExportando(null);
@@ -748,26 +777,67 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
             ) : (
               <>
                 <View style={styles.exportRow}>
-                  <Pressable style={styles.botonExport} onPress={() => setPedidoExport("gpx")} disabled={exportando !== null}>
-                    {exportando === "gpx" ? (
+                  {/* "Exportar Manchón" con desplegable (GPX / KMZ) — a
+                      pedido del usuario, reemplaza a los dos botones que
+                      había antes (GPX y KML por separado). El menú es una
+                      vista propia (no un picker nativo) posicionada justo
+                      debajo del botón. */}
+                  <View style={styles.exportDropdownWrap}>
+                    <Pressable
+                      style={styles.botonExport}
+                      onPress={() => setMenuManchonAbierto((v) => !v)}
+                      disabled={exportando !== null}
+                    >
+                      {exportando === "gpx" || exportando === "kmz" ? (
+                        <ActivityIndicator color={colors.primaryDark} size="small" />
+                      ) : (
+                        <Upload size={13} color={colors.primaryDark} />
+                      )}
+                      <Text style={styles.botonExportTexto}>Exportar Manchón</Text>
+                      <ChevronDown size={13} color={colors.primaryDark} />
+                    </Pressable>
+                    {menuManchonAbierto && (
+                      <View style={styles.menuDesplegable}>
+                        <Pressable
+                          style={styles.menuItem}
+                          onPress={() => {
+                            setMenuManchonAbierto(false);
+                            setPedidoExport("gpx");
+                          }}
+                        >
+                          <Text style={styles.menuItemTexto}>GPX</Text>
+                        </Pressable>
+                        <View style={styles.menuSeparador} />
+                        <Pressable
+                          style={styles.menuItem}
+                          onPress={() => {
+                            setMenuManchonAbierto(false);
+                            setPedidoExport("kmz");
+                          }}
+                        >
+                          <Text style={styles.menuItemTexto}>KMZ</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                  {/* KMZ con el manchón Y las celdas del mapa de densidad
+                      (como polígonos coloreados, no una imagen) — para
+                      abrir en Google Earth y retocar el manchón con más
+                      precisión que con el dedo en el celular, viendo la
+                      densidad de fondo (mismo flujo que el usuario ya usaba
+                      en ArcGIS). */}
+                  <Pressable style={styles.botonExport} onPress={() => setPedidoExport("kmzMapa")} disabled={exportando !== null}>
+                    {exportando === "kmzMapa" ? (
                       <ActivityIndicator color={colors.primaryDark} size="small" />
                     ) : (
                       <Upload size={13} color={colors.primaryDark} />
                     )}
-                    <Text style={styles.botonExportTexto}>Exportar GPX</Text>
-                  </Pressable>
-                  <Pressable style={styles.botonExport} onPress={() => setPedidoExport("kml")} disabled={exportando !== null}>
-                    {exportando === "kml" ? (
-                      <ActivityIndicator color={colors.primaryDark} size="small" />
-                    ) : (
-                      <Upload size={13} color={colors.primaryDark} />
-                    )}
-                    <Text style={styles.botonExportTexto}>Exportar KML</Text>
+                    <Text style={styles.botonExportTexto}>Exportar Manchón + Mapa</Text>
                   </Pressable>
                 </View>
                 <Text style={styles.hint}>
-                  El KML es la versión sin comprimir de KMZ — se abre igual en Google Earth y la mayoría de apps de
-                  GPS agrícola.
+                  El KMZ se abre directo en Google Earth (celu o compu) — "Manchón + Mapa" suma las celdas del mapa de
+                  densidad de fondo, útil para retocar el manchón con más precisión que con el dedo.
                 </Text>
               </>
             )}
@@ -797,7 +867,9 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
         titulo={
           pedidoExport === "pdf" || pedidoExport === "pdfDatos"
             ? "Exportar PDF"
-            : `Exportar manchoneo (${pedidoExport?.toUpperCase()})`
+            : pedidoExport === "kmzMapa"
+              ? "Exportar Manchón + Mapa (KMZ)"
+              : `Exportar manchoneo (${pedidoExport?.toUpperCase()})`
         }
         fields={pedidoExport ? [{ key: "nombre", label: "Nombre del archivo", valorInicial: nombreDefaultExport(pedidoExport) }] : []}
         textoConfirmar="Exportar"
@@ -1052,6 +1124,30 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   botonExportTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark },
+  // El wrap necesita el mismo flex:1 que botonExport para que la fila
+  // quede repartida igual entre los dos botones — position:"relative"
+  // es lo que ancla el desplegable (position:"absolute") justo debajo.
+  exportDropdownWrap: { flex: 1, position: "relative" },
+  menuDesplegable: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 8,
+    overflow: "hidden",
+    // Por encima de cualquier otra cosa de la tarjeta (el mapa, los
+    // botones de abajo) — si no, algo con más zIndex/orden de pintado
+    // podía taparlo.
+    zIndex: 10,
+    elevation: 10,
+  },
+  menuItem: { paddingVertical: 10, alignItems: "center" },
+  menuItemTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark },
+  menuSeparador: { height: 1, backgroundColor: colors.border },
   // wrap por las dudas — con "Editar polígono"/"Deshacer"/"Restablecer" los
   // tres a la vez (mientras se edita, con historial y con algo editado) no
   // siempre entran en una sola fila en pantallas angostas.

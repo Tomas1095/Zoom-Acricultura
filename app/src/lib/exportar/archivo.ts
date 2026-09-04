@@ -37,3 +37,20 @@ async function guardarYCompartir(nombreArchivo: string, contenido: string | Uint
 
   await Sharing.shareAsync(archivo.uri, { mimeType, dialogTitle: nombreArchivo });
 }
+
+/** Igual que `guardarYCompartirTexto`/`guardarYCompartirBinario`, pero
+ * partiendo de un archivo que YA existe en disco (p.ej. la captura de
+ * pantalla de una vista, ver exportar/mapa-png.ts) — lo copia con el
+ * nombre elegido por la persona (el original, de `react-native-view-shot`,
+ * tiene un nombre autogenerado) y comparte esa copia. */
+export async function guardarYCompartirDesdeArchivo(nombreArchivo: string, uriOrigen: string, mimeType: string): Promise<void> {
+  const disponible = await Sharing.isAvailableAsync();
+  if (!disponible) throw new Error("Compartir no está disponible en este dispositivo.");
+
+  const origen = new File(uriOrigen);
+  const destino = new File(Paths.cache, nombreArchivo);
+  if (destino.exists) destino.delete();
+  origen.copy(destino);
+
+  await Sharing.shareAsync(destino.uri, { mimeType, dialogTitle: nombreArchivo });
+}

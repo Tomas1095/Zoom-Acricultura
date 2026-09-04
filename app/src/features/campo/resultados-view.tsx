@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Image as ImageIcon } from "lucide-react-native";
 
 import { NIVEL_COLORES, rangosDe, type Plaga } from "@/lib/geo/densidad";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
+import { exportarMapaPng } from "@/lib/exportar/mapa-png";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
@@ -33,10 +35,20 @@ type SubTab = "mapas" | "datos";
  * a propósito — mismo formato que el mapa de la pestaña Informe, para que
  * el diseño se mantenga igual entre las dos solapas. "Datos" sí scrollea —
  * es una tabla, no un mapa. */
-export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaViendo: string }) {
+export function ResultadosView({
+  lote,
+  establecimientoNombre,
+  campanaViendo,
+}: {
+  lote: Lote;
+  establecimientoNombre?: string;
+  campanaViendo: string;
+}) {
   const [subTab, setSubTab] = useState<SubTab>("mapas");
   const [plaga, setPlaga] = useState<Plaga>("bicho");
   const [cajaSize, setCajaSize] = useState({ ancho: 0, alto: 0 });
+  const [exportandoPng, setExportandoPng] = useState(false);
+  const mapaRef = useRef<View>(null);
 
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
 
@@ -64,6 +76,22 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
   function onLayoutRecuadro(e: LayoutChangeEvent) {
     const { width, height } = e.nativeEvent.layout;
     setCajaSize({ ancho: width, alto: height });
+  }
+
+  // "Mapa BB <Lote> <Establecimiento>" / "Mapa Babosas <Lote> <Establecimiento>"
+  // — a pedido del usuario, mismo criterio de nombrado que el resto de las
+  // exportaciones (ver nombreDefaultExport en salidas-view.tsx).
+  async function exportarPng() {
+    setExportandoPng(true);
+    try {
+      const prefijo = plaga === "bicho" ? "BB" : "Babosas";
+      const nombre = `Mapa ${prefijo} ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+      await exportarMapaPng(mapaRef, nombre);
+    } catch (e: any) {
+      Alert.alert("No se pudo exportar el mapa", e.message ?? String(e));
+    } finally {
+      setExportandoPng(false);
+    }
   }
 
   if (cargando) {
@@ -115,6 +143,7 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
           <View style={styles.marco} onLayout={onLayoutRecuadro}>
             {mapaListo && (
               <MapaDensidad
+                ref={mapaRef}
                 puntos={puntosDensidad}
                 perimetro={lote.perimetro}
                 rangos={rangos}
@@ -131,6 +160,15 @@ export function ResultadosView({ lote, campanaViendo }: { lote: Lote; campanaVie
             {cargados}/{puntos.length} puntos cargados — valores llevados a m² (× 4 sobre el dato cargado a campo,
             tomado en 1/4 m²)
           </Text>
+
+          {/* Exportar solo el mapa (sin el resto del informe) — a pedido
+              del usuario, para alguna situación puntual donde solo haga
+              falta mandar eso. Aplica a la plaga que esté seleccionada
+              arriba (bicho o babosa), no a las dos a la vez. */}
+          <Pressable style={styles.botonPng} onPress={exportarPng} disabled={!mapaListo || exportandoPng}>
+            <ImageIcon size={14} color={colors.primaryDark} />
+            <Text style={styles.botonPngTexto}>{exportandoPng ? "Exportando…" : "Exportar PNG"}</Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -186,4 +224,15 @@ const styles = StyleSheet.create({
     padding: PAD_RECUADRO,
   },
   pie: { fontSize: 11, color: colors.textMuted, textAlign: "center" },
+  botonPng: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  botonPngTexto: { color: colors.primaryDark, fontWeight: "700", fontSize: 13 },
 });
