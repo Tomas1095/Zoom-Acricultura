@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import { fetchLote } from "@/lib/db/lotes";
@@ -21,8 +21,21 @@ const TOLERANCE_M = 10; // mismo radio que el prototipo — ver PointSheet/enRan
  * `resumenDeUsuarioId`: si se pasa, el `resumen` devuelto cuenta solo los
  * puntos cargados por esa persona (vista de un Monitoreador — "lo que hice
  * yo"); sin él, cuenta el lote entero (vista de Socio Gerente/Fundador/
- * Encargado — ver lib/offline/resumen.ts). */
-export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuarioId?: string) {
+ * Encargado — ver lib/offline/resumen.ts).
+ *
+ * `activo`: para pantallas que quedan montadas de forma persistente aunque
+ * no se estén viendo (Resultados/Salidas dentro de LoteTabs, ver
+ * lote-tabs.tsx — se dejaron de desmontar en cada cambio de pestaña para
+ * que volver a una ya vista sea instantáneo). Sin `activo`, ese ahorro
+ * tendría un costo: `useFocusEffect` de más abajo solo refresca cuando
+ * TODA la pantalla vuelve a foco (ej. al volver de cargar un punto), no
+ * cuando esta pestaña puntual se reactiva por dentro sin que la pantalla
+ * haya perdido el foco — así que sin esto, Resultados podía quedarse
+ * mostrando datos viejos después de cargar un punto en Grilla y volver.
+ * Por default `true` (siempre activo) para no romper ningún llamador que
+ * no le importa esta distinción (Grilla/modo trabajo, que si se desmontan
+ * de verdad al salir). */
+export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuarioId?: string, activo: boolean = true) {
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
   const [puntos, setPuntos] = useState<Punto[]>([]);
@@ -88,6 +101,17 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
       refrescar();
     }, [refrescar])
   );
+
+  // Ver el comentario de `activo` más arriba: refresca también cuando esta
+  // pestaña puntual pasa de inactiva a activa, sin esperar a que la
+  // pantalla entera pierda y recupere el foco. El ref evita refrescar de
+  // más en el montaje inicial (ahí `activo` ya arranca en `true`, y el
+  // useFocusEffect de arriba ya se encarga de esa primera carga).
+  const activoAntesRef = useRef(activo);
+  useEffect(() => {
+    if (activo && !activoAntesRef.current) refrescar();
+    activoAntesRef.current = activo;
+  }, [activo, refrescar]);
 
   const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
   const gps = useGps(origen);

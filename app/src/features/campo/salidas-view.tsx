@@ -73,6 +73,8 @@ interface SalidasViewProps {
   lote: Lote;
   establecimientoNombre?: string;
   campanaViendo: string;
+  /** Ver el comentario de `activo` en usar-datos-campo.ts. Default `true`. */
+  activo?: boolean;
 }
 
 /** Deja pasar dígitos y como mucho UN separador decimal (coma o punto) con
@@ -121,8 +123,8 @@ function zonaInicial(lote: Lote): ZonaCebo {
  * tabla de puntos que Resultados (ver tabla-datos-puntos.tsx) como vista
  * previa, con su propio "Exportar PDF" en A4 apaisada (ver
  * lib/exportar/datos.ts). */
-export function SalidasView({ lote, establecimientoNombre, campanaViendo }: SalidasViewProps) {
-  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
+export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo }: SalidasViewProps) {
+  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true);
   const [subTab, setSubTab] = useState<SubTab>("informe");
   // Elige qué diseño de PDF usa "Exportar PDF" — el mismo formulario
   // (mapas, situación, recomendación) sirve para las dos, solo cambia el
@@ -210,12 +212,17 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   // Los mapas de densidad del informe son los mismos que Resultados (mismos
   // datos, mismo cálculo de celdas) — se arman una sola vez acá y se
   // reusan tanto en pantalla como al exportar el PDF.
+  // `cargado` viaja acá adentro (no se usaba antes) solo para que
+  // exportarKMZManchonYMapa (ver más abajo y manchon-mapa-kmz.ts) sepa qué
+  // celdas rellenar de color y cuáles dejar vacías — a pedido del usuario.
   const puntosDensidadBicho = useMemo(
-    () => puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.bicho })),
+    () =>
+      puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.bicho, cargado: p.cargado })),
     [puntosConValores]
   );
   const puntosDensidadBabosa = useMemo(
-    () => puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.babosa })),
+    () =>
+      puntosConValores.map((p) => ({ id: `${p.linea}.${p.puntoNum}`, x: p.x, y: p.y, valor: p.babosa, cargado: p.cargado })),
     [puntosConValores]
   );
   const origenDensidad = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
@@ -332,20 +339,29 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
   const etiquetaActiva = manchoneoPlaga === "bicho" ? "Bicho bolita" : "Babosas";
   const prefijoExportActivo = manchoneoPlaga === "bicho" ? "BB" : "BAB";
 
-  // Celdas del mapa de densidad de la plaga activa — solo hace falta para
-  // "Exportar Manchón + Mapa" (ver exportarKMZManchonYMapa), no se
-  // muestran en pantalla acá (eso lo dibuja MapaManchoneo por su cuenta).
-  const celdasManchoneoActivo = useMemo(() => {
+  // Celdas del mapa de densidad de cada plaga — un useMemo por plaga (no
+  // uno solo con `manchoneoPlaga` en las dependencias), mismo motivo que
+  // celdasBicho/celdasBabosa en resultados-view.tsx: así cada Voronoi se
+  // calcula una sola vez y alternar entre Bicho bolita y Babosas (acá
+  // arriba, el toggle "Manchoneo — Bicho bolita/Babosas") no repite el
+  // recorte de polygon-clipping cada toque. Además de dibujarse en
+  // pantalla (MapaManchoneo), esta misma celda activa se usa para
+  // "Exportar Manchón + Mapa" (ver exportarKMZManchonYMapa).
+  const celdasManchoneoBicho = useMemo(() => {
     try {
-      return calcularCeldasDensidad(
-        manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa,
-        lote.perimetro,
-        rangosDe(manchoneoPlaga)
-      );
+      return calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"));
     } catch {
       return [];
     }
-  }, [manchoneoPlaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]);
+  }, [puntosDensidadBicho, lote.perimetro]);
+  const celdasManchoneoBabosa = useMemo(() => {
+    try {
+      return calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
+    } catch {
+      return [];
+    }
+  }, [puntosDensidadBabosa, lote.perimetro]);
+  const celdasManchoneoActivo = manchoneoPlaga === "bicho" ? celdasManchoneoBicho : celdasManchoneoBabosa;
 
   // Manchones/hectáreas que de verdad se muestran, exportan, etc.: el
   // cálculo automático tal cual, salvo que la persona ya haya editado un
@@ -724,6 +740,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo }: Sali
                 perimetro={lote.perimetro}
                 manchones={manchonesActivos}
                 puntosDensidad={manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa}
+                celdasPrecalculadas={celdasManchoneoActivo}
                 rangos={rangosDe(manchoneoPlaga)}
                 nivelColores={NIVEL_COLORES}
                 ancho={320}

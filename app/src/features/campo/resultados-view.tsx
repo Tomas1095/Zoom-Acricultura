@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Image as ImageIcon } from "lucide-react-native";
 
-import { NIVEL_COLORES, rangosDe, type Plaga } from "@/lib/geo/densidad";
+import { calcularCeldasDensidad, NIVEL_COLORES, rangosDe, type CeldaDensidad, type Plaga } from "@/lib/geo/densidad";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
 import { exportarMapaPng } from "@/lib/exportar/mapa-png";
 import type { Lote } from "@/types/domain";
@@ -39,10 +39,16 @@ export function ResultadosView({
   lote,
   establecimientoNombre,
   campanaViendo,
+  activo,
 }: {
   lote: Lote;
   establecimientoNombre?: string;
   campanaViendo: string;
+  /** Ver el comentario de `activo` en usar-datos-campo.ts — hace falta acá
+   * para refrescar los datos al volver a esta pestaña sin que se haya
+   * desmontado (ver lote-tabs.tsx). Default `true`: sin pasarlo (nadie más
+   * la usa así hoy), se comporta como siempre. */
+  activo?: boolean;
 }) {
   const [subTab, setSubTab] = useState<SubTab>("mapas");
   const [plaga, setPlaga] = useState<Plaga>("bicho");
@@ -50,21 +56,62 @@ export function ResultadosView({
   const [exportandoPng, setExportandoPng] = useState(false);
   const mapaRef = useRef<View>(null);
 
-  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo);
+  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true);
 
   const rangos = rangosDe(plaga);
   const etiqueta = plaga === "bicho" ? "Nº BB/m²" : "Nº Babosas/m²";
 
-  const puntosDensidad: PuntoDensidad[] = useMemo(
+  // Bicho y babosa por separado (no un solo useMemo con `plaga` en las
+  // dependencias) — a propósito: así cada uno se cachea por su cuenta y
+  // pasar de uno al otro (y volver) no repite el Voronoi completo cada vez
+  // — ver el comentario largo en celdasBicho/celdasBabosa más abajo, que es
+  // donde de verdad pesa el cálculo.
+  const puntosDensidadBicho: PuntoDensidad[] = useMemo(
     () =>
       puntos.map((p) => ({
         id: `${p.linea}.${p.puntoNum}`,
         x: p.x,
         y: p.y,
-        valor: (cargas.get(p.id)?.[plaga] ?? 0) * 4, // se carga por cuadrante de 1/4 m²
+        valor: (cargas.get(p.id)?.bicho ?? 0) * 4, // se carga por cuadrante de 1/4 m²
       })),
-    [puntos, cargas, plaga]
+    [puntos, cargas]
   );
+  const puntosDensidadBabosa: PuntoDensidad[] = useMemo(
+    () =>
+      puntos.map((p) => ({
+        id: `${p.linea}.${p.puntoNum}`,
+        x: p.x,
+        y: p.y,
+        valor: (cargas.get(p.id)?.babosa ?? 0) * 4,
+      })),
+    [puntos, cargas]
+  );
+  const puntosDensidad = plaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa;
+
+  // El Voronoi de cada plaga (calcularCeldasDensidad, con su recorte de
+  // polygon-clipping) es la parte que de verdad tarda acá — con un
+  // useMemo compartido entre las dos plagas, cambiar de Bichos bolita a
+  // Babosas y volver lo recalculaba las DOS veces (el useMemo solo
+  // recuerda el último resultado, no uno por cada valor de `plaga`). Con
+  // un useMemo propio para cada una, cada plaga se calcula una sola vez
+  // (la primera vez que se la mira) y después de eso alternar entre las
+  // dos es instantáneo — es lo que hacía sentir lenta la pantalla al tocar
+  // "Babosas"/"Bichos bolita" varias veces seguidas.
+  const celdasBicho = useMemo(() => {
+    try {
+      return calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"));
+    } catch {
+      return [];
+    }
+  }, [puntosDensidadBicho, lote.perimetro]);
+  const celdasBabosa = useMemo(() => {
+    try {
+      return calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
+    } catch {
+      return [];
+    }
+  }, [puntosDensidadBabosa, lote.perimetro]);
+  const celdas: CeldaDensidad[] = plaga === "bicho" ? celdasBicho : celdasBabosa;
 
   const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
   const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
@@ -145,6 +192,7 @@ export function ResultadosView({
               <MapaDensidad
                 ref={mapaRef}
                 puntos={puntosDensidad}
+                celdasPrecalculadas={celdas}
                 perimetro={lote.perimetro}
                 rangos={rangos}
                 nivelColores={NIVEL_COLORES}

@@ -28,6 +28,7 @@ import Svg, { Line as SvgLine, Polygon } from "react-native-svg";
 import { Check, RotateCcw, X } from "lucide-react-native";
 
 import { generarGrillaDesdePerimetro, type LatLon, type PuntoGrillaGenerado, type XY } from "@/lib/geo/geometria";
+import { formatearHectareas } from "@/lib/format";
 import { colors } from "@/theme/colors";
 
 const PAD = 24;
@@ -181,6 +182,13 @@ export function OrientacionGrilla({ visible, perimetro, haPorPunto, onConfirmar,
   const piezasPx = grilla?.piezas.map((pieza) => pieza.map((v) => toPx(v.x, v.y))) ?? [];
   const segmentosPx = segmentos.map((s) => s.map((v) => toPx(v.x, v.y)));
   const cantidadLineas = grilla ? new Set(grilla.puntos.map((p) => p.linea)).size : 0;
+  // "Ideal" = superficie real / hectáreas por punto — a pedido del usuario,
+  // para comparar de un vistazo contra la cantidad real que da la grilla
+  // con esta orientación (`grilla.puntos.length`, arriba): casi nunca
+  // coinciden exacto (la grilla es una malla regular sobre un perímetro
+  // real, no siempre entra justo), pero sirve de referencia de cuánto se
+  // aleja una orientación de la otra.
+  const puntosIdeal = grilla ? Math.round(grilla.hectareas / haPorPunto) : 0;
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onCancelar}>
@@ -191,6 +199,11 @@ export function OrientacionGrilla({ visible, perimetro, haPorPunto, onConfirmar,
             Cada línea es una fila de muestreo — {cantidadLineas} en total con esta orientación, {grilla?.puntos.length ?? 0}{" "}
             puntos.
           </Text>
+          {grilla && (
+            <Text style={estilos.subtitulo}>
+              Ideal → {formatearHectareas(grilla.hectareas)} has / {haPorPunto} has por punto = {puntosIdeal} puntos
+            </Text>
+          )}
         </View>
 
         <View

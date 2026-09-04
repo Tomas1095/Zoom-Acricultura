@@ -42,6 +42,25 @@ export function LoteTabs({ lote, establecimientoNombre, onLoteActualizado }: Lot
   const [tab, setTab] = useState<Tab>("grilla");
   const [campanas, setCampanas] = useState<string[]>([lote.campanaActual]);
   const [campanaViendo, setCampanaViendo] = useState(lote.campanaActual);
+  // Resultados y Salidas, una vez vistas, se quedan montadas para siempre
+  // (solo se esconden con display:none al cambiar de pestaña) — a pedido
+  // del usuario, que notó que ir y volver entre pestañas (sobre todo las
+  // que tienen mapas) tardaba bastante. Antes cada pestaña se montaba y
+  // desmontaba de cero en cada toque (`{tab === "x" && <Componente/>}`), lo
+  // que disparaba de nuevo TODO su trabajo pesado: useDatosCampo volvía a
+  // pedir los datos al server (useFocusEffect corre en cada montaje, no
+  // solo en la primera vez) y encima se recalculaba desde cero el Voronoi
+  // de densidad. Con esto, la primera vez que se entra a cada una sigue
+  // constando lo mismo, pero volver después es instantáneo. Grilla queda
+  // afuera de este esquema a propósito: tiene GPS/brújula corriendo en
+  // vivo, que sí conviene cortar de verdad al salir de esa pestaña (ver
+  // vista-general.tsx/mapa-campo.tsx).
+  const [pestanasVisitadas, setPestanasVisitadas] = useState<Set<Tab>>(() => new Set(["grilla"]));
+
+  function cambiarTab(t: Tab) {
+    setTab(t);
+    setPestanasVisitadas((prev) => (prev.has(t) ? prev : new Set(prev).add(t)));
+  }
 
   const puedeVerHistorial = !!usuario && puedeCerrarCampana(usuario.rol);
 
@@ -101,7 +120,7 @@ export function LoteTabs({ lote, establecimientoNombre, onLoteActualizado }: Lot
           <Pressable
             key={t.id}
             style={[styles.tabBoton, tab === t.id && styles.tabBotonActivo]}
-            onPress={() => setTab(t.id)}
+            onPress={() => cambiarTab(t.id)}
           >
             <Text style={[styles.tabTexto, tab === t.id && styles.tabTextoActivo]}>{t.etiqueta}</Text>
           </Pressable>
@@ -118,11 +137,25 @@ export function LoteTabs({ lote, establecimientoNombre, onLoteActualizado }: Lot
             onCampanaCerrada={onLoteActualizado}
           />
         )}
-        {tab === "resultados" && (
-          <ResultadosView lote={lote} establecimientoNombre={establecimientoNombre} campanaViendo={campanaViendo} />
+        {pestanasVisitadas.has("resultados") && (
+          <View style={[styles.tabPane, tab !== "resultados" && styles.tabPaneOculto]}>
+            <ResultadosView
+              lote={lote}
+              establecimientoNombre={establecimientoNombre}
+              campanaViendo={campanaViendo}
+              activo={tab === "resultados"}
+            />
+          </View>
         )}
-        {tab === "salidas" && (
-          <SalidasView lote={lote} establecimientoNombre={establecimientoNombre} campanaViendo={campanaViendo} />
+        {pestanasVisitadas.has("salidas") && (
+          <View style={[styles.tabPane, tab !== "salidas" && styles.tabPaneOculto]}>
+            <SalidasView
+              lote={lote}
+              establecimientoNombre={establecimientoNombre}
+              campanaViendo={campanaViendo}
+              activo={tab === "salidas"}
+            />
+          </View>
         )}
       </View>
     </View>
@@ -148,4 +181,8 @@ const styles = StyleSheet.create({
   tabTexto: { fontSize: 13, fontWeight: "700", color: colors.textMuted },
   tabTextoActivo: { color: colors.surface },
   contenido: { flex: 1 },
+  tabPane: { flex: 1 },
+  // display:none (no unmount) — deja de verse y de ocupar lugar, pero sin
+  // tirar el estado ni el trabajo ya hecho (ver el comentario de arriba).
+  tabPaneOculto: { display: "none" },
 });

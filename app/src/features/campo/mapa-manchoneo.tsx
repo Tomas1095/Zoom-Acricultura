@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import Svg, { Line, Polygon } from "react-native-svg";
 
-import { calcularCeldasDensidad, type RangoDensidad } from "@/lib/geo/densidad";
+import { calcularCeldasDensidad, type CeldaDensidad, type RangoDensidad } from "@/lib/geo/densidad";
 import { puntoEnAlgunPoligono, type XY } from "@/lib/geo/geometria";
 import { colors } from "@/theme/colors";
 
@@ -38,6 +38,11 @@ interface MapaManchoneoProps {
   nivelColores: readonly string[];
   ancho: number;
   alto: number;
+  /** Ver el mismo prop en mapa-densidad.tsx — celdas ya calculadas por
+   * salidas-view.tsx (una por plaga, cacheadas por separado), para que
+   * alternar entre Bicho bolita y Babosas en Manchoneo no recalcule el
+   * Voronoi cada vez. */
+  celdasPrecalculadas?: CeldaDensidad[];
   /** Modo edición: muestra los "agarres" en cada vértice de cada manchón,
    * arrastrables con el dedo. Fuera de este modo el mapa es puramente
    * visual, igual que antes. */
@@ -71,6 +76,7 @@ export function MapaManchoneo({
   alto,
   editable,
   onEditarVertice,
+  celdasPrecalculadas,
 }: MapaManchoneoProps) {
   const { toPx, escala } = useMemo(() => {
     const todosLosVertices = perimetro.flat();
@@ -87,12 +93,13 @@ export function MapaManchoneo({
   const piezasPx = perimetro.map((pieza) => pieza.map((v) => toPx(v.x, v.y)));
 
   const celdas = useMemo(() => {
+    if (celdasPrecalculadas) return celdasPrecalculadas;
     try {
       return calcularCeldasDensidad(puntosDensidad, perimetro, rangos);
     } catch {
       return [];
     }
-  }, [puntosDensidad, perimetro, rangos]);
+  }, [celdasPrecalculadas, puntosDensidad, perimetro, rangos]);
 
   // Vista previa en vivo del vértice que se está arrastrando ahora mismo —
   // vive ACÁ (no en salidas-view.tsx) a propósito: mientras dura el

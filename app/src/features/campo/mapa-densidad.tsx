@@ -7,6 +7,7 @@ import {
   elegirEscalaBarra,
   graduarEscalaBarra,
   ROSA_VIENTOS_KITES,
+  type CeldaDensidad,
   type RangoDensidad,
 } from "@/lib/geo/densidad";
 import type { LatLon, XY } from "@/lib/geo/geometria";
@@ -47,6 +48,15 @@ interface MapaDensidadProps {
    * imagen falla (sin señal, servicio caído), el mapa se ve igual que
    * antes, sobre el fondo claro liso. */
   origen?: LatLon | null;
+  /** Celdas ya calculadas por quien llama (ver resultados-view.tsx) — si se
+   * pasa, se usan directo en vez de recalcularlas acá adentro con
+   * `calcularCeldasDensidad`. Sirve para que un padre con más de una plaga
+   * (bicho/babosa) pueda cachear cada Voronoi por separado y reusarlo al
+   * alternar entre las dos, en vez de que este componente lo recalcule de
+   * cero cada vez que cambia `puntos` (que es lo que pasa al tocar el
+   * selector de plaga). Sin esto (y para el mapa del Informe, que sigue
+   * sin pasarlo), se comporta exactamente igual que antes. */
+  celdasPrecalculadas?: CeldaDensidad[];
 }
 
 /** Mapa de densidad — portado de la parte SVG de `DensidadView` del
@@ -73,7 +83,7 @@ interface MapaDensidadProps {
  * rectángulo del mapa, sin el marco/padding de la pantalla que lo
  * contiene. */
 export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDensidad(
-  { puntos, perimetro, rangos, nivelColores, etiquetaLeyenda, ancho, alto, origen },
+  { puntos, perimetro, rangos, nivelColores, etiquetaLeyenda, ancho, alto, origen, celdasPrecalculadas },
   ref
 ) {
   const [satelitalOk, setSatelitalOk] = useState(true);
@@ -112,12 +122,13 @@ export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDen
   const satUrl = origen ? construirUrlSatelital(origen, minX, minY, escala, ancho, alto, offX, offY) : null;
 
   const celdas = useMemo(() => {
+    if (celdasPrecalculadas) return celdasPrecalculadas;
     try {
       return calcularCeldasDensidad(puntos, perimetro, rangos);
     } catch {
       return []; // igual que el prototipo: si algo falla, se muestra el mapa vacío en vez de romper la pantalla
     }
-  }, [puntos, perimetro, rangos]);
+  }, [celdasPrecalculadas, puntos, perimetro, rangos]);
 
   const piezasPx = perimetro.map((pieza) => pieza.map((v) => toPx(v.x, v.y)));
   const escalaBarra = elegirEscalaBarra(escala);

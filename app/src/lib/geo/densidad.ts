@@ -79,6 +79,14 @@ export interface CeldaDensidad {
   poligono: XY[]; // en el mismo plano x,y (metros) que puntos y perímetro
   valorM2: number;
   nivel: number; // índice en NIVEL_COLORES / rangos
+  /** Si el punto de origen de esta celda tiene datos cargados. Solo lo usa
+   * hoy la exportación "Manchón + Mapa" (ver manchon-mapa-kmz.ts, a pedido
+   * del usuario): ahí las celdas sin dato quedan sin relleno en el KMZ,
+   * para que se vea la foto satelital de Google Earth de fondo en las
+   * zonas todavía no muestreadas. Sin `cargado` en el punto de entrada
+   * (los demás llamadores no lo pasan, ver calcularCeldasDensidad más
+   * abajo) se asume `true` — mismo comportamiento de siempre. */
+  cargado: boolean;
 }
 
 /** Calcula, para cada punto de muestreo, su celda de Voronoi ("el área más
@@ -143,7 +151,7 @@ function circulo(cx: number, cy: number, r: number, lados = 24): Tupla[] {
 }
 
 export function calcularCeldasDensidad(
-  puntos: Array<{ id: string; x: number; y: number; valor: number }>,
+  puntos: Array<{ id: string; x: number; y: number; valor: number; cargado?: boolean }>,
   piezas: XY[][],
   rangos: RangoDensidad[]
 ): CeldaDensidad[] {
@@ -202,6 +210,7 @@ export function calcularCeldasDensidad(
         poligono: anilloExterior.map(([x, y]) => ({ x, y })),
         valorM2: p.valor,
         nivel: clasificarNivel(p.valor, rangos),
+        cargado: p.cargado ?? true,
       });
     });
   });

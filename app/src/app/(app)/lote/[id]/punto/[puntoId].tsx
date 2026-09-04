@@ -554,14 +554,29 @@ export default function PuntoScreen() {
               foco del input (blur nativo), y de paso Pressable negocia el
               gesto con su propia lógica de Pressability antes de disparar
               cualquier callback — entre las dos cosas, el primer toque se
-              perdía y recién el segundo funcionaba. onResponderGrant se
-              dispara en el instante en que ESTA vista gana el responder
-              (el toque inicial), sin ninguna negociación de por medio, así
-              que ya no hace falta tocar dos veces. */}
+              perdía y recién el segundo funcionaba.
+              Esto había quedado resuelto con onResponderGrant (fase de
+              "bubbling" del responder), pero volvió a fallar — así que
+              ahora van TRES disparadores redundantes en vez de uno solo,
+              cualquiera de los tres alcanza y Keyboard.dismiss() no hace
+              nada raro si se llama de más de una vez:
+              1. onStartShouldSetResponderCapture, fase de CAPTURA — se
+                 evalúa de arriba hacia abajo ANTES que la de bubbling, así
+                 que esta vista se queda con el toque lo antes posible,
+                 sin que nada más arriba en el árbol pueda interceptarlo
+                 primero.
+              2. onResponderGrant, por si algo más abajo llegara a captar
+                 el responder primero (no debería, pero es la vía que ya
+                 había funcionado antes).
+              3. onTouchStart, el evento de toque más crudo de todos — no
+                 depende para nada del sistema de responder ni de ninguna
+                 negociación, dispara apenas el dedo toca la vista. */}
           <View
             style={styles.botonListoFlotante}
+            onStartShouldSetResponderCapture={() => true}
             onStartShouldSetResponder={() => true}
             onResponderGrant={() => Keyboard.dismiss()}
+            onTouchStart={() => Keyboard.dismiss()}
           >
             <Text style={styles.botonListoFlotanteTexto}>Listo</Text>
           </View>

@@ -6,9 +6,11 @@
 // en campos grandes. A diferencia de "Exportar Manchón" (ver
 // manchones.ts), esto NO es una imagen pegada: son polígonos KML de
 // verdad, así que se ve exactamente igual acercando o alejando el zoom.
-// Ni las celdas ni el manchón llevan relleno — solo el borde (ver el
-// comentario de construirKMLManchonYMapa), para no tapar la foto
-// satelital de fondo.
+// El manchón nunca lleva relleno — solo el borde verde, para no tapar la
+// foto satelital de fondo mientras se lo retoca. Las celdas de densidad sí
+// llevan relleno de color, pero SOLO donde hay dato cargado — las que
+// todavía no tienen dato quedan vacías (ver el comentario de
+// construirKMLManchonYMapa para el detalle completo).
 
 import JSZip from "jszip";
 import type { CeldaDensidad } from "@/lib/geo/densidad";
@@ -28,6 +30,11 @@ function poligonoKml(vertices: XY[], origen: LatLon): string {
     .join(" ");
 }
 
+// Blanco fijo para el borde de cada celda (antes usaba el color del nivel)
+// — a pedido del usuario, para que el cuadriculado contraste contra el
+// verde del manchón en vez de mimetizarse con celdas de su mismo color.
+const BORDE_CELDA_KML = colorKml("#FFFFFF");
+
 export function construirKMLManchonYMapa(
   manchones: XY[][],
   celdas: CeldaDensidad[],
@@ -41,18 +48,19 @@ export function construirKMLManchonYMapa(
   // las celdas de color (es lo que hay que ver y retocar), no tapado por
   // ellas.
   //
-  // Ni las celdas ni el manchón llevan relleno (a pedido del usuario) —
-  // solo el borde, para que la foto satelital de Google Earth se vea
-  // limpia de fondo mientras se retoca el manchón encima. Las celdas SÍ
-  // muestran el cuadriculado completo (el borde de cada celda, tenga o no
-  // tenga densidad cargada) coloreado según su nivel — así se sigue
-  // viendo de un vistazo cuáles tienen más/menos densidad, sin que el
-  // color tape el terreno.
+  // El cuadriculado (el borde de cada celda) se ve SIEMPRE, tenga o no
+  // tenga densidad cargada — en blanco, para contrastar contra el manchón
+  // verde. El relleno de color, en cambio, es a pedido del usuario "tal
+  // cual es el mapa": las celdas CON dato cargado (`c.cargado`) llevan el
+  // mismo color sólido que en la pantalla de Resultados/Manchoneo; las que
+  // todavía no tienen dato quedan sin relleno, para que ahí se vea la
+  // foto satelital de fondo de Google Earth (útil para saber qué falta
+  // recorrer).
   const celdasKml = celdas
-    .map(
-      (c) =>
-        `    <Placemark>\n      <Style><LineStyle><color>${colorKml(nivelColores[c.nivel])}</color><width>1.5</width></LineStyle><PolyStyle><fill>0</fill><outline>1</outline></PolyStyle></Style>\n      <Polygon><outerBoundaryIs><LinearRing><coordinates>${poligonoKml(c.poligono, origen)}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n    </Placemark>\n`
-    )
+    .map((c) => {
+      const relleno = c.cargado ? `<color>${colorKml(nivelColores[c.nivel])}</color><fill>1</fill>` : `<fill>0</fill>`;
+      return `    <Placemark>\n      <Style><LineStyle><color>${BORDE_CELDA_KML}</color><width>1.5</width></LineStyle><PolyStyle>${relleno}<outline>1</outline></PolyStyle></Style>\n      <Polygon><outerBoundaryIs><LinearRing><coordinates>${poligonoKml(c.poligono, origen)}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n    </Placemark>\n`;
+    })
     .join("");
 
   const manchonKml = manchonesValidos(manchones)
