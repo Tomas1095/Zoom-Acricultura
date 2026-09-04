@@ -188,15 +188,22 @@ function trazarContornoEscalera(celdasIncluidas: Set<string>, resolucion: number
   });
 
   // simplificar: sacar vértices colineales (donde el contorno sigue derecho)
-  return loops.map((loop) => {
-    const n = loop.length;
-    return loop.filter((b, i) => {
-      const a = loop[(i - 1 + n) % n];
-      const c = loop[(i + 1) % n];
-      const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
-      return Math.abs(cross) > 1e-6;
-    });
-  });
+  // — en una "isla" muy fina (una franja angosta pegada a un recoveco
+  // cóncavo del lote, caso real de un usuario) esto puede llegar a dejar
+  // menos de 3 vértices; se descarta acá (sin área real que valga la
+  // pena representar) en vez de dejarla pasar como un polígono roto que
+  // más adelante (snapABorde, o al exportar) explota al intentar usarlo.
+  return loops
+    .map((loop) => {
+      const n = loop.length;
+      return loop.filter((b, i) => {
+        const a = loop[(i - 1 + n) % n];
+        const c = loop[(i + 1) % n];
+        const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+        return Math.abs(cross) > 1e-6;
+      });
+    })
+    .filter((loop) => loop.length >= 3);
 }
 
 export interface ZonaAplicacionResultado {
@@ -302,6 +309,11 @@ export function calcularZonaAplicacion(
       // contra él (ver snapABorde) — antes de rotar de vuelta, en el mismo
       // marco rotado que piezasR.
       const snapeado = snapABorde(enUV, piezasR, TOLERANCIA_SNAP_BORDE_M);
+      // El propio snap (pegar al borde real + sacar colineales/duplicados
+      // de nuevo, ver el comentario de snapABorde) puede volver a dejar
+      // una isla con menos de 3 vértices — mismo caso que en
+      // trazarContornoEscalera, se descarta acá por la misma razón.
+      if (snapeado.length < 3) continue;
       const enXY = snapeado.map((v) => rotarPunto(v.x, v.y, theta));
       manchones.push(enXY);
     }
