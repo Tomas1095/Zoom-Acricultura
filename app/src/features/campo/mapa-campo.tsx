@@ -265,14 +265,20 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Portado de `rotate(-headingUsado)` sobre todo `mapWorld` en el
-  // prototipo: mientras nadie tocó el mapa a mano, rota el grupo entero
-  // para que arriba sea tu rumbo real — el marcador "Yo" ya rota al revés
-  // (`heading` sobre sí mismo, ver más abajo) así que dentro de este grupo
-  // queda siempre apuntando derecho para arriba.
+  // Gira el grupo entero para que arriba sea tu rumbo real, mientras nadie
+  // tocó el mapa a mano. El prototipo (web, `rotate(-headingUsado)` sobre
+  // `mapWorld`) usaba signo negativo — acá tiene que ser POSITIVO: probado
+  // en el campo caminando de verdad, con el signo negativo el mapa giraba
+  // exactamente al revés (el punto hacia el que caminabas se iba para abajo
+  // en vez de quedarse arriba). No es una traducción 1 a 1 del prototipo
+  // porque ahí la rotación era CSS sobre HTML (eje Z con la pantalla mirando
+  // al usuario, mismo sentido "matemático" que acá), pero el heading en sí
+  // puede venir con un signo distinto según la plataforma/librería nativa
+  // de brújula — con la real (expo-location, dispositivo físico) el que
+  // hace falta es este.
   useEffect(() => {
     if (!seguirRumbo || interactuado) return;
-    const rad = (-heading * Math.PI) / 180;
+    const rad = (heading * Math.PI) / 180;
     rotacion.value = withTiming(rad, { duration: 350 });
     savedRotacion.value = rad;
   }, [heading, seguirRumbo, interactuado]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -379,14 +385,6 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // solo toma translateX/Y acá, nunca scale ni rotateZ.
   const estiloYoArrastrado = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
-  }));
-
-  // Su flecha, aparte, necesita sumar a mano la rotación que tendría si
-  // estuviera adentro del grupo — heading más la rotación actual del mapa
-  // en grados — para seguir apuntando bien (el translate de arriba no la
-  // afecta, así que esto es independiente).
-  const estiloFlechaYoFija = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${heading + (rotacion.value * 180) / Math.PI}deg` }],
   }));
 
   // Una lista de puntos-en-pantalla por pieza (ver `perimetro` — casi
@@ -699,15 +697,30 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           o hacer zoom pivotea a su alrededor en vez de moverlo — por eso
           está fuera del grupo con el transform animado completo, no
           adentro (ese grupo sí tiene scale/rotateZ, que "Yo" no debe
-          heredar). "Volver a mi marcha" devuelve todo al lugar original. */}
+          heredar). "Volver a mi marcha" devuelve todo al lugar original.
+
+          Sin la flechita de rumbo que sí tiene en vista general — acá, con
+          el mapa entero rotando para que tu rumbo quede siempre "arriba"
+          (ver seguirRumbo más arriba), esa flecha apuntaría derecho para
+          arriba SIEMPRE mientras el auto-seguimiento está activo (que es
+          casi todo el tiempo real de uso) — matemáticamente cancela contra
+          la rotación del mapa, así que nunca se la ve moverse: a pedido del
+          usuario, que la probó en el campo y no le encontró sentido, se
+          saca en vez de dejarla puesta sin hacer nada.
+
+          `pointerEvents="none"`: este marcador queda dibujado JUSTO arriba
+          del punto donde estás parado (por diseño — es lo que te dice
+          "estás acá") pero al ser el último en el árbol, sin esto se
+          quedaba con el toque y no dejaba tocar el punto de abajo para
+          cargarlo — a pedido del usuario, que notó que parado sobre un
+          punto no podía abrirlo. Con esto el marcador se ve igual pero deja
+          pasar el toque directo al punto. */}
       {pantallaCompleta && miPos && (
         <Animated.View
           style={[styles.yoMarker, { left: anclaX - 12, top: anclaY - 12 }, estiloYoArrastrado]}
+          pointerEvents="none"
         >
           <View style={styles.yoMarkerPulso} />
-          <Animated.View style={estiloFlechaYoFija}>
-            <Navigation size={13} color="#FFFFFF" />
-          </Animated.View>
         </Animated.View>
       )}
 

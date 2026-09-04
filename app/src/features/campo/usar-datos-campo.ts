@@ -10,7 +10,10 @@ import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLo
 import type { Carga, Lote, Punto } from "@/types/domain";
 import { useGps } from "./usar-gps";
 
-const TOLERANCE_M = 10; // mismo radio que el prototipo — ver PointSheet/enRango
+// 20m, no 10 — a pedido del usuario, probando en el campo: con el radio
+// original quedaba muy justo como "zona segura" para considerar que estás
+// parado sobre el punto de muestreo (GPS real, no siempre preciso al metro).
+const TOLERANCE_M = 20;
 
 /** Junta todo lo que necesitan tanto la vista general como el modo trabajo:
  * el lote, sus puntos, el estado de carga de cada uno (campaña vigente, o
