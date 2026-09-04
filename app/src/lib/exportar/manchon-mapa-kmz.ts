@@ -11,6 +11,7 @@ import JSZip from "jszip";
 import type { CeldaDensidad } from "@/lib/geo/densidad";
 import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
 import { guardarYCompartirBinario, sanitizarNombreArchivo } from "./archivo";
+import { manchonesValidos } from "./manchones";
 import { escapeXml } from "./xml";
 
 /** KML pide el color como AABBGGRR (alfa, azul, verde, rojo) en hex — al
@@ -53,7 +54,7 @@ export function construirKMLManchonYMapa(
     )
     .join("");
 
-  const manchonKml = manchones
+  const manchonKml = manchonesValidos(manchones)
     .map(
       (m, i) =>
         `    <Placemark>\n      <name>${escapeXml(`${prefijo} ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n      <Style><PolyStyle><color>7d3fa07b</color></PolyStyle></Style>\n      <Polygon><outerBoundaryIs><LinearRing><coordinates>${poligonoKml(m, origen)}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n    </Placemark>\n`

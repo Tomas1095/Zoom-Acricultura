@@ -22,9 +22,19 @@ const GPX_HEADER =
   'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
   'xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">';
 
+// Filtra polígonos degenerados (menos de 3 vértices) antes de exportar —
+// el trazado de contorno del manchón (ver zona-aplicacion.ts) puede, en
+// algún caso borde con la geometría real de un lote, dejar una "isla" con
+// muy pocos o ningún vértice; sin este filtro, `m[0]` de un array vacío
+// da `undefined` y explota más abajo al leer sus coordenadas ("Cannot
+// read property 'y' of undefined", bug real reportado por un usuario).
+export function manchonesValidos(manchones: XY[][]): XY[][] {
+  return manchones.filter((m) => m.length >= 3);
+}
+
 export function construirGPX(manchones: XY[][], nombreLote: string, origen: LatLon, prefijo: string): string {
   let rutas = "";
-  manchones.forEach((m, i) => {
+  manchonesValidos(manchones).forEach((m, i) => {
     const cerrado = [...m, m[0]];
     const pts = cerrado
       .map((v) => {
@@ -39,7 +49,7 @@ export function construirGPX(manchones: XY[][], nombreLote: string, origen: LatL
 
 export function construirKML(manchones: XY[][], nombreLote: string, origen: LatLon, prefijo: string): string {
   let placemarks = "";
-  manchones.forEach((m, i) => {
+  manchonesValidos(manchones).forEach((m, i) => {
     const cerrado = [...m, m[0]];
     const coords = cerrado
       .map((v) => {
