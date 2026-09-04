@@ -295,6 +295,14 @@ export interface GrillaGenerada {
    * `generarGrillaDesdePerimetro`). */
   piezas: XY[][];
   hectareas: number;
+  /** El ángulo con el que se armó ESTA grilla (en grados, 0-360) — el
+   * automático si no se pasó `anguloManualGrados`, o ese mismo valor si sí
+   * se pasó. Sirve para la vista previa "Orientación de la grilla" (ver
+   * features/lotes/orientacion-grilla.tsx): al abrirla por primera vez,
+   * sin haber tocado nada todavía, necesita saber cuál es el automático
+   * para arrancar el control ahí (y para "Restablecer original" después
+   * de haberlo movido). */
+  anguloGrados: number;
 }
 
 /** Prepara UNA pieza del perímetro para trabajar en metros: saca el vértice
@@ -335,7 +343,14 @@ function limpiarPieza(piezaEntrada: LatLon[]): LatLon[] {
  *    1.4-1.6 en otra y 1.7-1.10 en una tercera, si esa fila las atraviesa
  *    a las tres).
  * 4. Hectáreas = suma de las de cada pieza (shoelace, una por una). */
-export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunto: number): GrillaGenerada {
+export function generarGrillaDesdePerimetro(
+  piezasEntrada: LatLon[][],
+  haPorPunto: number,
+  /** En grados (0-360), no radianes — pensado para venir directo de un
+   * control de UI (slider/input numérico, ver orientacion-grilla.tsx).
+   * Sin esto, el ángulo se sigue calculando automático como siempre. */
+  anguloManualGrados?: number
+): GrillaGenerada {
   const piezasLimpias = piezasEntrada.map(limpiarPieza).filter((p) => p.length >= 3);
   if (piezasLimpias.length === 0) {
     throw new Error("El KMZ no contiene ningún polígono válido (hacen falta al menos 3 vértices por pieza).");
@@ -352,8 +367,10 @@ export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunt
   const hectareas = piezas.reduce((s, pz) => s + areaPoligonoM2(pz) / 10000, 0);
 
   // Ángulo compartido por TODA la grilla — el lado más largo del casco
-  // convexo de todos los vértices juntos (ver el comentario de arriba).
-  const angulo = anguloBordeMasLargo(cascoConvexo(piezas.flat()));
+  // convexo de todos los vértices juntos (ver el comentario de arriba), o
+  // el que se haya elegido a mano en "Orientación de la grilla".
+  const angulo =
+    anguloManualGrados !== undefined ? (anguloManualGrados * Math.PI) / 180 : anguloBordeMasLargo(cascoConvexo(piezas.flat()));
   const piezasRotadas = piezas.map((pz) => pz.map((p) => rotar(p, -angulo)));
   const vs = piezasRotadas.flat().map((p) => p.y);
   const minV = Math.min(...vs);
@@ -403,5 +420,6 @@ export function generarGrillaDesdePerimetro(piezasEntrada: LatLon[][], haPorPunt
     throw new Error("No se generó ningún punto de muestreo — probá con menos hectáreas por punto.");
   }
 
-  return { puntos, piezas, hectareas };
+  const anguloGrados = ((angulo * 180) / Math.PI + 360) % 360; // normalizado a 0-360
+  return { puntos, piezas, hectareas, anguloGrados };
 }

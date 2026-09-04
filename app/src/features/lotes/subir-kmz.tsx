@@ -2,10 +2,11 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Upload } from "lucide-react-native";
 
-import { generarGrillaDesdePerimetro } from "@/lib/geo/geometria";
+import { generarGrillaDesdePerimetro, type LatLon } from "@/lib/geo/geometria";
 import { elegirArchivoKmz, extraerPerimetroDeArchivo } from "@/lib/kmz/parsear-kmz";
 import { guardarGrillaGenerada } from "@/lib/db/kmz";
 import { colors } from "@/theme/colors";
+import { OrientacionGrilla } from "./orientacion-grilla";
 
 interface SubirKmzProps {
   loteId: string;
@@ -14,11 +15,22 @@ interface SubirKmzProps {
 
 /** Sube el KMZ de un lote y genera su grilla real de muestreo — reemplaza
  * los datos hardcodeados del prototipo (ver reference/CONTEXTO.md,
- * "Procesamiento del KMZ"). Solo lo usan administradores. */
+ * "Procesamiento del KMZ"). Solo lo usan administradores.
+ *
+ * Después de leer el KMZ, antes de guardar nada, se abre "Orientación de
+ * la grilla" (ver orientacion-grilla.tsx) — a pedido del usuario, para
+ * poder ajustar a mano el ángulo de las filas de muestreo si el
+ * automático no le sirve. Recién al confirmar ahí se genera la grilla
+ * DEFINITIVA (con el ángulo elegido) y se guarda — es la única vez que se
+ * puede elegir: una vez creado el lote, la orientación queda fija. */
 export function SubirKmz({ loteId, onListo }: SubirKmzProps) {
   const [haPorPunto, setHaPorPunto] = useState("1.5");
   const [procesando, setProcesando] = useState(false);
   const [paso, setPaso] = useState("");
+  // Perímetro ya leído del KMZ, esperando que la persona confirme la
+  // orientación — null significa "sin nada pendiente", muestra el
+  // formulario de siempre en vez del modal de orientación.
+  const [pendiente, setPendiente] = useState<{ perimetro: LatLon[][]; ha: number } | null>(null);
 
   async function subir() {
     const ha = Number(haPorPunto.replace(",", "."));
@@ -38,16 +50,28 @@ export function SubirKmz({ loteId, onListo }: SubirKmzProps) {
 
       setPaso("Leyendo el KMZ…");
       const perimetro = await extraerPerimetroDeArchivo(archivo);
-
-      setPaso("Generando la grilla de muestreo…");
-      const grilla = generarGrillaDesdePerimetro(perimetro, ha);
-
-      setPaso("Guardando…");
-      await guardarGrillaGenerada(loteId, grilla, ha);
-
-      onListo();
+      setPendiente({ perimetro, ha });
     } catch (e: any) {
       Alert.alert("No se pudo procesar el KMZ", e.message ?? String(e));
+    } finally {
+      setProcesando(false);
+      setPaso("");
+    }
+  }
+
+  async function confirmarOrientacion(anguloGrados: number) {
+    if (!pendiente) return;
+    const { perimetro, ha } = pendiente;
+    setPendiente(null);
+    setProcesando(true);
+    setPaso("Generando la grilla de muestreo…");
+    try {
+      const grilla = generarGrillaDesdePerimetro(perimetro, ha, anguloGrados);
+      setPaso("Guardando…");
+      await guardarGrillaGenerada(loteId, grilla, ha);
+      onListo();
+    } catch (e: any) {
+      Alert.alert("No se pudo generar la grilla", e.message ?? String(e));
     } finally {
       setProcesando(false);
       setPaso("");
@@ -83,6 +107,21 @@ export function SubirKmz({ loteId, onListo }: SubirKmzProps) {
           </>
         )}
       </Pressable>
+
+      {/* Montado solo mientras hay algo pendiente (no con visible=false
+          permanente) — a propósito: así cada KMZ nuevo arranca con una
+          instancia nueva de OrientacionGrilla, con su propio estado del
+          ángulo desde cero, en vez de arrastrar el ángulo que se haya
+          dejado tocado en una subida anterior de esta misma sesión. */}
+      {pendiente && (
+        <OrientacionGrilla
+          visible
+          perimetro={pendiente.perimetro}
+          haPorPunto={pendiente.ha}
+          onConfirmar={confirmarOrientacion}
+          onCancelar={() => setPendiente(null)}
+        />
+      )}
     </View>
   );
 }
