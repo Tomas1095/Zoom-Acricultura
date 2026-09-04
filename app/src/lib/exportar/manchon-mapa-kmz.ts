@@ -1,29 +1,22 @@
 // "Exportar Manchón + Mapa" — a pedido del usuario: un KMZ con el mapa de
-// densidad (las celdas de Voronoi, cada una como su propio polígono
-// coloreado — igual a como las exportaba desde ArcGIS) Y el polígono del
+// densidad (las celdas de Voronoi, cada una como su propio polígono de
+// verdad — igual a como las exportaba desde ArcGIS) Y el polígono del
 // manchón juntos, para abrir en Google Earth y ahí retocar el manchón a
 // mano con mouse en vez de con el dedo en el celular — mucho más preciso
 // en campos grandes. A diferencia de "Exportar Manchón" (ver
 // manchones.ts), esto NO es una imagen pegada: son polígonos KML de
 // verdad, así que se ve exactamente igual acercando o alejando el zoom.
+// Ni las celdas ni el manchón llevan relleno — solo el borde (ver el
+// comentario de construirKMLManchonYMapa), para no tapar la foto
+// satelital de fondo.
 
 import JSZip from "jszip";
 import type { CeldaDensidad } from "@/lib/geo/densidad";
 import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
+import { colors } from "@/theme/colors";
 import { guardarYCompartirBinario, sanitizarNombreArchivo } from "./archivo";
 import { manchonesValidos } from "./manchones";
-import { escapeXml } from "./xml";
-
-/** KML pide el color como AABBGGRR (alfa, azul, verde, rojo) en hex — al
- * revés del "#RRGGBB" que usa el resto de la app (ver lib/geo/densidad.ts,
- * NIVEL_COLORES). */
-function colorKml(hexRRGGBB: string, alfaHex = "ff"): string {
-  const limpio = hexRRGGBB.replace("#", "");
-  const r = limpio.slice(0, 2);
-  const g = limpio.slice(2, 4);
-  const b = limpio.slice(4, 6);
-  return `${alfaHex}${b}${g}${r}`;
-}
+import { colorKml, escapeXml } from "./xml";
 
 function poligonoKml(vertices: XY[], origen: LatLon): string {
   const cerrado = [...vertices, vertices[0]];
@@ -47,17 +40,25 @@ export function construirKMLManchonYMapa(
   // se dibujan en orden de documento, así que el manchón queda ARRIBA de
   // las celdas de color (es lo que hay que ver y retocar), no tapado por
   // ellas.
+  //
+  // Ni las celdas ni el manchón llevan relleno (a pedido del usuario) —
+  // solo el borde, para que la foto satelital de Google Earth se vea
+  // limpia de fondo mientras se retoca el manchón encima. Las celdas SÍ
+  // muestran el cuadriculado completo (el borde de cada celda, tenga o no
+  // tenga densidad cargada) coloreado según su nivel — así se sigue
+  // viendo de un vistazo cuáles tienen más/menos densidad, sin que el
+  // color tape el terreno.
   const celdasKml = celdas
     .map(
       (c) =>
-        `    <Placemark>\n      <Style><PolyStyle><color>${colorKml(nivelColores[c.nivel])}</color><outline>0</outline></PolyStyle></Style>\n      <Polygon><outerBoundaryIs><LinearRing><coordinates>${poligonoKml(c.poligono, origen)}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n    </Placemark>\n`
+        `    <Placemark>\n      <Style><LineStyle><color>${colorKml(nivelColores[c.nivel])}</color><width>1.5</width></LineStyle><PolyStyle><fill>0</fill><outline>1</outline></PolyStyle></Style>\n      <Polygon><outerBoundaryIs><LinearRing><coordinates>${poligonoKml(c.poligono, origen)}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n    </Placemark>\n`
     )
     .join("");
 
   const manchonKml = manchonesValidos(manchones)
     .map(
       (m, i) =>
-        `    <Placemark>\n      <name>${escapeXml(`${prefijo} ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n      <Style><PolyStyle><color>7d3fa07b</color></PolyStyle></Style>\n      <Polygon><outerBoundaryIs><LinearRing><coordinates>${poligonoKml(m, origen)}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n    </Placemark>\n`
+        `    <Placemark>\n      <name>${escapeXml(`${prefijo} ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n      <Style><LineStyle><color>${colorKml(colors.primary)}</color><width>3</width></LineStyle><PolyStyle><fill>0</fill><outline>1</outline></PolyStyle></Style>\n      <Polygon><outerBoundaryIs><LinearRing><coordinates>${poligonoKml(m, origen)}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n    </Placemark>\n`
     )
     .join("");
 

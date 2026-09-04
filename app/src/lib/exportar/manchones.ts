@@ -10,8 +10,9 @@
 
 import JSZip from "jszip";
 import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
+import { colors } from "@/theme/colors";
 import { guardarYCompartirBinario, guardarYCompartirTexto, sanitizarNombreArchivo } from "./archivo";
-import { escapeXml } from "./xml";
+import { colorKml, escapeXml } from "./xml";
 
 // Namespace GPX 1.1 estándar (topografix) — sin esto algunos programas más
 // estrictos (Garmin MapSource, entre otros) rechazan el archivo con "could
@@ -57,7 +58,12 @@ export function construirKML(manchones: XY[][], nombreLote: string, origen: LatL
         return `${lon.toFixed(7)},${lat.toFixed(7)},0`;
       })
       .join(" ");
-    placemarks += `  <Placemark>\n    <name>${escapeXml(`${prefijo} ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n    <Style><PolyStyle><color>7d3fa07b</color></PolyStyle></Style>\n    <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n  </Placemark>\n`;
+    // Sin relleno, solo el borde — a pedido del usuario, para que en
+    // Google Earth se vea bien la foto satelital de fondo (nada de color
+    // sólido tapándola) mientras retoca el manchón; el borde usa el mismo
+    // verde (colors.primary) que ya se usa para el contorno del manchón
+    // en pantalla (ver mapa-manchoneo.tsx).
+    placemarks += `  <Placemark>\n    <name>${escapeXml(`${prefijo} ${i + 1} - ${nombreLote || "Lote"}`)}</name>\n    <Style><LineStyle><color>${colorKml(colors.primary)}</color><width>3</width></LineStyle><PolyStyle><fill>0</fill><outline>1</outline></PolyStyle></Style>\n    <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n  </Placemark>\n`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n${placemarks}</Document>\n</kml>`;
 }

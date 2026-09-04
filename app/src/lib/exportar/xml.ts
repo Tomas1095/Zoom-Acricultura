@@ -9,3 +9,13 @@ export function escapeXml(s: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 }
+
+/** KML pide el color como AABBGGRR (alfa, azul, verde, rojo) en hex — al
+ * revés del "#RRGGBB" que usa el resto de la app. */
+export function colorKml(hexRRGGBB: string, alfaHex = "ff"): string {
+  const limpio = hexRRGGBB.replace("#", "");
+  const r = limpio.slice(0, 2);
+  const g = limpio.slice(2, 4);
+  const b = limpio.slice(4, 6);
+  return `${alfaHex}${b}${g}${r}`;
+}
