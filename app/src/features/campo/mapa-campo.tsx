@@ -699,14 +699,20 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           adentro (ese grupo sí tiene scale/rotateZ, que "Yo" no debe
           heredar). "Volver a mi marcha" devuelve todo al lugar original.
 
-          Sin la flechita de rumbo que sí tiene en vista general — acá, con
-          el mapa entero rotando para que tu rumbo quede siempre "arriba"
-          (ver seguirRumbo más arriba), esa flecha apuntaría derecho para
-          arriba SIEMPRE mientras el auto-seguimiento está activo (que es
-          casi todo el tiempo real de uso) — matemáticamente cancela contra
-          la rotación del mapa, así que nunca se la ve moverse: a pedido del
-          usuario, que la probó en el campo y no le encontró sentido, se
-          saca en vez de dejarla puesta sin hacer nada.
+          La flechita interior va FIJA apuntando para arriba, sin rotar
+          (a diferencia de vista general, donde sí rota con `heading` —
+          ahí el mapa no gira, así que ahí la flecha es la única forma de
+          ver hacia dónde apunta el teléfono). Acá el mapa entero YA rota
+          para que tu rumbo quede siempre "arriba" (ver seguirRumbo más
+          arriba) — con eso, una flecha fija apuntando arriba ya representa
+          bien "hacia dónde vas", mismo criterio que el marcador de
+          posición de Google Maps en modo navegación (el mapa gira, la
+          flecha del usuario se queda fija apuntando arriba). Antes esta
+          flecha rotaba también por su cuenta (sumando heading + la
+          rotación del mapa) para terminar SIEMPRE cancelando en 0° —o sea,
+          ya apuntaba fija para arriba, pero por una cuenta innecesaria en
+          vez de simplemente no rotar nunca — a pedido del usuario, que la
+          quiere así (fija hacia arriba) de forma explícita.
 
           `pointerEvents="none"`: este marcador queda dibujado JUSTO arriba
           del punto donde estás parado (por diseño — es lo que te dice
@@ -721,6 +727,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           pointerEvents="none"
         >
           <View style={styles.yoMarkerPulso} />
+          <Navigation size={13} color="#FFFFFF" />
         </Animated.View>
       )}
 
