@@ -682,11 +682,19 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
           {/* Vista general: "Yo" es un punto más del mapa, gira y se mueve
               con el resto (no hay "ancla" en esta vista). En modo trabajo
-              va afuera, fijo — ver más abajo. */}
+              va afuera, fijo — ver más abajo.
+              `- 45` fijo: el ícono "Navigation" de lucide, sin rotar, NO
+              apunta derecho para arriba — su dibujo (un polígono tipo
+              flecha de ubicación) sale de fábrica apuntando hacia el
+              noreste, 45° para la derecha de "arriba" (se puede comprobar
+              con las coordenadas de su polygon). Sin este ajuste, a
+              heading=0 (mirando al norte) la flecha se veía apuntando en
+              diagonal en vez de derecho hacia arriba — es lo mismo que se
+              corrige en el marcador de modo trabajo, más abajo. */}
           {!pantallaCompleta && posMi && (
             <View style={[styles.yoMarker, { left: posMi.left - 12, top: posMi.top - 12 }]}>
               <View style={styles.yoMarkerPulso} />
-              <Navigation size={13} color="#FFFFFF" style={{ transform: [{ rotate: `${heading}deg` }] }} />
+              <Navigation size={13} color="#FFFFFF" style={{ transform: [{ rotate: `${heading - 45}deg` }] }} />
             </View>
           )}
         </Animated.View>
@@ -714,6 +722,15 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           vez de simplemente no rotar nunca — a pedido del usuario, que la
           quiere así (fija hacia arriba) de forma explícita.
 
+          Ojo, "0°" acá NO es sin ningún transform: el ícono "Navigation" de
+          lucide, tal cual sale de fábrica (sin rotar), apunta hacia el
+          NORESTE, no hacia arriba — su dibujo interno es un polígono tipo
+          flecha de ubicación orientado 45° a la derecha de "arriba" (mismo
+          motivo que el ajuste `heading - 45` de la flecha de vista general,
+          más arriba). Por eso acá el fijo real es `-45deg`, no sin
+          transform — es lo que hace que se vea derecha hacia arriba de
+          verdad, en vez de ligeramente inclinada hacia la derecha.
+
           `pointerEvents="none"`: este marcador queda dibujado JUSTO arriba
           del punto donde estás parado (por diseño — es lo que te dice
           "estás acá") pero al ser el último en el árbol, sin esto se
@@ -727,7 +744,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           pointerEvents="none"
         >
           <View style={styles.yoMarkerPulso} />
-          <Navigation size={13} color="#FFFFFF" />
+          <Navigation size={13} color="#FFFFFF" style={{ transform: [{ rotate: "-45deg" }] }} />
         </Animated.View>
       )}
 
