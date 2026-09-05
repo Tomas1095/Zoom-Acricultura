@@ -376,6 +376,24 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     return { transform: [{ rotateZ: `${-rotacion.value}rad` }] };
   });
 
+  // Brújula fija en pantalla (la "N", ver JSX) — a pedido del usuario, para
+  // poder confirmar a simple vista que el norte real cae donde tiene que
+  // caer, gire lo que gire el mapa (por seguir el rumbo en modo trabajo, o
+  // por el gesto de 2 dedos en vista general). Ojo, ACÁ SÍ es con el MISMO
+  // signo que `rotacion` (no el negativo, a diferencia de
+  // estiloContraRotacionEtiqueta de arriba) — son dos cosas opuestas a
+  // propósito: la etiqueta de un punto se contra-rota para deshacer el
+  // giro del mapa y quedar siempre horizontal (no me importa hacia dónde
+  // señala, me importa que se lea); la brújula tiene que hacer exactamente
+  // lo contrario — ACOMPAÑAR el giro del mapa, para seguir señalando el
+  // norte real (que en pantalla se mueve para donde se mueva el mapa
+  // entero). Si tocara el norte queda "arriba" siempre (sin importar el
+  // giro), dejaría de servir para confirmar nada.
+  const estiloRosaNorte = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ rotateZ: `${rotacion.value}rad` }] };
+  });
+
   // Solo modo trabajo: el marcador "Yo" está fuera del grupo que
   // gira/escala/arrastra (ver JSX), pero necesita moverse CON el arrastre
   // (pan) — arrastrar el mapa con dos dedos tiene que mover "Yo" también,
@@ -772,6 +790,22 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           {Math.round((pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado) * 100)}%
         </Text>
       </View>
+
+      {/* Brújula fija ("N") — a pedido del usuario, para poder confirmar a
+          simple vista hacia dónde cae el norte real, gire lo que gire el
+          mapa (siguiendo el rumbo en modo trabajo, o con el gesto manual de
+          2 dedos en vista general). Va AFUERA del grupo con el transform
+          animado (mismo motivo que el badge de zoom, arriba): si estuviera
+          ADENTRO, giraría junto con el resto y nunca señalaría nada —acá
+          el truco es lo contrario, la flechita de adentro es la que gira
+          (con `estiloRosaNorte`, mismo signo que el mapa) mientras el
+          circulito de fondo se queda fijo en su esquina de la pantalla. */}
+      <View style={styles.rosaNorte} pointerEvents="none">
+        <Animated.View style={estiloRosaNorte}>
+          <View style={styles.rosaNorteFlecha} />
+          <Text style={styles.rosaNorteTexto}>N</Text>
+        </Animated.View>
+      </View>
     </View>
   );
 });
@@ -803,6 +837,36 @@ const styles = StyleSheet.create({
   // para quedar pegado justo arriba del rocker de +/- en modo trabajo.
   zoomBadgeModoTrabajo: { top: "50%", right: 16, transform: [{ translateY: -72 }] },
   zoomBadgeTexto: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
+  // Arriba a la izquierda en los dos modos — esquina libre: la vuelta
+  // ("volver", en modo-trabajo.tsx) está más abajo, y el badge de zoom
+  // ocupa la derecha.
+  rosaNorte: {
+    position: "absolute",
+    top: 12,
+    left: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Triángulo apuntando hacia arriba armado con bordes (sin ícono/SVG de
+  // más) — rojo como la aguja de una brújula real, para que se distinga de
+  // un vistazo de cualquier otro elemento del mapa.
+  rosaNorteFlecha: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderBottomWidth: 9,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "#D32F2F",
+  },
+  rosaNorteTexto: { fontSize: 9, fontWeight: "800", color: colors.text, marginTop: 1 },
   punto: {
     position: "absolute",
     alignItems: "center",
