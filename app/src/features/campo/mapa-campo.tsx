@@ -266,19 +266,27 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   );
 
   // Gira el grupo entero para que arriba sea tu rumbo real, mientras nadie
-  // tocó el mapa a mano. El prototipo (web, `rotate(-headingUsado)` sobre
-  // `mapWorld`) usaba signo negativo — acá tiene que ser POSITIVO: probado
-  // en el campo caminando de verdad, con el signo negativo el mapa giraba
-  // exactamente al revés (el punto hacia el que caminabas se iba para abajo
-  // en vez de quedarse arriba). No es una traducción 1 a 1 del prototipo
-  // porque ahí la rotación era CSS sobre HTML (eje Z con la pantalla mirando
-  // al usuario, mismo sentido "matemático" que acá), pero el heading en sí
-  // puede venir con un signo distinto según la plataforma/librería nativa
-  // de brújula — con la real (expo-location, dispositivo físico) el que
-  // hace falta es este.
+  // tocó el mapa a mano — signo NEGATIVO (mismo que el prototipo,
+  // `rotate(-headingUsado)`). Hubo idas y vueltas con este signo en esta
+  // misma sesión (se había probado positivo por un reporte de campo,
+  // caminando hacia un punto) — pero ese test tenía una trampa: al
+  // caminar en línea recta HACIA un punto que ya está "arriba", el punto
+  // se va acercando al ancla (más abajo en la pantalla) a medida que
+  // reducís la distancia real — eso es lo ESPERADO, no un signo de que el
+  // giro esté al revés (el heading casi ni cambiaba en ese test, caminando
+  // derecho). La prueba que sí aísla el signo del giro es girar el
+  // TELÉFONO en el lugar (sin caminar) y mirar hacia dónde se mueve la
+  // brújula fija del mapa (ver estiloRosaNorte, más abajo): girando el
+  // cuerpo/teléfono 90° hacia la derecha (para pasar de mirar al norte a
+  // mirar al este), el norte real pasa a quedar a tu IZQUIERDA — o sea el
+  // mapa (y la brujulita) tienen que girar hacia la IZQUIERDA (sentido
+  // antihorario) cuando vos girás hacia la derecha (sentido horario) —
+  // exactamente como una brújula de mano de verdad, que al girarla en tu
+  // mano se ve "quieta" respecto al norte real (la aguja no gira con vos,
+  // gira al revés tuyo). Esa cuenta da signo NEGATIVO, y es la que quedó.
   useEffect(() => {
     if (!seguirRumbo || interactuado) return;
-    const rad = (heading * Math.PI) / 180;
+    const rad = (-heading * Math.PI) / 180;
     rotacion.value = withTiming(rad, { duration: 350 });
     savedRotacion.value = rad;
   }, [heading, seguirRumbo, interactuado]); // eslint-disable-line react-hooks/exhaustive-deps
