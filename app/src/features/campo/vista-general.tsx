@@ -16,6 +16,7 @@ import { ChevronDown, Download, Maximize2, RotateCcw } from "lucide-react-native
 import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import { exportarPuntos } from "@/lib/exportar/puntos";
+import { exportarShapefileLotePoligono } from "@/lib/exportar/shapefile";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
@@ -145,6 +146,21 @@ export function VistaGeneral({
         formato,
         valores.nombre
       );
+      // Shapefile del polígono del lote, automático — a pedido del
+      // usuario: además de los puntos, un segundo .zip (aparte, para
+      // abrirlo por separado en QGIS/ArcGIS) con el límite real del lote,
+      // nombrado "Lote Establecimiento" (sin el "Puntos" adelante, y sin
+      // depender de si la persona cambió el nombre del archivo de puntos
+      // en el modal). Solo tiene sentido para Shapefile — GPX/KML de
+      // puntos no llevan un segundo archivo. `Sharing.shareAsync` (ver
+      // guardarYCompartirBinario) muestra la hoja de compartir del
+      // primero, y recién cuando esa se cierra se dispara la del segundo
+      // — dos archivos separados, uno atrás del otro, no uno mezclado con
+      // el otro.
+      if (formato === "shp") {
+        const nombrePoligono = `${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+        await exportarShapefileLotePoligono(lote.perimetro, origen, nombrePoligono);
+      }
     } catch (e: any) {
       Alert.alert(`No se pudo exportar el ${formato.toUpperCase()}`, e.message ?? String(e));
     } finally {

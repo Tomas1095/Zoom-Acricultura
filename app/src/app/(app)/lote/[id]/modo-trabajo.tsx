@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { ChevronLeft, Compass, Minus, Pencil, Plus } from "lucide-react-native";
 import { useKeepAwake } from "expo-keep-awake";
 
@@ -23,6 +31,16 @@ export default function ModoTrabajoScreen() {
   const { cargando, error, usandoCache, lote, puntos, cargas, gps, puntoCercano, enRango } = useDatosCampo(id);
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
+  // Borde de abajo de la pila de indicadores (📡 sin señal / GPS / mi
+  // recorrido / volver a mi marcha, ver pillTop) medido en vivo — la
+  // brújula del mapa (ver MapaCampo, brujulaOffsetTop) se ubica siempre
+  // justo debajo de acá, para no superponerse con ninguno sea cual sea la
+  // combinación que esté visible en un momento dado (no es siempre la
+  // misma: usandoCache/miRuta/vistaModificada son todos opcionales).
+  const [pillTopAbajo, setPillTopAbajo] = useState<number | null>(null);
+  function onLayoutPillTop(e: LayoutChangeEvent) {
+    setPillTopAbajo(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
+  }
   // Recorrido personal, de solo lectura acá — se marca/edita solo desde
   // vista general (ver usarMiRuta) — se vuelve a leer cada vez que se
   // entra a esta pantalla, por si se editó justo antes de entrar.
@@ -91,13 +109,14 @@ export default function ModoTrabajoScreen() {
         alto={height}
         seguirRumbo
         onInteraccion={setVistaModificada}
+        brujulaOffsetTop={pillTopAbajo != null ? pillTopAbajo + 10 : undefined}
       />
 
       <Pressable style={styles.volver} onPress={() => router.back()}>
         <ChevronLeft size={22} color={colors.text} />
       </Pressable>
 
-      <View style={styles.pillTop}>
+      <View style={styles.pillTop} onLayout={onLayoutPillTop}>
         {usandoCache && (
           <View style={styles.pillSinSenal}>
             <Text style={styles.pillSinSenalTexto}>📡 Sin señal — datos guardados</Text>

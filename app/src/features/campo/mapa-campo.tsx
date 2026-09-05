@@ -86,6 +86,15 @@ interface MapaCampoProps {
    * del prototipo (rotate(-heading) sobre todo el mapa). Se pausa apenas el
    * usuario toca el mapa con los dedos — cualquier gesto manual gana. */
   seguirRumbo?: boolean;
+  /** Solo modo trabajo: dónde ubicar la brújula ("N", ver más abajo) del
+   * lado derecho — quien llama (modo-trabajo.tsx) mide en vivo hasta dónde
+   * llega su propia pila de indicadores (📡 sin señal / GPS / mi recorrido
+   * / volver a mi marcha) y pasa ese borde de abajo acá, así la brújula
+   * siempre queda justo debajo, sea cual sea la combinación de indicadores
+   * visible en ese momento (no es fija, varios son opcionales). Sin esto
+   * (vista general, o mientras todavía no se midió nada), va en la
+   * esquina superior izquierda. */
+  brujulaOffsetTop?: number;
 }
 
 export interface MapaCampoHandle {
@@ -121,6 +130,7 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     alto,
     onInteraccion,
     seguirRumbo,
+    brujulaOffsetTop,
   },
   ref
 ) {
@@ -807,8 +817,24 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
           ADENTRO, giraría junto con el resto y nunca señalaría nada —acá
           el truco es lo contrario, la flechita de adentro es la que gira
           (con `estiloRosaNorte`, mismo signo que el mapa) mientras el
-          circulito de fondo se queda fijo en su esquina de la pantalla. */}
-      <View style={styles.rosaNorte} pointerEvents="none">
+          circulito de fondo se queda fijo en su esquina de la pantalla.
+
+          Posición: en modo trabajo, del lado derecho, debajo de la pila de
+          indicadores (📡/GPS/mi recorrido/volver a mi marcha) — a pedido
+          del usuario, para que no tape ni quede tapada por ningún botón.
+          `brujulaOffsetTop` lo mide y pasa modo-trabajo.tsx en vivo (esa
+          pila cambia de alto según qué indicadores estén visibles en cada
+          momento); mientras no haya nada medido todavía usa 100 como
+          valor razonable (la pila con solo el GPS, el caso más común).
+          Vista general no manda `brujulaOffsetTop` — ahí se queda en la
+          esquina superior izquierda, como al principio. */}
+      <View
+        style={[
+          styles.rosaNorte,
+          pantallaCompleta ? { top: brujulaOffsetTop ?? 100, right: 16 } : { top: 12, left: 16 },
+        ]}
+        pointerEvents="none"
+      >
         <Animated.View style={estiloRosaNorte}>
           <View style={styles.rosaNorteFlecha} />
           <Text style={styles.rosaNorteTexto}>N</Text>
@@ -845,13 +871,10 @@ const styles = StyleSheet.create({
   // para quedar pegado justo arriba del rocker de +/- en modo trabajo.
   zoomBadgeModoTrabajo: { top: "50%", right: 16, transform: [{ translateY: -72 }] },
   zoomBadgeTexto: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
-  // Arriba a la izquierda en los dos modos — esquina libre: la vuelta
-  // ("volver", en modo-trabajo.tsx) está más abajo, y el badge de zoom
-  // ocupa la derecha.
+  // Sin top/left/right acá — se aplican dinámicamente en el JSX (distinto
+  // según el modo, ver el comentario grande ahí).
   rosaNorte: {
     position: "absolute",
-    top: 12,
-    left: 16,
     width: 34,
     height: 34,
     borderRadius: 17,
