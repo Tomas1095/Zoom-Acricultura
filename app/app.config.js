@@ -37,7 +37,16 @@ module.exports = {
       permissions: ["android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION"],
     },
     web: {
-      output: "static",
+      // "single" (una sola página, todo corre en el navegador), no
+      // "static" (pre-renderiza cada ruta en Node al momento del build,
+      // pensado para sitios públicos que necesitan SEO) — esta es una
+      // herramienta interna con login, sin nada que indexar, y el login
+      // de Supabase (que toca `window`/localStorage apenas se inicializa)
+      // directamente no puede correr en el entorno de Node del
+      // pre-renderizado ("ReferenceError: window is not defined" al
+      // exportar). En modo SPA todo el código corre siempre en el
+      // navegador de verdad, así que este problema no existe.
+      output: "single",
       favicon: "./assets/images/favicon.png",
     },
     plugins: [
