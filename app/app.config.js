@@ -52,6 +52,24 @@ module.exports = {
     plugins: [
       "expo-router",
       [
+        "expo-build-properties",
+        {
+          // Techo de memoria más alto para el proceso de la app en
+          // Android — a pedido de un caso real: procesar un KMZ (que hay
+          // que leer entero y descomprimir) tiraba
+          // "OutOfMemoryError: Failed to allocate..." en un celular
+          // Android de gama más chica, con un límite de heap bastante más
+          // bajo que el de un iPhone. `largeHeap` es la bandera estándar
+          // de Android para pedir un techo más generoso (varía según el
+          // fabricante, pero suele ser 2-3 veces más) — junto con el
+          // arreglo del lado del código (leer el archivo una sola vez, no
+          // dos, ver parsear-kmz.ts), es la forma correcta de encarar
+          // esto en vez de simplemente esperar que el archivo nunca sea
+          // grande. Sin efecto en iOS (esa app no tiene este problema).
+          android: { largeHeap: true },
+        },
+      ],
+      [
         "expo-splash-screen",
         {
           backgroundColor: "#FFFFFF",

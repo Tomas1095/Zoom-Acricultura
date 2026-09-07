@@ -8,6 +8,7 @@
     "@supabase/supabase-js": "^2.112.3",
     "d3-delaunay": "^6.0.4",
     "expo": "^54.0.37",
+    "expo-build-properties": "~1.0.10",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.14",
     "expo-device": "~8.0.10",

@@ -80,18 +80,14 @@ export async function elegirArchivoKmz(): Promise<File | null> {
   }
 }
 
-/** Prueba si el contenido (en base64) es un .zip válido — así se puede ver
- * si es un KMZ mirando el contenido real, no el nombre del archivo (ver el
- * comentario grande de `extraerPerimetroDeArchivo`, más abajo, sobre por
- * qué el nombre no alcanza). `null` si no lo es — cualquier motivo (no es
- * un zip, está corrupto) da lo mismo acá: cae al camino de "es KML
- * plano". */
-async function intentarAbrirComoZip(base64: string): Promise<JSZip | null> {
-  try {
-    return await JSZip.loadAsync(base64, { base64: true });
-  } catch {
-    return null;
-  }
+// Firma de un archivo ZIP real ("PK\x03\x04", el número mágico del
+// formato — un .kmz no es más que un .kml comprimido en ZIP) — mirar esto
+// permite decidir si hay que descomprimir o no leyendo apenas los
+// primeros 4 bytes del archivo, no el archivo entero.
+const FIRMA_ZIP = [0x50, 0x4b, 0x03, 0x04];
+
+function empiezaComoZip(primerosBytes: Uint8Array): boolean {
+  return FIRMA_ZIP.every((b, i) => primerosBytes[i] === b);
 }
 
 /** Descomprime el KMZ (o lee el KML directo si no viene zipeado) y devuelve
@@ -104,21 +100,39 @@ async function intentarAbrirComoZip(base64: string): Promise<JSZip | null> {
  * pantalla (ver subir-kmz.tsx).
  *
  * Si es KMZ (comprimido) o KML plano se decide mirando el CONTENIDO real
- * (¿es un .zip válido?), no la extensión del nombre del archivo — en
- * Android, eligiendo el archivo desde Drive/WhatsApp/Gmail, el selector
- * del sistema no siempre devuelve el nombre con la extensión puesta (bug
- * real reportado por un usuario: un .kmz de verdad, con nombre sin ".kmz"
- * al final, se leía como si fuera texto plano — el ZIP binario
- * interpretado como texto UTF-8 daba una mezcla de símbolos sin sentido, y
- * el parser de XML fallaba con un error indescifrable,
+ * (¿empieza con la firma de un ZIP?), no la extensión del nombre del
+ * archivo — en Android, eligiendo el archivo desde Drive/WhatsApp/Gmail,
+ * el selector del sistema no siempre devuelve el nombre con la extensión
+ * puesta (bug real reportado por un usuario: un .kmz de verdad, con
+ * nombre sin ".kmz" al final, se leía como si fuera texto plano — el ZIP
+ * binario interpretado como texto UTF-8 daba una mezcla de símbolos sin
+ * sentido, y el parser de XML fallaba con un error indescifrable,
  * "readTagExp returned undefined"). Mirando el contenido en vez del
- * nombre, esto funciona sin importar cómo haya llegado el archivo. */
+ * nombre, esto funciona sin importar cómo haya llegado el archivo.
+ *
+ * OJO con leer el archivo dos veces acá — un primer intento de este mismo
+ * arreglo abría el archivo COMPLETO en base64 para "probar" si era un
+ * zip, y si no lo era, lo volvía a leer COMPLETO como texto: en un KMZ
+ * grande de verdad, en un Android de gama más chica (con un techo de
+ * memoria bastante más bajo que un iPhone), eso se quedaba sin memoria a
+ * mitad de camino ("OutOfMemoryError", bug real reportado por un
+ * usuario). Por eso el chequeo del contenido se hace con una lectura
+ * MÍNIMA (los primeros 4 bytes, vía `archivo.open()`), y recién después
+ * se hace la ÚNICA lectura completa que hace falta — bytes crudos (no
+ * base64, que pesa un 33% más en memoria) si es zip, texto si no. */
 export async function extraerPerimetroDeArchivo(archivo: File): Promise<LatLon[][]> {
-  const base64 = await archivo.base64();
-  let xml: string;
+  const handle = archivo.open();
+  let primerosBytes: Uint8Array;
+  try {
+    primerosBytes = handle.readBytes(FIRMA_ZIP.length);
+  } finally {
+    handle.close();
+  }
 
-  const zip = await intentarAbrirComoZip(base64);
-  if (zip) {
+  let xml: string;
+  if (empiezaComoZip(primerosBytes)) {
+    const bytes = await archivo.bytes();
+    const zip = await JSZip.loadAsync(bytes);
     const nombreKml = Object.keys(zip.files).find((n) => n.toLowerCase().endsWith(".kml"));
     if (!nombreKml) {
       throw new Error("El archivo no parece un KMZ válido: no tiene ningún .kml adentro.");
