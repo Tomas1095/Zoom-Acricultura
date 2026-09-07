@@ -80,6 +80,20 @@ export async function elegirArchivoKmz(): Promise<File | null> {
   }
 }
 
+/** Prueba si el contenido (en base64) es un .zip válido — así se puede ver
+ * si es un KMZ mirando el contenido real, no el nombre del archivo (ver el
+ * comentario grande de `extraerPerimetroDeArchivo`, más abajo, sobre por
+ * qué el nombre no alcanza). `null` si no lo es — cualquier motivo (no es
+ * un zip, está corrupto) da lo mismo acá: cae al camino de "es KML
+ * plano". */
+async function intentarAbrirComoZip(base64: string): Promise<JSZip | null> {
+  try {
+    return await JSZip.loadAsync(base64, { base64: true });
+  } catch {
+    return null;
+  }
+}
+
 /** Descomprime el KMZ (o lee el KML directo si no viene zipeado) y devuelve
  * el perímetro del campo/lote como una o más "piezas" — lista de vértices
  * {lat, lon} en orden, una por cada `<Polygon>` real encontrado. Casi
@@ -87,14 +101,24 @@ export async function elegirArchivoKmz(): Promise<File | null> {
  * por lotes no contiguos agrupados en un `<MultiGeometry>` (ver
  * `buscarPoligonos`). Nunca cae en silencio a datos de ejemplo: si algo
  * sale mal, tira un error con mensaje claro para que se muestre en
- * pantalla (ver subir-kmz.tsx). */
+ * pantalla (ver subir-kmz.tsx).
+ *
+ * Si es KMZ (comprimido) o KML plano se decide mirando el CONTENIDO real
+ * (¿es un .zip válido?), no la extensión del nombre del archivo — en
+ * Android, eligiendo el archivo desde Drive/WhatsApp/Gmail, el selector
+ * del sistema no siempre devuelve el nombre con la extensión puesta (bug
+ * real reportado por un usuario: un .kmz de verdad, con nombre sin ".kmz"
+ * al final, se leía como si fuera texto plano — el ZIP binario
+ * interpretado como texto UTF-8 daba una mezcla de símbolos sin sentido, y
+ * el parser de XML fallaba con un error indescifrable,
+ * "readTagExp returned undefined"). Mirando el contenido en vez del
+ * nombre, esto funciona sin importar cómo haya llegado el archivo. */
 export async function extraerPerimetroDeArchivo(archivo: File): Promise<LatLon[][]> {
-  const esKmz = archivo.name.toLowerCase().endsWith(".kmz");
+  const base64 = await archivo.base64();
   let xml: string;
 
-  if (esKmz) {
-    const base64 = await archivo.base64();
-    const zip = await JSZip.loadAsync(base64, { base64: true });
+  const zip = await intentarAbrirComoZip(base64);
+  if (zip) {
     const nombreKml = Object.keys(zip.files).find((n) => n.toLowerCase().endsWith(".kml"));
     if (!nombreKml) {
       throw new Error("El archivo no parece un KMZ válido: no tiene ningún .kml adentro.");
