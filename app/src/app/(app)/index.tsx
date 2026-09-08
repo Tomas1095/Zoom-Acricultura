@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Building2, LogOut, Users } from "lucide-react-native";
 
@@ -33,6 +33,21 @@ export default function MisLotesScreen() {
 
   const esAdministrador = usuario.rol !== "monitoreador";
 
+  // Un solo toque, sin nada de por medio, cerraba la sesión al instante —
+  // a pedido del usuario, que lo tocó sin querer en el campo (sol, guantes,
+  // apuntar mal entre los otros íconos de al lado) y se quedó sin poder
+  // volver a entrar hasta encontrar señal (cerrar sesión de verdad borra
+  // lo guardado en el dispositivo — a diferencia de simplemente no tener
+  // señal, ahí sí hace falta loguearse de cero, y un login nuevo siempre
+  // necesita conexión). Con la confirmación, un toque accidental ya no
+  // alcanza para perder la sesión.
+  function pedirCerrarSesion() {
+    Alert.alert("¿Cerrar sesión?", "Vas a tener que volver a ingresar con tu mail y contraseña.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Cerrar sesión", style: "destructive", onPress: signOut },
+    ]);
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -54,7 +69,7 @@ export default function MisLotesScreen() {
               <Users size={20} color={colors.primaryDark} />
             </Pressable>
           )}
-          <Pressable style={styles.iconBtn} onPress={signOut}>
+          <Pressable style={styles.iconBtn} onPress={pedirCerrarSesion}>
             <LogOut size={19} color={colors.danger} />
           </Pressable>
         </View>
