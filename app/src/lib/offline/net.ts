@@ -21,7 +21,27 @@ const TIMEOUT_MS = 10000;
 export async function hayConexion(): Promise<boolean> {
   try {
     const estado = await NetInfo.fetch();
-    return !!estado.isConnected;
+    // `isConnected` (el radio de wifi/datos está prendido y asociado a
+    // una red) no alcanza para saber si hay INTERNET DE VERDAD — con
+    // señal débil (el caso típico en el campo) o un wifi sin salida real
+    // (portal cautivo, router sin internet), el teléfono se sigue
+    // mostrando "conectado" aunque ningún pedido real vaya a funcionar.
+    // Con solo `isConnected`, la app igual intentaba el pedido real y se
+    // quedaba colgada hasta que venciera el timeout completo (10s, ver
+    // `conTimeout` más abajo) antes de recién ahí caer al respaldo
+    // local — un caso real reportado por un usuario: entrar a un lote o
+    // abrir un punto se sentía "muy lento" en el campo con señal débil,
+    // exactamente este síntoma, multiplicado por cada pantalla que hace
+    // su propio chequeo (ver dónde se usa `hayConexion` — el árbol de
+    // lotes, la pantalla del lote, la del punto, el login).
+    // `isInternetReachable` es la propia verificación de NetInfo, con un
+    // pedido liviano de verdad (no el pedido real nuestro, mucho más
+    // pesado) — cuando da explícitamente `false` (confirmado sin
+    // internet) no tiene sentido ni probar. Si todavía no se determinó
+    // (`null`, recién arrancando la app) se deja pasar igual — el
+    // timeout de `conTimeout` sigue siendo la red de contención para ese
+    // caso.
+    return !!estado.isConnected && estado.isInternetReachable !== false;
   } catch {
     // Si falla el chequeo en sí (raro), que decida el fetch real en vez
     // de asumir que no hay señal.
