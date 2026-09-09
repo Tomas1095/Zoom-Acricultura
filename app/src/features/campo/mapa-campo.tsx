@@ -40,7 +40,21 @@ const ZOOM_MAX_VISTA_GENERAL = 9;
 // 500ha o más, así que el piso baja bastante (500ha son ~2x más grandes
 // en cada dimensión que el lote de 117ha con el que se probó, y esto deja
 // margen de sobra incluso para algo más grande todavía).
-const NIVELES_ZOOM = [0.04, 0.07, 0.15, 0.25, 0.4, 0.6, 0.8, 1, 1.3, 1.6, 2, ZOOM_MAX];
+// Techo agregado más allá de ZOOM_MAX (2.5, el de antes) a pedido del
+// usuario: con una grilla muy densa (un lote con muchos puntos muy juntos)
+// 250% no alcanzaba para separar los círculos/números lo suficiente como
+// para poder leerlos — necesitaba poder acercar bastante más con los
+// botones +/- para llegar a esa zona en particular. Los pasos de acá
+// arriba (hasta 2) se dejan igual (para no cambiar el "sentir" del zoom
+// que ya venía andando bien), y de acá para abajo se agregan escalones
+// más finos, llegando hasta el mismo techo que el pellizco de vista
+// general (ZOOM_MAX_VISTA_GENERAL, 900%) — de la mano del recorte por
+// vecino más cercano (ver distanciaVecinoPorId, más abajo), que ya
+// garantiza que ningún círculo se pise con el de al lado sea cual sea el
+// zoom: lo que este techo más alto suma es la POSIBILIDAD de acercarse lo
+// suficiente como para que el número de cada punto, en una zona puntual,
+// vuelva a entrar (dejar de ocultarse por chico, ver UMBRAL_LEGIBLE_PX).
+const NIVELES_ZOOM = [0.04, 0.07, 0.15, 0.25, 0.4, 0.6, 0.8, 1, 1.3, 1.6, 2, ZOOM_MAX, 3.5, 5, 7, ZOOM_MAX_VISTA_GENERAL];
 const NIVEL_ZOOM_INICIAL = NIVELES_ZOOM.indexOf(1);
 
 export interface PuntoMapa {
@@ -145,6 +159,46 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
   const baseScaleFit = Math.min((ancho - MAP_PAD * 2) / spanX, (alto - MAP_PAD * 2) / spanY, MAP_SCALE_MAX);
   const baseScale = pantallaCompleta ? Math.min(baseScaleFit * 1.8, MAP_SCALE_MAX) : baseScaleFit;
+
+  // Distancia (en metros, mismas unidades que p.x/p.y) de cada punto a su
+  // VECINO MÁS CERCANO — a pedido del usuario, para que en una grilla muy
+  // densa el círculo y el número de un punto nunca se dibujen tan grandes
+  // como para pisar al de al lado, sea cual sea el zoom. O(n²) (cada punto
+  // contra todos los demás) — con una grilla real de unos pocos cientos de
+  // puntos esto es una cuenta trivial para el dispositivo, así que no hace
+  // falta nada más sofisticado (una grilla en cuadrantes, etc.).
+  //
+  // La cuenta clave (por qué el tope de tamaño NO depende del zoom actual,
+  // solo de esta distancia): tanto el círculo como la separación entre
+  // puntos en pantalla se multiplican por el MISMO factor cuando el grupo
+  // entero se escala (ver estiloAnimado/scale.value) — entonces, si el
+  // tamaño "real" (antes de esa escala) de un punto nunca supera una
+  // fracción fija de la distancia "real" a su vecino, esa proporción se
+  // mantiene sin importar cuánto se acerque o aleje el zoom: los círculos
+  // JAMÁS se llegan a tocar, en vez de solo "tocarse menos" a más zoom.
+  const distanciaVecinoPorId = useMemo(() => {
+    const mapa = new Map<string, number>();
+    for (let i = 0; i < puntos.length; i++) {
+      let minDist = Infinity;
+      for (let j = 0; j < puntos.length; j++) {
+        if (i === j) continue;
+        const d = Math.hypot(puntos[i].x - puntos[j].x, puntos[i].y - puntos[j].y);
+        if (d < minDist) minDist = d;
+      }
+      mapa.set(puntos[i].id, minDist);
+    }
+    return mapa;
+  }, [puntos]);
+  // El diámetro de un punto nunca ocupa más que esta fracción de la
+  // distancia (en pantalla) a su vecino más cercano — deja un huequito
+  // entre los dos círculos en vez de que apenas se toquen borde con borde.
+  const FRACCION_MAX_CIRCULO = 0.8;
+  // Por debajo de este tamaño en pantalla (px reales, ya con el zoom
+  // aplicado) el número deja de ser legible — mejor mostrar el puntito
+  // solo, sin número encimado e ilegible, que forzarlo igual. Acercando el
+  // zoom en esa zona puntual el número vuelve a aparecer (ver
+  // NIVELES_ZOOM, ahora con más escalones para poder llegar más cerca).
+  const UMBRAL_LEGIBLE_PX = 7;
   const anclaX = ancho / 2;
   const anclaY = alto * 0.72; // como en cualquier GPS de navegación: más lote "adelante" que "atrás"
 
@@ -167,6 +221,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // dedos) — apenas soltás, éste se actualiza (ver pinch.onEnd) y quedan
   // nítidos de nuevo.
   const [zoomAsentado, setZoomAsentado] = useState(1);
+
+  // Índice actual dentro de NIVELES_ZOOM (solo modo trabajo, con los
+  // botones +/-) — movido acá arriba (antes vivía más abajo, junto al
+  // resto de los gestos) porque zoomEfectivo, un par de líneas más abajo,
+  // lo necesita para saber el zoom REAL de modo trabajo en vez de un valor
+  // fijo. El ref alcanzaba para que acercar()/alejar()/restablecer() supieran
+  // en qué nivel están, pero el badge de zoom (ver más abajo) necesita un
+  // state en paralelo para poder mostrarlo.
+  const indiceZoomRef = useRef(NIVEL_ZOOM_INICIAL);
+  const [nivelZoomIndex, setNivelZoomIndex] = useState(NIVEL_ZOOM_INICIAL);
 
   // Tamaño REAL (no un transform) del círculo/número — ver `zoomAsentado`
   // más arriba, que es la razón de todo esto: si el zoom del pellizco crece
@@ -196,10 +260,26 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // para terminar en el tamaño final ya amortiguado — de ahí el exponente
   // `1 - CRECIMIENTO_ZOOM` en vez de dividir directo por zoomEfectivo).
   const CRECIMIENTO_ZOOM = 0.35;
-  const zoomEfectivo = pantallaCompleta ? 1 : zoomAsentado;
+  // Antes esto era un `1` fijo en modo trabajo — no afecta el tamaño BASE
+  // del círculo ahí (que ya es un valor fijo, 24, sin usar amortiguador —
+  // ver tamPuntoBase más abajo: el crecimiento visual de un punto suelto
+  // ya lo da por sí solo el transform `scale` del grupo entero, ver
+  // estiloAnimado), pero sí rompía la decisión de mostrar o no el número
+  // (ver mostrarEtiqueta, dentro del .map() de puntos): con esto fijo en 1,
+  // acercar con los botones +/- en una zona densa nunca hacía reaparecer
+  // los números que el recorte por vecino más cercano había ocultado por
+  // chicos — la cuenta de legibilidad siempre pensaba que seguías a zoom
+  // 1x, por más que hubieras acercado mucho más. Con
+  // `NIVELES_ZOOM[nivelZoomIndex]` acá, esa cuenta usa el zoom REAL de modo
+  // trabajo, y los números vuelven a aparecer al acercar sobre una zona en
+  // particular, como corresponde.
+  const zoomEfectivo = pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado;
   const amortiguador = Math.pow(zoomEfectivo, 1 - CRECIMIENTO_ZOOM);
-  const tamPunto = pantallaCompleta ? 24 : 18 / amortiguador;
-  const tamFuente = pantallaCompleta ? 11 : 8.5 / amortiguador;
+  // "Base": el tamaño que tendría cada punto si no hubiera vecinos cerca —
+  // el tope real, por vecino más cercano, se aplica más abajo (dentro del
+  // .map() de puntos, ver tamPuntoTope) porque es DISTINTO para cada punto.
+  const tamPuntoBase = pantallaCompleta ? 24 : 18 / amortiguador;
+  const tamFuenteBase = pantallaCompleta ? 11 : 8.5 / amortiguador;
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
@@ -225,12 +305,6 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // necesitamos acá adentro (no solo afuera, vía onInteraccion) para poder
   // pausar el useEffect de seguirRumbo de abajo.
   const [interactuado, setInteractuado] = useState(false);
-  // Índice actual dentro de NIVELES_ZOOM (solo modo trabajo, con los
-  // botones +/-) — el ref alcanzaba para que acercar()/alejar()/
-  // restablecer() supieran en qué nivel están, pero el badge de zoom (ver
-  // más abajo) necesita un state en paralelo para poder mostrarlo.
-  const indiceZoomRef = useRef(NIVEL_ZOOM_INICIAL);
-  const [nivelZoomIndex, setNivelZoomIndex] = useState(NIVEL_ZOOM_INICIAL);
 
   function avisarInteraccion() {
     setInteractuado(true);
@@ -615,6 +689,29 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             const marcadoEnRuta = marcandoRuta && miRutaSet.has(p.id);
             const colorFondo = marcadoEnRuta ? colors.info : p.confirmado ? colorFillCompleto : colors.surface;
             const colorBorde = marcadoEnRuta ? colors.info : p.confirmado ? colorBorderCompleto : colorBorderPendiente;
+
+            // Tope de tamaño por vecino más cercano (ver el comentario
+            // grande de distanciaVecinoPorId, más arriba) — el tamaño
+            // "base" (tamPuntoBase) es el que tendría este punto si
+            // estuviera solo; acá se lo recorta si eso lo haría más grande
+            // que la fracción permitida de la distancia real a su vecino.
+            // dVecino === Infinity (un solo punto en toda la grilla, sin
+            // nadie más cerca) deja pasar el tamaño base sin tocar nada.
+            const dVecino = distanciaVecinoPorId.get(p.id) ?? Infinity;
+            const tamPunto = Number.isFinite(dVecino)
+              ? Math.min(tamPuntoBase, Math.max(3, FRACCION_MAX_CIRCULO * dVecino * baseScale))
+              : tamPuntoBase;
+            // La letra se achica en la misma proporción que el círculo, así
+            // el número sigue "calzando" adentro/al lado del círculo como
+            // siempre.
+            const tamFuente = tamFuenteBase * (tamPunto / tamPuntoBase);
+            // Legibilidad en pantalla de VERDAD: acá se multiplica por
+            // zoomEfectivo porque tamFuente es el tamaño ANTES de que el
+            // grupo entero se escale con el zoom actual (ver
+            // estiloAnimado/scale.value) — es esa multiplicación final la
+            // que importa para decidir si el número, ya en pantalla, se
+            // puede leer o no.
+            const mostrarEtiqueta = tamFuente * zoomEfectivo >= UMBRAL_LEGIBLE_PX;
             return (
               <Pressable
                 key={p.id}
@@ -701,17 +798,28 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     <Text> no se pixela con el zoom de vista general
                     (`tamFuente` ya viene ajustado, amortiguado, contra el
                     zoom asentado), y de paso evita el bug de SVG con la
-                    rotación de dos dedos, que vista general también tiene. */}
-                <Animated.Text
-                  numberOfLines={1}
-                  style={[
-                    styles.puntoLabel,
-                    { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                    estiloContraRotacionEtiqueta,
-                  ]}
-                >
-                  {p.id}
-                </Animated.Text>
+                    rotación de dos dedos, que vista general también tiene.
+
+                    Si `mostrarEtiqueta` da false (el número, ya recortado
+                    por su vecino más cercano, quedaría demasiado chico para
+                    leerse en pantalla) directamente no se dibuja nada acá —
+                    mejor un puntito solo, sin número, que un montón de
+                    números ilegibles amontonados unos sobre otros. Ver el
+                    comentario grande de distanciaVecinoPorId, más arriba:
+                    acercando el zoom en esa zona puntual el número vuelve a
+                    aparecer solo. */}
+                {mostrarEtiqueta && (
+                  <Animated.Text
+                    numberOfLines={1}
+                    style={[
+                      styles.puntoLabel,
+                      { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
+                      estiloContraRotacionEtiqueta,
+                    ]}
+                  >
+                    {p.id}
+                  </Animated.Text>
+                )}
               </Pressable>
             );
           })}
