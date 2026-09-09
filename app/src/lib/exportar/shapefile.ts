@@ -18,6 +18,7 @@
 
 import JSZip from "jszip";
 import { xyALatLon, type LatLon, type XY } from "@/lib/geo/geometria";
+import { latLonAUTM, prjUTM, zonaUTM, type PuntoUTM } from "@/lib/geo/utm";
 import { guardarYCompartirBinario, sanitizarNombreArchivo } from "./archivo";
 import type { PuntoGrillaExport } from "./puntos";
 
@@ -56,19 +57,24 @@ function escribirCabecera(
 
 /** Arma el .shp (la geometría en sí) y el .shx (índice: dónde arranca y
  * cuánto mide cada registro del .shp) — van de la mano, por eso una sola
- * función arma los dos juntos. */
-function construirShpYShx(puntosLatLon: LatLon[]): { shp: Uint8Array; shx: Uint8Array } {
-  const n = puntosLatLon.length;
+ * función arma los dos juntos. Recibe las coordenadas YA proyectadas (UTM,
+ * metros — ver utm.ts), no lat/lon: el shapefile de puntos sale en UTM
+ * desde acá (a diferencia del de antes, en grados), para que un Voronoi
+ * calculado afuera (QGIS/ArcGIS) sobre esta grilla no tropiece con la
+ * distorsión de trabajar en grados en vez de metros (ver el comentario
+ * grande de utm.ts — caso real reportado por un usuario, con ArcGIS). */
+function construirShpYShx(puntosUtm: PuntoUTM[]): { shp: Uint8Array; shx: Uint8Array } {
+  const n = puntosUtm.length;
   const CONTENIDO_BYTES = 4 + 8 + 8; // shape type + X + Y
   const CONTENIDO_WORDS = CONTENIDO_BYTES / 2; // el formato mide todo en "palabras" de 16 bits
   const REGISTRO_SHP_BYTES = 8 + CONTENIDO_BYTES; // cabecera de registro (8) + contenido
 
-  const lons = puntosLatLon.map((p) => p.lon);
-  const lats = puntosLatLon.map((p) => p.lat);
-  const minX = Math.min(...lons);
-  const maxX = Math.max(...lons);
-  const minY = Math.min(...lats);
-  const maxY = Math.max(...lats);
+  const estes = puntosUtm.map((p) => p.este);
+  const nortes = puntosUtm.map((p) => p.norte);
+  const minX = Math.min(...estes);
+  const maxX = Math.max(...estes);
+  const minY = Math.min(...nortes);
+  const maxY = Math.max(...nortes);
 
   const shpBuffer = new ArrayBuffer(100 + n * REGISTRO_SHP_BYTES);
   const shpView = new DataView(shpBuffer);
@@ -79,12 +85,12 @@ function construirShpYShx(puntosLatLon: LatLon[]): { shp: Uint8Array; shx: Uint8
   escribirCabecera(shxView, (100 + n * 8) / 2, SHAPE_TYPE_POINT, minX, minY, maxX, maxY);
 
   let offsetShp = 100;
-  puntosLatLon.forEach((p, i) => {
+  puntosUtm.forEach((p, i) => {
     shpView.setInt32(offsetShp, i + 1, false); // número de registro, 1-based, big-endian
     shpView.setInt32(offsetShp + 4, CONTENIDO_WORDS, false);
     shpView.setInt32(offsetShp + 8, SHAPE_TYPE_POINT, true);
-    shpView.setFloat64(offsetShp + 12, p.lon, true); // X = longitud
-    shpView.setFloat64(offsetShp + 20, p.lat, true); // Y = latitud
+    shpView.setFloat64(offsetShp + 12, p.este, true); // X = este
+    shpView.setFloat64(offsetShp + 20, p.norte, true); // Y = norte
 
     const offsetShx = 100 + i * 8;
     shxView.setInt32(offsetShx, offsetShp / 2, false); // offset del registro, en palabras
@@ -161,30 +167,40 @@ function construirDbf(puntos: PuntoGrillaExport[]): Uint8Array {
   return new Uint8Array(buffer);
 }
 
-// WGS84 geográfico — mismo datum que usan lat/lon en toda la app (ver
-// geometria.ts). Es el .prj estándar que cualquier GIS reconoce sin
-// preguntar nada.
-const PRJ_WGS84 =
-  'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],' +
-  'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+/** Zona/hemisferio UTM para TODO un lote, calculados una sola vez desde su
+ * origen (ver utm.ts) — los dos shapefiles que se exportan de un mismo
+ * lote (puntos y polígono) tienen que usar la MISMA zona para quedar
+ * coherentes entre sí al abrirlos juntos en QGIS/ArcGIS. */
+function zonaDelLote(origen: LatLon): { zona: number; hemisferioSur: boolean } {
+  return { zona: zonaUTM(origen.lon), hemisferioSur: origen.lat < 0 };
+}
 
 /** Arma el .zip con los 4 archivos del shapefile (.shp/.shx/.dbf/.prj),
  * listo para compartir como un solo archivo — ver el comentario del
- * encabezado de este módulo. */
+ * encabezado de este módulo.
+ *
+ * Los puntos se exportan en UTM (metros), no en WGS84 geográfico (grados)
+ * — a pedido del usuario: calculado en grados, un Voronoi armado afuera
+ * (QGIS/ArcGIS) sobre esta grilla podía salir con hexágonos en vez de
+ * cuadrados (ver el comentario grande de utm.ts). */
 export async function construirShapefilePuntosZip(
   puntos: PuntoGrillaExport[],
   origen: LatLon,
   nombreBase: string
 ): Promise<Uint8Array> {
-  const puntosLatLon = puntos.map((p) => xyALatLon(origen, p));
-  const { shp, shx } = construirShpYShx(puntosLatLon);
+  const { zona, hemisferioSur } = zonaDelLote(origen);
+  const puntosUtm = puntos.map((p) => {
+    const latLon = xyALatLon(origen, p);
+    return latLonAUTM(latLon.lat, latLon.lon, zona, hemisferioSur);
+  });
+  const { shp, shx } = construirShpYShx(puntosUtm);
   const dbf = construirDbf(puntos);
 
   const zip = new JSZip();
   zip.file(`${nombreBase}.shp`, shp);
   zip.file(`${nombreBase}.shx`, shx);
   zip.file(`${nombreBase}.dbf`, dbf);
-  zip.file(`${nombreBase}.prj`, PRJ_WGS84);
+  zip.file(`${nombreBase}.prj`, prjUTM(zona, hemisferioSur));
   return zip.generateAsync({ type: "uint8array" });
 }
 
@@ -222,23 +238,20 @@ function asegurarSentidoHorario(anillo: LatLon[]): LatLon[] {
 /** Arma el .shp/.shx de un ÚNICO registro Polygon con una parte ("part")
  * por pieza del lote — así un lote compuesto por varias piezas no
  * contiguas (ver Lote["perimetro"]) queda como un solo polígono
- * multi-parte, en vez de varios registros sueltos. */
-function construirShpYShxPoligono(piezasLatLon: LatLon[][]): { shp: Uint8Array; shx: Uint8Array } {
-  // Cada anillo, en sentido horario y CERRADO (primer y último punto
-  // iguales) — nuestras piezas (ver limpiarPieza en geometria.ts) vienen
-  // sin ese cierre repetido, así que se agrega acá.
-  const piezas = piezasLatLon.map((anillo) => {
-    const horario = asegurarSentidoHorario(anillo);
-    return [...horario, horario[0]];
-  });
-
+ * multi-parte, en vez de varios registros sueltos. Recibe las piezas YA en
+ * lat/lon (para decidir el sentido horario/antihorario, ver
+ * asegurarSentidoHorario) pero YA CERRADAS y listas — el llamador
+ * (construirShapefileLotePoligonoZip) es quien las proyecta a UTM antes de
+ * pasarlas, mismo motivo que el shapefile de puntos (ver el comentario
+ * grande de utm.ts). */
+function construirShpYShxPoligono(piezas: PuntoUTM[][]): { shp: Uint8Array; shx: Uint8Array } {
   const todosLosPuntos = piezas.flat();
-  const lons = todosLosPuntos.map((p) => p.lon);
-  const lats = todosLosPuntos.map((p) => p.lat);
-  const minX = Math.min(...lons);
-  const maxX = Math.max(...lons);
-  const minY = Math.min(...lats);
-  const maxY = Math.max(...lats);
+  const estes = todosLosPuntos.map((p) => p.este);
+  const nortes = todosLosPuntos.map((p) => p.norte);
+  const minX = Math.min(...estes);
+  const maxX = Math.max(...estes);
+  const minY = Math.min(...nortes);
+  const maxY = Math.max(...nortes);
 
   const numParts = piezas.length;
   const numPoints = todosLosPuntos.length;
@@ -283,9 +296,9 @@ function construirShpYShxPoligono(piezasLatLon: LatLon[][]): { shp: Uint8Array; 
   }
   for (const anillo of piezas) {
     for (const p of anillo) {
-      shpView.setFloat64(cur, p.lon, true);
+      shpView.setFloat64(cur, p.este, true);
       cur += 8;
-      shpView.setFloat64(cur, p.lat, true);
+      shpView.setFloat64(cur, p.norte, true);
       cur += 8;
     }
   }
@@ -339,17 +352,33 @@ function construirDbfPoligono(nombre: string): Uint8Array {
  * que `construirShapefilePuntosZip`, pero como un .zip APARTE (no se
  * mezclan los dos shapefiles en un mismo .zip): así cada uno se abre por
  * separado en QGIS/ArcGIS, como corresponde a dos capas distintas
- * (puntos vs. polígono). */
+ * (puntos vs. polígono).
+ *
+ * Igual que el shapefile de puntos, sale en UTM (metros) — misma zona/
+ * hemisferio que ese (los dos vienen del mismo `origen`, ver zonaDelLote),
+ * para que las dos capas queden coherentes entre sí al abrirlas juntas. */
 export async function construirShapefileLotePoligonoZip(piezas: XY[][], origen: LatLon, nombreBase: string): Promise<Uint8Array> {
+  const { zona, hemisferioSur } = zonaDelLote(origen);
   const piezasLatLon = piezas.map((pieza) => pieza.map((p) => xyALatLon(origen, p)));
-  const { shp, shx } = construirShpYShxPoligono(piezasLatLon);
+  // Cada anillo, en sentido horario y CERRADO (primer y último punto
+  // iguales) — nuestras piezas (ver limpiarPieza en geometria.ts) vienen
+  // sin ese cierre repetido, así que se agrega acá. Se decide el sentido
+  // en lat/lon (antes de proyectar): una proyección UTM no cambia si un
+  // anillo es horario o antihorario (conserva ángulos/orientación), así
+  // que da lo mismo en qué paso se decida esto.
+  const piezasUtm = piezasLatLon.map((anillo) => {
+    const horario = asegurarSentidoHorario(anillo);
+    const cerrado = [...horario, horario[0]];
+    return cerrado.map((p) => latLonAUTM(p.lat, p.lon, zona, hemisferioSur));
+  });
+  const { shp, shx } = construirShpYShxPoligono(piezasUtm);
   const dbf = construirDbfPoligono(nombreBase);
 
   const zip = new JSZip();
   zip.file(`${nombreBase}.shp`, shp);
   zip.file(`${nombreBase}.shx`, shx);
   zip.file(`${nombreBase}.dbf`, dbf);
-  zip.file(`${nombreBase}.prj`, PRJ_WGS84);
+  zip.file(`${nombreBase}.prj`, prjUTM(zona, hemisferioSur));
   return zip.generateAsync({ type: "uint8array" });
 }
 
