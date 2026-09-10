@@ -260,26 +260,34 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // para terminar en el tamaño final ya amortiguado — de ahí el exponente
   // `1 - CRECIMIENTO_ZOOM` en vez de dividir directo por zoomEfectivo).
   const CRECIMIENTO_ZOOM = 0.35;
-  // Antes esto era un `1` fijo en modo trabajo — no afecta el tamaño BASE
-  // del círculo ahí (que ya es un valor fijo, 24, sin usar amortiguador —
-  // ver tamPuntoBase más abajo: el crecimiento visual de un punto suelto
-  // ya lo da por sí solo el transform `scale` del grupo entero, ver
-  // estiloAnimado), pero sí rompía la decisión de mostrar o no el número
-  // (ver mostrarEtiqueta, dentro del .map() de puntos): con esto fijo en 1,
-  // acercar con los botones +/- en una zona densa nunca hacía reaparecer
-  // los números que el recorte por vecino más cercano había ocultado por
-  // chicos — la cuenta de legibilidad siempre pensaba que seguías a zoom
-  // 1x, por más que hubieras acercado mucho más. Con
-  // `NIVELES_ZOOM[nivelZoomIndex]` acá, esa cuenta usa el zoom REAL de modo
-  // trabajo, y los números vuelven a aparecer al acercar sobre una zona en
-  // particular, como corresponde.
+  // Con `NIVELES_ZOOM[nivelZoomIndex]` acá (en vez de un `1` fijo), esta
+  // cuenta usa el zoom REAL de modo trabajo — hace falta para dos cosas:
+  // que "mostrarEtiqueta" (más abajo, en el .map() de puntos) sepa cuándo
+  // un número vuelve a entrar al acercar con los botones +/- en una zona
+  // densa, y para el contra-escalado de tamPuntoBase, justo abajo.
   const zoomEfectivo = pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado;
   const amortiguador = Math.pow(zoomEfectivo, 1 - CRECIMIENTO_ZOOM);
   // "Base": el tamaño que tendría cada punto si no hubiera vecinos cerca —
   // el tope real, por vecino más cercano, se aplica más abajo (dentro del
   // .map() de puntos, ver tamPuntoTope) porque es DISTINTO para cada punto.
-  const tamPuntoBase = pantallaCompleta ? 24 : 18 / amortiguador;
-  const tamFuenteBase = pantallaCompleta ? 11 : 8.5 / amortiguador;
+  //
+  // En modo trabajo, a pedido del usuario: el círculo de "Yo" (ver
+  // yoMarker, más abajo) tiene un tamaño FIJO en pantalla (24px, nunca
+  // cambia con el zoom — vive afuera del grupo que se escala, ver
+  // estiloYoArrastrado) y los puntos se veían desproporcionados al lado
+  // — chicos "Yo" y enormes los círculos apenas acercabas, porque el
+  // tamaño real de un punto (acá) quedaba fijo en 24 mientras el
+  // transform `scale` del grupo entero (ver estiloAnimado) lo agrandaba
+  // 1 a 1 con el zoom. Dividiendo acá por `zoomEfectivo` se cancela
+  // exactamente esa multiplicación: el tamaño FINAL en pantalla de un
+  // punto suelto (sin vecinos cerca que lo recorten) da siempre 24,
+  // constante a cualquier zoom — igual que "Yo", sea cual sea el % en el
+  // que estés. El recorte por vecino más cercano (tamPuntoTope) sigue
+  // funcionando igual arriba de esto: en una zona densa, un punto puede
+  // terminar más chico que 24 (nunca más grande) — así que 24 pasa a ser
+  // el techo, no un tamaño fijo.
+  const tamPuntoBase = pantallaCompleta ? 24 / zoomEfectivo : 18 / amortiguador;
+  const tamFuenteBase = pantallaCompleta ? 11 / zoomEfectivo : 8.5 / amortiguador;
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
