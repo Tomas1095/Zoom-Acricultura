@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Redirect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Clock, LogOut, XCircle } from "lucide-react-native";
+import { Clock, LogOut, Trash2, XCircle } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
+import { useEliminarCuenta } from "@/lib/usar-eliminar-cuenta";
 import { ZoomLogo } from "@/components/zoom-logo";
 import { colors } from "@/theme/colors";
 
@@ -20,6 +21,13 @@ export default function ComunidadPendienteScreen() {
   const insets = useSafeAreaInsets();
   const { session, usuario, comunidad, refrescarUsuario, signOut } = useAuth();
   const [refrescando, setRefrescando] = useState(false);
+  // A pedido de Apple (App Review, Guideline 5.1.1(v)): quien se registró
+  // creando una comunidad nueva y queda acá esperando (o le rechazaron la
+  // solicitud) también tiene que poder eliminar su cuenta, no solo cerrar
+  // sesión — esta pantalla vive afuera del grupo (app), así que no tiene
+  // forma de llegar a mi-cuenta.tsx (que además necesita una comunidad
+  // activa para poder entrar, ver (app)/_layout.tsx).
+  const { eliminando, pedirEliminarCuenta } = useEliminarCuenta();
 
   if (!session || !usuario) return <Redirect href="/login" />;
   if (comunidad && comunidad.estado === "activa") return <Redirect href="/(app)" />;
@@ -67,6 +75,17 @@ export default function ComunidadPendienteScreen() {
         <Pressable style={styles.salirBtn} onPress={signOut}>
           <LogOut size={16} color={colors.danger} />
           <Text style={styles.salirTexto}>Cerrar sesión</Text>
+        </Pressable>
+
+        <Pressable style={styles.salirBtn} onPress={pedirEliminarCuenta} disabled={eliminando}>
+          {eliminando ? (
+            <ActivityIndicator color={colors.danger} size="small" />
+          ) : (
+            <>
+              <Trash2 size={16} color={colors.danger} />
+              <Text style={styles.salirTexto}>Eliminar cuenta</Text>
+            </>
+          )}
         </Pressable>
       </ScrollView>
     </View>

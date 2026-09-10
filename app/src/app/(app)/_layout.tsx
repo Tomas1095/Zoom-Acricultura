@@ -41,6 +41,7 @@ function AppLayoutStack() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="mi-cuenta" options={{ title: "Mi cuenta" }} />
       <Stack.Screen name="equipo" options={{ title: "Mi equipo" }} />
       <Stack.Screen name="solicitudes-comunidad" options={{ title: "Solicitudes de comunidad" }} />
       <Stack.Screen name="lote/[id]/index" options={{ headerShown: false }} />
