@@ -79,6 +79,47 @@ export async function guardarYConfirmarCarga(
   if (error) throw error;
 }
 
+export interface FilaImportacionCarga {
+  puntoId: string;
+  bicho: number;
+  babosa: number;
+  huevoBabosas: boolean;
+  gusanoArroz: boolean;
+  isocaCortadora: boolean;
+  gusanoBlanco: boolean;
+}
+
+/** Carga en bloque varios puntos de una — a pedido del usuario, para
+ * importar una planilla Excel con los datos que se tomaron en papel a
+ * campo (ver lib/planilla/planilla-monitoreo.ts) mientras todavía no se
+ * podía usar la app ahí. Mismo resultado final que `guardarYConfirmarCarga`
+ * fila por fila (cargado y confirmado = true, punto en verde), pero en UN
+ * solo pedido a la base en vez de uno por punto — con una planilla de 100+
+ * puntos, 100 pedidos seguidos sería bastante más lento y más frágil (un
+ * corte de señal a mitad de camino dejaría la carga a medio hacer). */
+export async function importarCargas(filas: FilaImportacionCarga[], campana: string, cargadoPorId: string): Promise<void> {
+  if (filas.length === 0) return;
+  const { error } = await supabase.from("cargas").upsert(
+    filas.map((f) => ({
+      punto_id: f.puntoId,
+      campana,
+      bicho: f.bicho,
+      babosa: f.babosa,
+      huevo_babosas: f.huevoBabosas,
+      gusano_arroz: f.gusanoArroz,
+      isoca_cortadora: f.isocaCortadora,
+      gusano_blanco: f.gusanoBlanco,
+      observaciones: "",
+      cargado: true,
+      confirmado: true,
+      cargado_por_id: cargadoPorId,
+      updated_at: new Date().toISOString(),
+    })),
+    { onConflict: "punto_id,campana", ignoreDuplicates: false }
+  );
+  if (error) throw error;
+}
+
 /** Reabre un punto ya confirmado para poder editarlo — portado de
  * `reabrirPunto`. Deja `cargado_por_id` como estaba (no cambia de dueño
  * solo por reabrirlo). */

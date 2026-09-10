@@ -11,12 +11,14 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { ChevronDown, Download, Maximize2, RotateCcw } from "lucide-react-native";
+import { ChevronDown, Download, FileSpreadsheet, Maximize2, RotateCcw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import { exportarPuntos } from "@/lib/exportar/puntos";
 import { exportarShapefileLotePoligono } from "@/lib/exportar/shapefile";
+import { elegirArchivoExcel, exportarPlantillaExcel, parsearPlanillaExcel } from "@/lib/planilla/planilla-monitoreo";
+import { importarCargas } from "@/lib/db/cargas";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
@@ -78,7 +80,7 @@ export function VistaGeneral({
   // Fundador/Encargado ven el total del lote — pedido explícito del
   // usuario, ver lib/offline/resumen.ts.
   const esMonitoreador = usuario?.rol === "monitoreador";
-  const { cargando, usandoCache, puntos, cargas, resumen, gps, puntoCercano, enRango, origen } = useDatosCampo(
+  const { cargando, usandoCache, puntos, cargas, resumen, gps, puntoCercano, enRango, origen, refrescar } = useDatosCampo(
     lote.id,
     campanaEfectiva,
     esMonitoreador ? usuario?.id : undefined
@@ -96,6 +98,14 @@ export function VistaGeneral({
   // significa cerrado.
   const botonExportarRef = useRef<View>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  // Planilla Excel — a pedido del usuario, para cargar datos tomados en
+  // papel mientras todavía no se podía usar la app a campo (ver
+  // lib/planilla/planilla-monitoreo.ts). Mismo patrón de desplegable que
+  // "Exportar grilla" de arriba, pero con su propio estado — son menús
+  // independientes.
+  const botonPlanillaRef = useRef<View>(null);
+  const [menuPlanillaPos, setMenuPlanillaPos] = useState<{ top: number; left: number } | null>(null);
+  const [procesandoPlanilla, setProcesandoPlanilla] = useState(false);
 
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>
@@ -169,6 +179,60 @@ export function VistaGeneral({
     }
   }
 
+  function abrirMenuPlanilla() {
+    botonPlanillaRef.current?.measureInWindow((x, y, _width, height) => {
+      setMenuPlanillaPos({ top: y + height + 4, left: x });
+    });
+  }
+
+  async function descargarPlanilla() {
+    setMenuPlanillaPos(null);
+    setProcesandoPlanilla(true);
+    try {
+      await exportarPlantillaExcel(
+        puntos.map((p) => ({ linea: p.linea, puntoNum: p.puntoNum })),
+        `${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`
+      );
+    } catch (e: any) {
+      Alert.alert("No se pudo descargar la planilla", e.message ?? String(e));
+    } finally {
+      setProcesandoPlanilla(false);
+    }
+  }
+
+  // Sube la planilla ya completada, la matchea contra los puntos reales
+  // del lote y carga cada fila válida — mismo resultado que cargar cada
+  // punto a mano y confirmarlo (queda en verde). Errores puntuales (un
+  // punto que no existe, un número mal escrito) no cortan todo el import,
+  // se juntan y se muestran al final (ver parsearPlanillaExcel).
+  async function subirPlanilla() {
+    setMenuPlanillaPos(null);
+    const archivo = await elegirArchivoExcel();
+    if (!archivo || !usuario) return;
+    setProcesandoPlanilla(true);
+    try {
+      const { filas, errores } = await parsearPlanillaExcel(
+        archivo,
+        puntos.map((p) => ({ id: p.id, linea: p.linea, puntoNum: p.puntoNum }))
+      );
+      if (filas.length > 0) {
+        await importarCargas(filas, campanaEfectiva, usuario.id);
+        await refrescar();
+      }
+      const resumenTexto = `Se cargaron ${filas.length} punto${filas.length === 1 ? "" : "s"}.`;
+      if (errores.length > 0) {
+        const detalle = errores.slice(0, 10).join("\n") + (errores.length > 10 ? `\n… y ${errores.length - 10} más.` : "");
+        Alert.alert("Planilla importada, con avisos", `${resumenTexto}\n\n${detalle}`);
+      } else {
+        Alert.alert("Listo", resumenTexto);
+      }
+    } catch (e: any) {
+      Alert.alert("No se pudo importar la planilla", e.message ?? String(e));
+    } finally {
+      setProcesandoPlanilla(false);
+    }
+  }
+
   if (cargando) {
     return (
       <View style={styles.centrado}>
@@ -202,6 +266,28 @@ export function VistaGeneral({
           <Pressable ref={botonExportarRef} style={styles.botonExportarGrilla} onPress={abrirMenuExportar}>
             <Download size={12} color={colors.primaryDark} />
             <Text style={styles.botonExportarGrillaTexto}>Exportar grilla</Text>
+            <ChevronDown size={12} color={colors.primaryDark} />
+          </Pressable>
+        )}
+        {/* Planilla Excel — a pedido del usuario, mientras la carga a
+            campo desde el celular todavía no se podía usar: bajar una
+            planilla con los puntos del lote ya listados, completarla en
+            la compu y volver a subirla para cargar todo de una. Solo
+            tiene sentido en la campaña vigente (no se carga sobre
+            historial archivado). */}
+        {puedeExportarGrilla && puntos.length > 0 && viendoActual && (
+          <Pressable
+            ref={botonPlanillaRef}
+            style={styles.botonExportarGrilla}
+            onPress={abrirMenuPlanilla}
+            disabled={procesandoPlanilla}
+          >
+            {procesandoPlanilla ? (
+              <ActivityIndicator size="small" color={colors.primaryDark} />
+            ) : (
+              <FileSpreadsheet size={12} color={colors.primaryDark} />
+            )}
+            <Text style={styles.botonExportarGrillaTexto}>Planilla</Text>
             <ChevronDown size={12} color={colors.primaryDark} />
           </Pressable>
         )}
@@ -241,6 +327,24 @@ export function VistaGeneral({
             </Pressable>
             <Pressable style={styles.menuExportarItem} onPress={() => elegirFormatoExportar("shp")}>
               <Text style={styles.menuExportarItemTexto}>Shapefile</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={menuPlanillaPos !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuPlanillaPos(null)}
+      >
+        <Pressable style={styles.menuExportarBackdrop} onPress={() => setMenuPlanillaPos(null)}>
+          <View style={[styles.menuExportar, menuPlanillaPos ? { top: menuPlanillaPos.top, left: menuPlanillaPos.left } : null]}>
+            <Pressable style={styles.menuExportarItem} onPress={descargarPlanilla}>
+              <Text style={styles.menuExportarItemTexto}>Descargar planilla</Text>
+            </Pressable>
+            <Pressable style={styles.menuExportarItem} onPress={subirPlanilla}>
+              <Text style={styles.menuExportarItemTexto}>Subir planilla completa</Text>
             </Pressable>
           </View>
         </Pressable>
