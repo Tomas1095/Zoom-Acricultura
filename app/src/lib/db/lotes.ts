@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { Cliente, Establecimiento, Lote } from "@/types/domain";
+import { campanaVigentePorFecha } from "@/lib/campanas";
 import { filaACliente, filaAEstablecimiento, filaALote } from "./mappers";
 
 export interface Arbol {
@@ -64,10 +65,20 @@ export async function eliminarEstablecimiento(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Un lote nuevo arranca siempre en la campaña vigente HOY (según el año
+ * de trabajo 1/9-31/8, ver campanaVigentePorFecha) — antes quedaba
+ * librado al default de la columna en la base, que había que ir
+ * actualizando a mano cada campaña (y se había quedado atrás: seguía en
+ * "25/26" con la 26/27 ya arrancada). Así, esto no vuelve a desactualizarse. */
 export async function crearLote(establecimientoId: string, nombre: string, cultivo: string): Promise<Lote> {
   const { data, error } = await supabase
     .from("lotes")
-    .insert({ establecimiento_id: establecimientoId, nombre, cultivo: cultivo || "Sin especificar" })
+    .insert({
+      establecimiento_id: establecimientoId,
+      nombre,
+      cultivo: cultivo || "Sin especificar",
+      campana_actual: campanaVigentePorFecha(),
+    })
     .select()
     .single();
   if (error) throw error;
