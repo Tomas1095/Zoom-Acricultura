@@ -183,10 +183,22 @@ export async function parsearPlanillaExcel(
       continue;
     }
 
+    // La plantilla trae la columna "Punto" YA completa para el lote entero
+    // (ver construirPlantilla) — así que `puntoTexto` nunca viene vacío,
+    // se haya tocado esa fila o no. Sin este chequeo, un punto que la
+    // persona todavía no monitoreó (todas las columnas de dato en blanco)
+    // se cargaba igual con 0/NO en todo y quedaba confirmado — a un punto
+    // de una carga real que da 0 en todo. Se salta en silencio (no es un
+    // error, es sencillamente un punto que falta completar todavía).
+    const crudos = columnasDato.map((col) => (col.indice === -1 ? null : fila[col.indice]));
+    const sinCompletar = crudos.every((v) => v == null || String(v).trim() === "");
+    if (sinCompletar) continue;
+
     const valores: Partial<Record<(typeof COLUMNAS_DATO)[number]["campo"], number | boolean>> = {};
     let filaValida = true;
-    for (const col of columnasDato) {
-      const crudo = col.indice === -1 ? null : fila[col.indice];
+    for (let c = 0; c < columnasDato.length; c++) {
+      const col = columnasDato[c];
+      const crudo = crudos[c];
       if (col.tipo === "numero") {
         const n = normalizarNumero(crudo);
         if (Number.isNaN(n)) {
