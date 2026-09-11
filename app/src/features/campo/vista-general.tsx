@@ -18,7 +18,7 @@ import { puedeAdministrarLotes } from "@/lib/roles";
 import { exportarPuntos } from "@/lib/exportar/puntos";
 import { exportarShapefileLotePoligono } from "@/lib/exportar/shapefile";
 import { elegirArchivoExcel, exportarPlantillaExcel, parsearPlanillaExcel } from "@/lib/planilla/planilla-monitoreo";
-import { importarCargas } from "@/lib/db/cargas";
+import { eliminarCargas, importarCargas } from "@/lib/db/cargas";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
@@ -225,15 +225,44 @@ export function VistaGeneral({
     if (!archivo || !usuario) return;
     setProcesandoPlanilla(true);
     try {
-      const { filas, errores } = await parsearPlanillaExcel(
+      const { filas, errores, puntosSinDato } = await parsearPlanillaExcel(
         archivo,
         puntos.map((p) => ({ id: p.id, linea: p.linea, puntoNum: p.puntoNum }))
       );
-      if (filas.length > 0) {
-        await importarCargas(filas, campanaEfectiva, usuario.id);
-        await refrescar();
+
+      // A pedido del usuario: la planilla que se sube manda para el lote
+      // entero, no solo para los puntos que trae completos — un punto sin
+      // datos en ESTA planilla queda sin datos en la app, tenga o no una
+      // carga previa (de otra planilla, o cargada a mano desde el
+      // celular). Como eso puede borrar una carga real si se subió la
+      // planilla que no era, se pide confirmación explícita antes de
+      // tocar nada — mismo criterio que "Eliminar cuenta" (ver
+      // usar-eliminar-cuenta.ts): una acción así no se dispara sin que la
+      // persona vea antes, en números, qué se va a borrar.
+      if (puntosSinDato.length > 0) {
+        setProcesandoPlanilla(false);
+        const single = puntosSinDato.length === 1;
+        const confirmar = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            "Esta planilla no completa todo el lote",
+            `${puntosSinDato.length} punto${single ? "" : "s"} no ${single ? "trae" : "traen"} datos en esta planilla y va${single ? "" : "n"} a quedar SIN datos (se borra lo que tuviera${single ? "" : "n"} cargado antes, si tenía${single ? "" : "n"}).\n\n¿Confirmás subir igual?`,
+            [
+              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+              { text: "Confirmar", style: "destructive", onPress: () => resolve(true) },
+            ]
+          );
+        });
+        if (!confirmar) return;
+        setProcesandoPlanilla(true);
       }
-      const resumenTexto = `Se cargaron ${filas.length} punto${filas.length === 1 ? "" : "s"}.`;
+
+      await importarCargas(filas, campanaEfectiva, usuario.id);
+      await eliminarCargas(puntosSinDato, campanaEfectiva);
+      await refrescar();
+
+      const resumenTexto =
+        `Se cargaron ${filas.length} punto${filas.length === 1 ? "" : "s"}.` +
+        (puntosSinDato.length > 0 ? ` ${puntosSinDato.length} quedaron sin datos.` : "");
       if (errores.length > 0) {
         const detalle = errores.slice(0, 10).join("\n") + (errores.length > 10 ? `\n… y ${errores.length - 10} más.` : "");
         Alert.alert("Planilla importada, con avisos", `${resumenTexto}\n\n${detalle}`);

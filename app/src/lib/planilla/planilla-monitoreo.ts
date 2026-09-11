@@ -80,6 +80,16 @@ export interface ResultadoPlanilla {
    * puntual, y se le muestran a la persona al final para que sepa qué
    * revisar a mano. */
   errores: string[];
+  /** IDs de puntos del lote cuya fila vino en blanco en ESTA planilla — a
+   * pedido del usuario, la planilla que se sube manda para el lote
+   * entero: un punto sin datos acá tiene que quedar sin datos en la app,
+   * aunque antes hubiera tenido una carga (de una planilla previa o
+   * hecha a mano). No incluye puntos con una fila con ALGÚN dato pero mal
+   * escrito (esos quedan en `errores` y su carga previa, si tenía, se
+   * respeta — un typo no tiene por qué borrar un dato real). Quien llama
+   * a `parsearPlanillaExcel` es responsable de borrar la carga de estos
+   * puntos (ver `eliminarCargas` en lib/db/cargas.ts). */
+  puntosSinDato: string[];
 }
 
 /** Arma la planilla en blanco para un lote — una fila por punto, en el
@@ -171,6 +181,13 @@ export async function parsearPlanillaExcel(
 
   const filas: FilaPlanilla[] = [];
   const errores: string[] = [];
+  // Arranca con TODOS los puntos del lote — a pedido del usuario, la
+  // planilla que se sube manda para el lote entero: un punto se saca de
+  // acá recién cuando su fila trae algún dato (se haya podido cargar o
+  // no, ver más abajo), nunca antes. Así, un punto que ni siquiera tiene
+  // fila en la planilla (alguien borró esa fila a mano) también queda
+  // sin datos, igual que uno con la fila en blanco.
+  const puntosSinDato = new Set(puntosDelLote.map((p) => p.id));
 
   for (let i = indiceEncabezado + 1; i < filasCrudas.length; i++) {
     const fila = filasCrudas[i];
@@ -189,10 +206,17 @@ export async function parsearPlanillaExcel(
     // persona todavía no monitoreó (todas las columnas de dato en blanco)
     // se cargaba igual con 0/NO en todo y quedaba confirmado — a un punto
     // de una carga real que da 0 en todo. Se salta en silencio (no es un
-    // error, es sencillamente un punto que falta completar todavía).
+    // error, es sencillamente un punto que falta completar todavía) — y
+    // se deja en `puntosSinDato`.
     const crudos = columnasDato.map((col) => (col.indice === -1 ? null : fila[col.indice]));
     const sinCompletar = crudos.every((v) => v == null || String(v).trim() === "");
     if (sinCompletar) continue;
+
+    // Tiene ALGÚN dato — se saca de `puntosSinDato` acá, antes de validar
+    // los números, para no borrar una carga previa real solo porque esta
+    // fila tiene un typo (ese caso queda en `errores`, con la carga
+    // vieja — si la tenía — intacta).
+    puntosSinDato.delete(punto.id);
 
     const valores: Partial<Record<(typeof COLUMNAS_DATO)[number]["campo"], number | boolean>> = {};
     let filaValida = true;
@@ -224,5 +248,5 @@ export async function parsearPlanillaExcel(
     });
   }
 
-  return { filas, errores };
+  return { filas, errores, puntosSinDato: Array.from(puntosSinDato) };
 }

@@ -120,6 +120,21 @@ export async function importarCargas(filas: FilaImportacionCarga[], campana: str
   if (error) throw error;
 }
 
+/** Borra la carga de una tanda de puntos en una campaña — a pedido del
+ * usuario: al importar una planilla, ESA planilla manda para el lote
+ * entero. Un punto que en la planilla nueva viene sin datos tiene que
+ * quedar sin datos en la app también, tenga o no una carga previa (de
+ * una planilla anterior o hecha a mano desde el celular) — por eso
+ * borra la fila entera en vez de dejarla con ceros: "sin datos" de
+ * verdad, no "cargado con un cero". Usado solo desde el import de
+ * planilla (ver planilla-monitoreo.ts, campo `puntosSinDato` del
+ * resultado) — el guardado normal desde el celular nunca borra nada. */
+export async function eliminarCargas(puntoIds: string[], campana: string): Promise<void> {
+  if (puntoIds.length === 0) return;
+  const { error } = await supabase.from("cargas").delete().eq("campana", campana).in("punto_id", puntoIds);
+  if (error) throw error;
+}
+
 /** Reabre un punto ya confirmado para poder editarlo — portado de
  * `reabrirPunto`. Deja `cargado_por_id` como estaba (no cambia de dueño
  * solo por reabrirlo). */
