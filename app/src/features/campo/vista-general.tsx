@@ -185,10 +185,23 @@ export function VistaGeneral({
     });
   }
 
+  // En "Exportar grilla" (arriba) cerrar el desplegable siempre da paso a
+  // OTRO modal propio (pedir el nombre del archivo) antes de compartir de
+  // verdad, así que para cuando se llega a la hoja nativa el desplegable
+  // ya terminó de cerrarse hace rato. Acá no hay ningún paso intermedio:
+  // se pasa directo del desplegable a un picker/hoja de compartir nativo
+  // de iOS — y presentarlo mientras el <Modal> del desplegable todavía se
+  // está cerrando (la animación tarda un rato) hace que iOS lo ignore en
+  // silencio: ni error, ni cartel, el ícono se queda girando para
+  // siempre. Es un problema conocido de RN/Expo en iOS (ver expo/expo#21418,
+  // #35835, #43774) — el margen de espera evita la carrera.
+  const ESPERA_CIERRE_MODAL_MS = 350;
+
   async function descargarPlanilla() {
     setMenuPlanillaPos(null);
     setProcesandoPlanilla(true);
     try {
+      await new Promise((resolve) => setTimeout(resolve, ESPERA_CIERRE_MODAL_MS));
       await exportarPlantillaExcel(
         puntos.map((p) => ({ linea: p.linea, puntoNum: p.puntoNum })),
         `${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`
@@ -207,6 +220,7 @@ export function VistaGeneral({
   // se juntan y se muestran al final (ver parsearPlanillaExcel).
   async function subirPlanilla() {
     setMenuPlanillaPos(null);
+    await new Promise((resolve) => setTimeout(resolve, ESPERA_CIERRE_MODAL_MS));
     const archivo = await elegirArchivoExcel();
     if (!archivo || !usuario) return;
     setProcesandoPlanilla(true);
