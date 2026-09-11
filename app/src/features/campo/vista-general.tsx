@@ -223,38 +223,36 @@ export function VistaGeneral({
     await new Promise((resolve) => setTimeout(resolve, ESPERA_CIERRE_MODAL_MS));
     const archivo = await elegirArchivoExcel();
     if (!archivo || !usuario) return;
+
+    // A pedido del usuario: la planilla que se sube manda para el lote
+    // entero, no solo para los puntos que trae completos — un punto sin
+    // datos en la planilla queda sin datos en la app, tenga o no una
+    // carga previa. Como eso puede borrar una carga real si se subió la
+    // planilla que no era, si el lote ya tiene algo cargado se pide
+    // confirmación antes de tocar nada — un aviso simple acá (no hace
+    // falta abrir el archivo todavía para saber si HAY algo cargado, ver
+    // `resumen.completados`); el resumen final, más abajo, ya cuenta en
+    // números cuántos puntos quedaron sin datos con esta subida puntual.
+    if (resumen.completados > 0) {
+      const avanzar = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          "Estás por sobrescribir datos",
+          "Este lote ya tiene puntos cargados. La planilla que subas ahora manda: los puntos que traiga completos se actualizan, y los que no traiga quedan SIN datos (se borra lo que tuvieran antes).\n\n¿Avanzamos?",
+          [
+            { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+            { text: "Avanzamos", onPress: () => resolve(true) },
+          ]
+        );
+      });
+      if (!avanzar) return;
+    }
+
     setProcesandoPlanilla(true);
     try {
       const { filas, errores, puntosSinDato } = await parsearPlanillaExcel(
         archivo,
         puntos.map((p) => ({ id: p.id, linea: p.linea, puntoNum: p.puntoNum }))
       );
-
-      // A pedido del usuario: la planilla que se sube manda para el lote
-      // entero, no solo para los puntos que trae completos — un punto sin
-      // datos en ESTA planilla queda sin datos en la app, tenga o no una
-      // carga previa (de otra planilla, o cargada a mano desde el
-      // celular). Como eso puede borrar una carga real si se subió la
-      // planilla que no era, se pide confirmación explícita antes de
-      // tocar nada — mismo criterio que "Eliminar cuenta" (ver
-      // usar-eliminar-cuenta.ts): una acción así no se dispara sin que la
-      // persona vea antes, en números, qué se va a borrar.
-      if (puntosSinDato.length > 0) {
-        setProcesandoPlanilla(false);
-        const single = puntosSinDato.length === 1;
-        const confirmar = await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            "Esta planilla no completa todo el lote",
-            `${puntosSinDato.length} punto${single ? "" : "s"} no ${single ? "trae" : "traen"} datos en esta planilla y va${single ? "" : "n"} a quedar SIN datos (se borra lo que tuviera${single ? "" : "n"} cargado antes, si tenía${single ? "" : "n"}).\n\n¿Confirmás subir igual?`,
-            [
-              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
-              { text: "Confirmar", style: "destructive", onPress: () => resolve(true) },
-            ]
-          );
-        });
-        if (!confirmar) return;
-        setProcesandoPlanilla(true);
-      }
 
       await importarCargas(filas, campanaEfectiva, usuario.id);
       await eliminarCargas(puntosSinDato, campanaEfectiva);
