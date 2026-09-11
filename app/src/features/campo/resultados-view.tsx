@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Image as ImageIcon } from "lucide-react-native";
 
-import { calcularCeldasDensidad, NIVEL_COLORES, rangosDe, type CeldaDensidad, type Plaga } from "@/lib/geo/densidad";
+import { calcularCeldasDensidad, coloresDe, rangosDe, type CeldaDensidad, type Plaga } from "@/lib/geo/densidad";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
 import { exportarMapaPng } from "@/lib/exportar/mapa-png";
 import type { Lote } from "@/types/domain";
@@ -195,7 +195,7 @@ export function ResultadosView({
                 celdasPrecalculadas={celdas}
                 perimetro={lote.perimetro}
                 rangos={rangos}
-                nivelColores={NIVEL_COLORES}
+                nivelColores={coloresDe(plaga)}
                 etiquetaLeyenda={etiqueta}
                 ancho={anchoMapa}
                 alto={altoMapa}

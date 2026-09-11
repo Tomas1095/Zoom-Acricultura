@@ -20,7 +20,7 @@ import {
   type EstacionAplicacion,
 } from "@/lib/geo/zona-aplicacion";
 import { inferirOrigenDesdePuntos, type XY } from "@/lib/geo/geometria";
-import { calcularCeldasDensidad, NIVEL_COLORES, rangosDe } from "@/lib/geo/densidad";
+import { calcularCeldasDensidad, coloresDe, rangosDe } from "@/lib/geo/densidad";
 import { resumenPlaga, resumenPresencias, textoSituacion } from "@/lib/informe/situacion";
 import {
   construirInformeHtml,
@@ -466,7 +466,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             puntosDensidadBicho,
             lote.perimetro,
             rangosDe("bicho"),
-            NIVEL_COLORES,
+            coloresDe("bicho"),
             "Nº BB/m²",
             MAPA_PDF_ANCHO,
             MAPA_PDF_ALTO,
@@ -476,7 +476,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             puntosDensidadBabosa,
             lote.perimetro,
             rangosDe("babosa"),
-            NIVEL_COLORES,
+            coloresDe("babosa"),
             "Nº Babosas/m²",
             MAPA_PDF_ANCHO,
             MAPA_PDF_ALTO,
@@ -499,7 +499,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
           await exportarKMZManchonYMapa(
             manchonesActivos,
             celdasManchoneoActivo,
-            NIVEL_COLORES,
+            coloresDe(manchoneoPlaga),
             lote.nombre,
             origen,
             valores.nombre,
@@ -742,7 +742,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
                 puntosDensidad={manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa}
                 celdasPrecalculadas={celdasManchoneoActivo}
                 rangos={rangosDe(manchoneoPlaga)}
-                nivelColores={NIVEL_COLORES}
+                nivelColores={coloresDe(manchoneoPlaga)}
                 ancho={320}
                 alto={320}
                 editable={editandoManchon}
@@ -926,7 +926,7 @@ function MapaInformeConLeyenda({ titulo, puntos, perimetro, plaga, origen, ancho
           puntos={puntos}
           perimetro={perimetro}
           rangos={rangos}
-          nivelColores={NIVEL_COLORES}
+          nivelColores={coloresDe(plaga)}
           etiquetaLeyenda={etiqueta}
           ancho={ancho}
           alto={alto}

@@ -52,8 +52,10 @@ export const RANGOS_BABOSA: RangoDensidad[] = [
 ];
 
 // Blanco (nada) hasta rojo oscuro (mucho) — mismos 7 colores del prototipo,
-// uno por cada rango de arriba.
-export const NIVEL_COLORES = [
+// uno por cada rango de arriba. Bicho bolita tiene un primer escalón
+// "suave" (31-59, un aviso temprano todavía lejos del umbral de daño) antes
+// de pasar a colores fuertes.
+export const NIVEL_COLORES_BICHO = [
   "#FFFFFF",
   "#FFF4B8",
   "#FFD93D",
@@ -63,8 +65,29 @@ export const NIVEL_COLORES = [
   "#8E0000",
 ];
 
+// Babosa NO tiene ese escalón suave — a pedido del usuario, con su mapa de
+// referencia de siempre (ArcGIS) al lado: el primer rango por encima de 3
+// (4-8) YA está por encima del umbral de daño, así que tiene que verse como
+// alerta de una, con un amarillo fuerte — nada de un amarillo pálido tipo
+// "todavía no es para preocuparse" ahí. Son los mismos colores fuertes de
+// Bicho corridos un escalón hacia arriba (sin el pálido), más un rojo bien
+// oscuro al final para no repetir el mismo tono en los últimos dos rangos.
+export const NIVEL_COLORES_BABOSA = [
+  "#FFFFFF",
+  "#FFD93D",
+  "#FFA726",
+  "#F4511E",
+  "#D32F2F",
+  "#B71C1C",
+  "#4A0000",
+];
+
 export function rangosDe(plaga: Plaga): RangoDensidad[] {
   return plaga === "bicho" ? RANGOS_BICHO : RANGOS_BABOSA;
+}
+
+export function coloresDe(plaga: Plaga): string[] {
+  return plaga === "bicho" ? NIVEL_COLORES_BICHO : NIVEL_COLORES_BABOSA;
 }
 
 export function clasificarNivel(valorM2: number, rangos: RangoDensidad[]): number {
@@ -78,7 +101,7 @@ export interface CeldaDensidad {
   id: string;
   poligono: XY[]; // en el mismo plano x,y (metros) que puntos y perímetro
   valorM2: number;
-  nivel: number; // índice en NIVEL_COLORES / rangos
+  nivel: number; // índice en NIVEL_COLORES_BICHO/BABOSA (ver coloresDe) / rangos
   /** Si el punto de origen de esta celda tiene datos cargados. Solo lo usa
    * hoy la exportación "Manchón + Mapa" (ver manchon-mapa-kmz.ts, a pedido
    * del usuario): ahí las celdas sin dato quedan sin relleno en el KMZ,
