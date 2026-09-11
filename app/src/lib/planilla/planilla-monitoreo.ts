@@ -19,6 +19,33 @@ import * as XLSX from "xlsx";
 
 import { guardarYCompartirBinario, sanitizarNombreArchivo } from "@/lib/exportar/archivo";
 
+// La librería xlsx usa `type: "array"`/`"buffer"` para leer y escribir en
+// Node/browser, pero eso depende de cosas que no existen en React
+// Native/Hermes (el global `Buffer` de Node, entre otras) — ahí se queda
+// colgada sin tirar error. La propia guía de SheetJS para React Native
+// recomienda usar siempre `type: "base64"`, así que se escribe/lee en
+// base64 y acá se pasa a bytes a mano para no tocar
+// `guardarYCompartirBinario` (que ya funciona bien para el shapefile).
+const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function base64ADecoded(base64: string): Uint8Array {
+  const limpio = base64.replace(/=+$/, "");
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const char of limpio) {
+    const valor = BASE64_CHARS.indexOf(char);
+    if (valor === -1) continue;
+    buffer = (buffer << 6) | valor;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+  return new Uint8Array(bytes);
+}
+
 const COLUMNA_PUNTO = "Punto";
 
 // Cada entrada: el texto EXACTO de la columna en la planilla, a qué campo
@@ -66,7 +93,8 @@ function construirPlantilla(puntos: Array<{ linea: number; puntoNum: number }>):
   const hoja = XLSX.utils.aoa_to_sheet([encabezado, ...filas]);
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, "Planilla");
-  return new Uint8Array(XLSX.write(libro, { type: "array", bookType: "xlsx" }));
+  const base64 = XLSX.write(libro, { type: "base64", bookType: "xlsx" }) as string;
+  return base64ADecoded(base64);
 }
 
 export async function exportarPlantillaExcel(puntos: Array<{ linea: number; puntoNum: number }>, nombreLote: string): Promise<void> {
@@ -119,8 +147,8 @@ export async function parsearPlanillaExcel(
   archivo: File,
   puntosDelLote: Array<{ id: string; linea: number; puntoNum: number }>
 ): Promise<ResultadoPlanilla> {
-  const bytes = await archivo.bytes();
-  const libro = XLSX.read(bytes, { type: "array" });
+  const base64 = await archivo.base64();
+  const libro = XLSX.read(base64, { type: "base64" });
   const hoja = libro.Sheets[libro.SheetNames[0]];
   if (!hoja) throw new Error("El archivo no tiene ninguna hoja con datos.");
 
