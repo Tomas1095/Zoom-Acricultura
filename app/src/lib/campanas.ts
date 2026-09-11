@@ -13,17 +13,21 @@ export function siguienteCampana(campana: string): string {
   return `${pad(a + 1)}/${pad(b + 1)}`;
 }
 
-// El año de trabajo real (según el usuario) arranca el 1° de septiembre y
-// termina el 31 de agosto — ej. la campaña "26/27" corre de 1/9/2026 a
-// 31/8/2027. Antes de esa fecha de arranque, esa campaña ni existe todavía.
-const MES_INICIO_CAMPANA = 9; // septiembre, en base 1 (1=enero)
+// El año de trabajo real (según el usuario) arranca el 1° de julio y
+// termina el 30 de junio — ej. la campaña "26/27" corre de 1/7/2026 a
+// 30/6/2027. Antes era 1/9-31/8, pero el usuario suele armar los campos
+// (KMZ, grilla) un mes antes de arrancar a monitorear de verdad, y con
+// esa fecha un campo armado en agosto para la campaña que ya estaba por
+// arrancar quedaba mal etiquetado con la campaña vieja — julio da margen
+// de sobra. Antes de esa fecha de arranque, esa campaña ni existe todavía.
+const MES_INICIO_CAMPANA = 7; // julio, en base 1 (1=enero)
 
 function primerAnio(campana: string): number {
   return parseInt(String(campana || "").split("/")[0], 10);
 }
 
-/** Qué campaña corresponde "hoy" según el año de trabajo (1/9 a 31/8) —
- * ej. cualquier fecha entre el 1/9/2026 y el 31/8/2027 da "26/27". */
+/** Qué campaña corresponde "hoy" según el año de trabajo (1/7 a 30/6) —
+ * ej. cualquier fecha entre el 1/7/2026 y el 30/6/2027 da "26/27". */
 export function campanaVigentePorFecha(fecha: Date = new Date()): string {
   const anio = fecha.getFullYear();
   const mes = fecha.getMonth() + 1; // Date.getMonth() es 0-11
@@ -41,9 +45,9 @@ export function puedeAvanzarACampana(candidata: string, fecha: Date = new Date()
 }
 
 /** Fecha de arranque de `campana` en texto, para el aviso de "todavía no
- * se puede cerrar" (ej. "26/27" -> "1 de septiembre de 2026"). Asume años
+ * se puede cerrar" (ej. "26/27" -> "1 de julio de 2026"). Asume años
  * 2000+ (con dos dígitos "26" -> 2026), razonable para esta app. */
 export function fechaInicioCampanaTexto(campana: string): string {
   const anio = 2000 + primerAnio(campana);
-  return `1 de septiembre de ${anio}`;
+  return `1 de julio de ${anio}`;
 }

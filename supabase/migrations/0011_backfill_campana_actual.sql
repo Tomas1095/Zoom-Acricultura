@@ -1,0 +1,11 @@
+-- A pedido del usuario: todos los lotes que ya tenía creados quedan
+-- puestos directo en la campaña "26/27" — los había creado el mes
+-- anterior (agosto), cuando con la regla de fecha vieja (1/9-31/8, ver
+-- lib/campanas.ts) todavía correspondía "25/26". Con la regla nueva
+-- (1/7-30/6) esos mismos lotes, creados en agosto, ya deberían haber
+-- arrancado directo en "26/27" — esto los deja ahí de una, sin tener que
+-- pasar por "Cerrar campaña" uno por uno.
+--
+-- Sin condición en el WHERE a propósito: el usuario pidió esto para
+-- TODOS los lotes que tiene hoy en la app.
+update public.lotes set campana_actual = '26/27';

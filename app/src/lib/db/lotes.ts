@@ -66,7 +66,7 @@ export async function eliminarEstablecimiento(id: string): Promise<void> {
 }
 
 /** Un lote nuevo arranca siempre en la campaña vigente HOY (según el año
- * de trabajo 1/9-31/8, ver campanaVigentePorFecha) — antes quedaba
+ * de trabajo 1/7-30/6, ver campanaVigentePorFecha) — antes quedaba
  * librado al default de la columna en la base, que había que ir
  * actualizando a mano cada campaña (y se había quedado atrás: seguía en
  * "25/26" con la 26/27 ya arrancada). Así, esto no vuelve a desactualizarse. */
