@@ -46,7 +46,7 @@ const TITULOS: Record<Modo, string> = {
  * eso: la persona lo escribe a mano en la app, como un segundo factor,
  * sin depender de ningún link ni esquema de URL. */
 export default function LoginScreen() {
-  const { session, usuario, comunidad, refrescarUsuario } = useAuth();
+  const { usuario, comunidad, refrescarUsuario } = useAuth();
   const insets = useSafeAreaInsets();
   const commit = commitDelBuild();
   const [modo, setModo] = useState<Modo>("ingresar");
@@ -59,11 +59,13 @@ export default function LoginScreen() {
   const [nuevaClave, setNuevaClave] = useState("");
   const [cargando, setCargando] = useState(false);
 
-  // Ya hay sesión + perfil resuelto (p. ej. volviste de canjear el código,
-  // o recién cambiaste tu contraseña) → afuera. Salvo que la comunidad
-  // todavía esté pendiente de aprobación (recién pedida una nueva, ver
-  // crearComunidad) — ahí a la pantalla de espera, no a la app.
-  if (session && usuario) {
+  // Ya hay perfil resuelto (p. ej. volviste de canjear el código, o recién
+  // cambiaste tu contraseña — o, sin señal, el perfil guardado en el
+  // celular de una sesión que sigue activa, ver auth-context.tsx) → afuera.
+  // Salvo que la comunidad todavía esté pendiente de aprobación (recién
+  // pedida una nueva, ver crearComunidad) — ahí a la pantalla de espera,
+  // no a la app.
+  if (usuario) {
     // Falla "cerrado": hace falta una comunidad conocida y activa.
     if (!comunidad || comunidad.estado !== "activa") return <Redirect href="/comunidad-pendiente" />;
     return <Redirect href="/(app)" />;
@@ -231,8 +233,8 @@ export default function LoginScreen() {
       return;
     }
     // Ya queda logueada con la sesión que abrió verifyOtp — el chequeo de
-    // arriba (session && usuario) la manda derecho adentro apenas
-    // useAuth resuelva el perfil.
+    // arriba (if (usuario)) la manda derecho adentro apenas useAuth
+    // resuelva el perfil.
     await refrescarUsuario();
   }
 

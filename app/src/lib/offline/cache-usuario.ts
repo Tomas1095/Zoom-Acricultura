@@ -42,3 +42,36 @@ export async function leerUsuarioCache(authUserId: string): Promise<PerfilCache 
     return null;
   }
 }
+
+/** Igual que `leerUsuarioCache`, pero sin nada contra qué comparar — para
+ * cuando ni siquiera hay un `authUserId` de una sesión viva (ver
+ * auth-context.tsx: el token de acceso venció de verdad y no hay señal
+ * para renovarlo, así que `getSession()` no devuelve nada con qué
+ * comparar). Es seguro devolver lo que haya sin chequeo porque
+ * `signOut()` borra esta cache (ver `borrarUsuarioCache`) — si hay algo
+ * guardado acá, es de la sesión que sigue activa en este celular, nunca
+ * de una cuenta anterior que ya cerró sesión. */
+export async function leerUltimoUsuarioCache(): Promise<PerfilCache | null> {
+  try {
+    const raw = await AsyncStorage.getItem(KEY);
+    return raw ? (JSON.parse(raw) as PerfilCache) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Se llama al cerrar sesión — sin esto, la cache de un usuario quedaba
+ * pegada en el celular para siempre después de cerrar sesión, lista para
+ * que `leerUltimoUsuarioCache` (sin chequeo de a quién pertenece) se la
+ * mostrara sin querer a la persona que loguee después en el mismo
+ * dispositivo, si llegara a intentarlo sin señal antes de loguearse de
+ * verdad. */
+export async function borrarUsuarioCache(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(KEY);
+  } catch {
+    // no hay mucho que hacer si falla — no es data sensible más allá de
+    // nombre/rol/comunidad, y de todos modos se pisa sola en el próximo
+    // login exitoso.
+  }
+}

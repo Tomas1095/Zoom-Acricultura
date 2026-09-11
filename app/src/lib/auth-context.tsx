@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase";
 import { filaAComunidad, filaAUsuario } from "./db/mappers";
-import { guardarUsuarioCache, leerUsuarioCache } from "./offline/cache-usuario";
+import { borrarUsuarioCache, guardarUsuarioCache, leerUltimoUsuarioCache, leerUsuarioCache } from "./offline/cache-usuario";
 import { conTimeout, hayConexion } from "./offline/net";
 import type { Comunidad, Usuario } from "@/types/domain";
 
@@ -68,16 +68,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data, error }) => {
       setSession(data.session);
-      if (data.session) cargarUsuario(data.session.user.id).finally(() => setLoading(false));
-      else setLoading(false);
+      if (data.session) {
+        await cargarUsuario(data.session.user.id);
+        setLoading(false);
+        return;
+      }
+      // Sin sesión viva. Si fue porque de verdad no hay ninguna sesión (no
+      // se logueó nunca en este celular, o cerró sesión), acá termina —
+      // vacío está bien. Pero si `error` es un fallo de RED al intentar
+      // renovar el token (el celular llega al campo sin señal más de una
+      // hora después de la última vez que se abrió la app, con el access
+      // token ya vencido de verdad — supabase-js ya no lo puede dar por
+      // válido sin poder renovarlo) NO es lo mismo que una sesión
+      // realmente inválida/revocada: se restaura el último perfil
+      // guardado localmente (mismo criterio que ya usaba `cargarUsuario`
+      // más abajo para cuando SÍ hay sesión pero el pedido del perfil
+      // falla sin señal) — si no, la persona queda mandada a un login que
+      // tampoco puede completar sin señal, sin poder ver ni lo que ya
+      // tenía cargado en el celular. Apenas vuelva a tener señal, el
+      // refresco automático de supabase-js reconstruye la sesión de
+      // verdad sola (por eso entra "sin loguearse" apenas engancha 4G).
+      if (error && isAuthRetryableFetchError(error)) {
+        const cache = await leerUltimoUsuarioCache();
+        setUsuario(cache?.usuario ?? null);
+        setComunidad(cache?.comunidad ?? null);
+      }
+      setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nuevaSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nuevaSession) => {
       setSession(nuevaSession);
-      if (nuevaSession) cargarUsuario(nuevaSession.user.id);
-      else {
+      if (nuevaSession) {
+        cargarUsuario(nuevaSession.user.id);
+      } else if (event !== "INITIAL_SESSION") {
+        // `INITIAL_SESSION` con sesión null se dispara SIEMPRE al
+        // suscribirse acá arriba, en paralelo con el `getSession()` de
+        // más arriba — misma ambigüedad (sesión vencida de verdad vs. sin
+        // señal para renovarla) que ese `.then()` ya resolvió, restaurando
+        // el perfil de la cache si correspondía. Sin este chequeo, este
+        // handler pisaba ese restablecimiento al toque, vaciando de nuevo
+        // usuario/comunidad — la persona veía la app abrirse un instante y
+        // mandarla igual al login. Un evento real después (cerrar sesión
+        // de verdad, por ejemplo) sí tiene que vaciar el perfil acá.
         setUsuario(null);
         setComunidad(null);
       }
@@ -97,6 +131,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       signOut: async () => {
         await supabase.auth.signOut();
+        // Sin esto, el perfil de esta cuenta quedaba guardado en el
+        // celular para siempre después de cerrar sesión — ver el
+        // comentario de `leerUltimoUsuarioCache` en cache-usuario.ts.
+        await borrarUsuarioCache();
       },
     }),
     [loading, session, usuario, comunidad]

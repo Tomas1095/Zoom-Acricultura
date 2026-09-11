@@ -6,7 +6,7 @@ import { SyncProvider } from "@/lib/sync-context";
 import { colors } from "@/theme/colors";
 
 export default function AppLayout() {
-  const { loading, session, usuario, comunidad } = useAuth();
+  const { loading, usuario, comunidad } = useAuth();
 
   if (loading) {
     return (
@@ -15,7 +15,8 @@ export default function AppLayout() {
       </View>
     );
   }
-  if (!session || !usuario) return <Redirect href="/login" />;
+  // No exige `session` en vivo — ver el mismo comentario en app/index.tsx.
+  if (!usuario) return <Redirect href="/login" />;
   // Defensa en profundidad — app/index.tsx ya manda para acá primero, pero
   // por si alguien entra directo a una ruta de (app) con un deep link.
   // Falla "cerrado": hace falta una comunidad conocida y activa.

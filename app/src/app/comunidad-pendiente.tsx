@@ -19,7 +19,7 @@ import { colors } from "@/theme/colors";
  * algo instantáneo, así que no hay apuro real en golpear el server solo. */
 export default function ComunidadPendienteScreen() {
   const insets = useSafeAreaInsets();
-  const { session, usuario, comunidad, refrescarUsuario, signOut } = useAuth();
+  const { usuario, comunidad, refrescarUsuario, signOut } = useAuth();
   const [refrescando, setRefrescando] = useState(false);
   // A pedido de Apple (App Review, Guideline 5.1.1(v)): quien se registró
   // creando una comunidad nueva y queda acá esperando (o le rechazaron la
@@ -29,7 +29,8 @@ export default function ComunidadPendienteScreen() {
   // activa para poder entrar, ver (app)/_layout.tsx).
   const { eliminando, pedirEliminarCuenta } = useEliminarCuenta();
 
-  if (!session || !usuario) return <Redirect href="/login" />;
+  // No exige `session` en vivo — ver el mismo comentario en app/index.tsx.
+  if (!usuario) return <Redirect href="/login" />;
   if (comunidad && comunidad.estado === "activa") return <Redirect href="/(app)" />;
 
   async function refrescar() {
