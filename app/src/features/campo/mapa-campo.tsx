@@ -720,6 +720,34 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             // que importa para decidir si el número, ya en pantalla, se
             // puede leer o no.
             const mostrarEtiqueta = tamFuente * zoomEfectivo >= UMBRAL_LEGIBLE_PX;
+            // Tamaño real en pantalla del círculo (después de que el grupo
+            // entero se escale con el zoom, ver estiloAnimado/scale.value)
+            // — a pedido del usuario, que mandó capturas mostrando el
+            // círculo pixelado/"comido" por el borde a mucho zoom en modo
+            // trabajo. La causa: a zoom alto `tamPunto` (el tamaño ANTES
+            // de esa escala) se hace chiquito a propósito (para que el
+            // círculo, ya escalado, dé siempre ~24px) — pero el sistema
+            // dibuja la vista nativa a ESE tamaño chico de verdad (unos
+            // pocos píxeles físicos) y RECIÉN DESPUÉS la estira con la
+            // transformación del grupo: estirar algo dibujado tan chico es
+            // lo que se ve pixelado/en bloques. Y el borde (fijo, 2-3px)
+            // quedaba multiplicado por el mismo zoom, comiéndose el
+            // círculo entero a partir de cierto punto.
+            //
+            // Se arregla dibujando el círculo directo a SU TAMAÑO FINAL en
+            // pantalla (tamPuntoFinal) — nítido, porque el sistema lo
+            // dibuja grande de una — y contrarrestando la transformación
+            // del grupo con una propia, inversa (`transform: scale(1 /
+            // zoomEfectivo)`), puesta en esta misma vista. Las dos
+            // transformaciones (la del grupo y esta) se combinan en una
+            // sola antes de dibujar nada en pantalla (no es "dibujar,
+            // agrandar, volver a achicar" en pasos separados), así que el
+            // resultado final es matemáticamente idéntico a como se veía
+            // antes en el resto del zoom — nada más cambia CÓMO se llega
+            // ahí, evitando el paso intermedio (dibujar chico) que
+            // pixelaba. El resto de la lógica (tamPunto en sí, la
+            // posición, el área de toque) sigue exactamente igual.
+            const tamPuntoFinal = tamPunto * zoomEfectivo;
             return (
               <Pressable
                 key={p.id}
@@ -766,11 +794,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     toque, que mantiene su tamaño/posición real siempre) —
                     en vista general, `tamPunto` ya viene ajustado (amortiguado,
                     no 1 a 1) contra el zoom asentado (ver el comentario de
-                    tamPunto/tamFuente más arriba), así que acá no hace falta
-                    ningún transform de más: sin eso, acercar con el pellizco
-                    agranda el círculo tanto como separa los puntos entre sí,
-                    y con una grilla densa terminan tapándose igual por más
-                    zoom que se haga.
+                    tamPunto/tamFuente más arriba). El único transform de
+                    más que sí lleva (ver `tamPuntoFinal`/`transform` en el
+                    style, abajo) es a propósito, para dibujar el círculo
+                    nítido a cualquier zoom — sin eso, acercar con el
+                    pellizco agranda el círculo tanto como separa los
+                    puntos entre sí, y con una grilla densa terminan
+                    tapándose igual por más zoom que se haga.
 
                     Vista nativa (borderRadius/backgroundColor/borderWidth),
                     no SVG, en los dos modos — se había probado con SVG acá
@@ -782,23 +812,26 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     dos dedos, no solo pellizcar. Una vista nativa con
                     borderRadius no tiene ese problema (son propiedades que
                     dibuja el sistema directo, no una imagen que se pueda
-                    corromper con la rotación) — y ya sin la sombra puesta
-                    de más (ver estilo `punto`, arriba) tampoco se pixela
-                    con el zoom, así que no hacía falta el SVG para nada. */}
+                    corromper con la rotación) — y sin la sombra puesta de
+                    más (ver estilo `punto`, arriba), sumado al
+                    "dibujar-a-tamaño-final" de acá abajo (ver
+                    `tamPuntoFinal`, más arriba), tampoco se pixela con el
+                    zoom, así que no hacía falta el SVG para nada. */}
                 <View style={[styles.puntoCirculo, { width: tamPunto, height: tamPunto }]}>
                   <View
                     style={{
-                      width: tamPunto,
-                      height: tamPunto,
-                      borderRadius: tamPunto / 2,
+                      width: tamPuntoFinal,
+                      height: tamPuntoFinal,
+                      borderRadius: tamPuntoFinal / 2,
                       backgroundColor: colorFondo,
                       borderColor: colorBorde,
                       borderWidth: pantallaCompleta ? 3 : 2,
                       alignItems: "center",
                       justifyContent: "center",
+                      transform: [{ scale: 1 / zoomEfectivo }],
                     }}
                   >
-                    {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                    {marcadoEnRuta && <Check size={tamPuntoFinal * 0.6} color="#FFFFFF" strokeWidth={3} />}
                   </View>
                 </View>
                 {/* Mismo motivo que el círculo de arriba: vista nativa
