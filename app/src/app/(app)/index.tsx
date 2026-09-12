@@ -10,12 +10,13 @@ import { contarComunidadesPendientes } from "@/lib/db/comunidades";
 import { ArbolLotes } from "@/features/lotes/arbol-lotes";
 import { MisLotes } from "@/features/lotes/mis-lotes";
 import { AppHeader } from "@/components/app-header";
-import { commitDelBuild } from "@/lib/version";
+import { commitDelBuild, versionDelBuild } from "@/lib/version";
 import { colors } from "@/theme/colors";
 
 export default function MisLotesScreen() {
   const { usuario } = useAuth();
   const commit = commitDelBuild();
+  const version = versionDelBuild();
   // Aviso de solicitudes de comunidad esperando aprobación — solo importa
   // (y solo se pide) para quien administra la plataforma entera, no para
   // el resto del equipo. Un puntito rojo alcanza para que Tomás lo note sin
@@ -69,10 +70,20 @@ export default function MisLotesScreen() {
 
       {/* A pedido del usuario: poder comparar de un vistazo, en el campo
        * con el resto del equipo, si todos tienen la misma versión
-       * instalada — mismo commit que ya se muestra en la pantalla de
+       * instalada — mismo texto que ya se muestra en la pantalla de
        * ingreso (ver lib/version.ts), acá además visible sin tener que
-       * cerrar sesión para volver a esa pantalla. */}
-      {commit && <Text style={styles.version}>v{commit}</Text>}
+       * cerrar sesión para volver a esa pantalla. La versión (ej.
+       * "1.0.1 (4)") es la que hay que mirar para comparar contra lo que
+       * figura en App Store Connect/TestFlight — el commit al lado es
+       * solo el detalle interno de git, para cuando hace falta algo más
+       * fino que la versión. */}
+      {(version || commit) && (
+        <Text style={styles.version}>
+          {version ? `v${version}` : ""}
+          {version && commit ? " · " : ""}
+          {commit ?? ""}
+        </Text>
+      )}
     </View>
   );
 }

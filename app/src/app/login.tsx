@@ -18,7 +18,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { solicitarComunidad } from "@/lib/db/comunidades";
-import { commitDelBuild } from "@/lib/version";
+import { commitDelBuild, versionDelBuild } from "@/lib/version";
 import { ZoomLogo } from "@/components/zoom-logo";
 import { colors } from "@/theme/colors";
 
@@ -49,6 +49,7 @@ export default function LoginScreen() {
   const { usuario, comunidad, refrescarUsuario } = useAuth();
   const insets = useSafeAreaInsets();
   const commit = commitDelBuild();
+  const version = versionDelBuild();
   const [modo, setModo] = useState<Modo>("ingresar");
   const [mail, setMail] = useState("");
   const [password, setPassword] = useState("");
@@ -398,9 +399,20 @@ export default function LoginScreen() {
 
             {/* Para poder confirmar de un vistazo qué build tiene instalado
                 alguien, sin depender de memoria/fecha de una conversación —
-                ver lib/version.ts. `null` en un build local (npx expo
-                start), donde no aplica ningún commit "del build". */}
-            {commit && <Text style={styles.version}>v{commit}</Text>}
+                ver lib/version.ts. La versión (ej. "1.0.1 (4)") es la misma
+                que se ve en App Store Connect/TestFlight, para comparar
+                directo si todo el equipo ya tiene la última actualización;
+                el commit (interno, de git) queda al lado para cuando hace
+                falta el detalle exacto de qué código tiene un build en
+                particular. Los dos dan `null` en un build local (npx expo
+                start), donde no aplica ninguno de los dos. */}
+            {(version || commit) && (
+              <Text style={styles.version}>
+                {version ? `v${version}` : ""}
+                {version && commit ? " · " : ""}
+                {commit ?? ""}
+              </Text>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
