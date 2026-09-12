@@ -35,6 +35,7 @@ import { construirMapaDensidadHtml } from "@/lib/exportar/mapa-svg";
 import { exportarGPX, exportarKMZ } from "@/lib/exportar/manchones";
 import { exportarKMZManchonYMapa } from "@/lib/exportar/manchon-mapa-kmz";
 import { construirDatosHtml, exportarDatosPdf } from "@/lib/exportar/datos";
+import { nombreLoteYEstablecimiento } from "@/lib/exportar/nombres";
 import { formatearHectareas } from "@/lib/format";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -433,10 +434,10 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
   // modal (ver onConfirmar), esto solo prellena el campo.
   function nombreDefaultExport(pedido: PedidoExport): string {
     if (pedido === "pdf") {
-      return `Informe monitoreo de plagas ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+      return `Informe monitoreo de plagas ${nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)}`;
     }
     if (pedido === "pdfDatos") {
-      return `Datos Monitoreo ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+      return `Datos Monitoreo ${nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)}`;
     }
     // BB/BAB, nombre del lote, establecimiento (si hay) y superficie con
     // coma decimal (24,1 Ha, no 24.1) — a pedido del usuario, mismo
@@ -444,7 +445,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
     // palabra "Lote" (a pedido del usuario).
     const superficie = haActivas.toFixed(1).replace(".", ",");
     const sufijo = pedido === "kmzMapa" ? " + Mapa" : "";
-    return `${prefijoExportActivo}${sufijo} ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""} ${superficie} Ha`;
+    return `${prefijoExportActivo}${sufijo} ${nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)} ${superficie} Ha`;
   }
 
   async function confirmarExport(valores: Record<string, string>) {

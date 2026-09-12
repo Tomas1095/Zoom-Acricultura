@@ -5,6 +5,7 @@ import { Image as ImageIcon } from "lucide-react-native";
 import { calcularCeldasDensidad, coloresDe, rangosDe, type CeldaDensidad, type Plaga } from "@/lib/geo/densidad";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
 import { exportarMapaPng } from "@/lib/exportar/mapa-png";
+import { nombreLoteYEstablecimiento } from "@/lib/exportar/nombres";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { useDatosCampo } from "./usar-datos-campo";
@@ -132,7 +133,7 @@ export function ResultadosView({
     setExportandoPng(true);
     try {
       const prefijo = plaga === "bicho" ? "BB" : "Babosas";
-      const nombre = `Mapa ${prefijo} ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+      const nombre = `Mapa ${prefijo} ${nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)}`;
       await exportarMapaPng(mapaRef, nombre);
     } catch (e: any) {
       Alert.alert("No se pudo exportar el mapa", e.message ?? String(e));

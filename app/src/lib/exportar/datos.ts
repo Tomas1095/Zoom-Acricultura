@@ -6,6 +6,7 @@
 
 import type { Carga, Punto } from "@/types/domain";
 import { exportarInformePdf } from "./informe";
+import { nombreLoteYEstablecimiento } from "./nombres";
 
 // A4 apaisada en puntos (72 dpi: A4 = 595×842pt en vertical, acá invertido)
 // — expo-print, a diferencia del informe técnico (que usa el tamaño carta
@@ -51,9 +52,7 @@ export function construirDatosHtml(
     })
     .join("");
 
-  const titulo = `Monitoreo de Bichos Bolita y Babosas ${escapeHtml(loteNombre)}${
-    establecimientoNombre ? " " + escapeHtml(establecimientoNombre) : ""
-  }`;
+  const titulo = `Monitoreo de Bichos Bolita y Babosas ${escapeHtml(nombreLoteYEstablecimiento(loteNombre, establecimientoNombre))}`;
 
   return `<!DOCTYPE html>
 <html>

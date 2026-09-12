@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import { exportarPuntos } from "@/lib/exportar/puntos";
 import { exportarShapefileLotePoligono } from "@/lib/exportar/shapefile";
+import { nombreLoteYEstablecimiento } from "@/lib/exportar/nombres";
 import { elegirArchivoExcel, exportarPlantillaExcel, parsearPlanillaExcel } from "@/lib/planilla/planilla-monitoreo";
 import { eliminarCargas, importarCargas } from "@/lib/db/cargas";
 import type { Lote } from "@/types/domain";
@@ -125,7 +126,7 @@ export function VistaGeneral({
   const puedeExportarGrilla = !!usuario && puedeAdministrarLotes(usuario.rol);
   const anchoMapa = Math.min(width - 32, 400);
 
-  const nombreGrillaDefault = `Puntos ${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+  const nombreGrillaDefault = `Puntos ${nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)}`;
 
   // Mide dónde está el botón en la pantalla (no en el contenido del
   // ScrollView, que se puede haber desplazado) para poner el desplegable
@@ -168,7 +169,7 @@ export function VistaGeneral({
       // — dos archivos separados, uno atrás del otro, no uno mezclado con
       // el otro.
       if (formato === "shp") {
-        const nombrePoligono = `${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`;
+        const nombrePoligono = nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre);
         await exportarShapefileLotePoligono(lote.perimetro, origen, nombrePoligono);
       }
     } catch (e: any) {
@@ -204,7 +205,7 @@ export function VistaGeneral({
       await new Promise((resolve) => setTimeout(resolve, ESPERA_CIERRE_MODAL_MS));
       await exportarPlantillaExcel(
         puntos.map((p) => ({ linea: p.linea, puntoNum: p.puntoNum })),
-        `${lote.nombre}${establecimientoNombre ? " " + establecimientoNombre : ""}`
+        nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)
       );
     } catch (e: any) {
       Alert.alert("No se pudo descargar la planilla", e.message ?? String(e));

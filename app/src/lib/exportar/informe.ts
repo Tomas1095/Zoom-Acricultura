@@ -11,6 +11,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
 import { sanitizarNombreArchivo } from "./archivo";
+import { esMismoNombreLoteEstablecimiento } from "./nombres";
 
 // dosis/superficie quedan como TEXTO (lo que la persona tecleó tal cual),
 // no como number — si se guardara ya convertido, el campo controlado
@@ -163,7 +164,11 @@ export function construirInformeHtml({
   const encabezadoHtml = `<div class="encabezado">
     <div>
       <div class="eyebrow">INFORME TÉCNICO</div>
-      <h1>${escapeHtml(loteNombre)}${establecimientoNombre ? ` - ${escapeHtml(establecimientoNombre)}` : ""}</h1>
+      <h1>${escapeHtml(loteNombre)}${
+        establecimientoNombre && !esMismoNombreLoteEstablecimiento(loteNombre, establecimientoNombre)
+          ? ` - ${escapeHtml(establecimientoNombre)}`
+          : ""
+      }</h1>
     </div>
     ${LOGO_HTML}
   </div>`;
@@ -338,9 +343,10 @@ function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | und
   // usuario, los dos son igual de importantes. Se distingue del nombre del
   // lote solo por tipografía/color (itálica, dorado, el mismo acento que
   // ya usa el resto del documento), no por tamaño.
-  const establecimientoHtml = establecimientoNombre
-    ? ` <span style="font-size:0.55em;color:${NUEVO_DORADO};">–</span> <span style="font-style:italic;color:${NUEVO_DORADO};">${escapeHtml(establecimientoNombre)}</span>`
-    : "";
+  const establecimientoHtml =
+    establecimientoNombre && !esMismoNombreLoteEstablecimiento(loteNombre, establecimientoNombre)
+      ? ` <span style="font-size:0.55em;color:${NUEVO_DORADO};">–</span> <span style="font-style:italic;color:${NUEVO_DORADO};">${escapeHtml(establecimientoNombre)}</span>`
+      : "";
   // Mismo tamaño y mismo padding en las dos hojas (antes la hoja 2 achicaba
   // el encabezado) — a pedido del usuario, la "portada" se repite igual en
   // las dos.
