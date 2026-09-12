@@ -2,7 +2,6 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import Svg, { Line, Path } from "react-native-svg";
 import { Check, Navigation } from "lucide-react-native";
 
 import type { XY } from "@/lib/geo/geometria";
@@ -502,29 +501,10 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
   // Una lista de puntos-en-pantalla por pieza (ver `perimetro` — casi
   // siempre una sola pieza, más de una en un campo con lotes no
-  // contiguos).
+  // contiguos). Ya no se arma acá un `d` de SVG para el contorno — ver el
+  // comentario grande junto al contorno, más abajo, sobre por qué el SVG
+  // se sacó de los dos modos.
   const piezasPx = perimetro.map((pieza) => pieza.map((p) => toPx(p.x, p.y)));
-  // El relleno usa Path (M...L...Z, uno por pieza, todo en el mismo `d`)
-  // armado a mano con las mismas coordenadas — sirve para el área
-  // sombreada, pero el CONTORNO (lo que de verdad se está evaluando acá)
-  // se dibuja aparte, como líneas sueltas (ver más abajo): con datos
-  // reales de un lote real, tanto Polygon como Path (como un solo trazo
-  // con stroke) dejaban alguna arista sin dibujar — un bug de esta
-  // versión de react-native-svg al armar una figura de varios segmentos
-  // de una sola vez. Una <Line> por lado, cada una con sus 4 números
-  // sueltos (nada de texto para parsear), es lo más básico que se puede
-  // pedirle a la librería — si esto también falla, el problema no está en
-  // cómo se arma la figura.
-  const perimetroPath = piezasPx
-    .filter((pieza) => pieza.length > 0)
-    .map(
-      (pieza) =>
-        `M ${pieza[0].left},${pieza[0].top} L ${pieza
-          .slice(1)
-          .map((p) => `${p.left},${p.top}`)
-          .join(" L ")} Z`
-    )
-    .join(" ");
 
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
   // Mientras se está marcando el recorrido (no una vez confirmado — ver
@@ -549,116 +529,72 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     >
       <GestureDetector gesture={gestoCompuesto}>
         <Animated.View style={[{ position: "absolute", top: 0, left: 0, width: ancho, height: altoGrupo }, estiloAnimado]}>
-          {/* El width/height del SVG tienen que coincidir con el tamaño real
-              de esta vista (altoGrupo, no el `alto` de la pantalla) — si no
-              coinciden, el SVG reescala su contenido para "entrar" en el
-              tamaño real, desalineando el perímetro de los puntos (que se
-              posicionan aparte, con estilos normales, sin ese reescalado). */}
-          <Svg width={ancho} height={altoGrupo} style={{ position: "absolute", top: 0, left: 0 }}>
-            {/* El relleno sombreado (Path con fill) tenía el mismo problema
-                que el contorno — se veía "cortado" en franjas, con datos
-                reales de un lote real. El contorno con vistas comunes (ver
-                más abajo) ya se ve perfecto y es lo que de verdad importa
-                para saber si estás adentro o afuera, así que en modo
-                trabajo se saca el relleno en vez de seguir peleando con la
-                misma librería. Vista general sí lo mantiene — ahí nunca
-                dio problema. */}
-            {!pantallaCompleta && <Path d={perimetroPath} fill="rgba(59,143,92,0.08)" stroke="none" />}
-            {/* Vista general: el contorno con <Line> anda bien acá (lote
-                chico, sin la rotación grande de seguir rumbo) — se deja
-                como estaba. Un loop por pieza (el `(i+1) % length` de
-                adentro cierra CADA pieza sobre sí misma, nunca salta de
-                una pieza a la siguiente). */}
-            {!pantallaCompleta &&
-              piezasPx.map((piezaPx, pi) =>
-                piezaPx.map((a, i) => {
-                  const b = piezaPx[(i + 1) % piezaPx.length];
-                  return (
-                    <Line
-                      key={`lado-${pi}-${i}`}
-                      x1={a.left}
-                      y1={a.top}
-                      x2={b.left}
-                      y2={b.top}
-                      stroke={colors.primary}
-                      strokeWidth={1.5}
-                      strokeDasharray="4 3"
-                    />
-                  );
-                })
-              )}
-
-            {/* Recorrido personal — vista general nomás (en modo trabajo se
-                dibuja con vistas comunes más abajo, mismo motivo que el
-                perímetro: SVG con la rotación grande de seguir rumbo no
-                dibuja bien todos los tramos). */}
-            {!pantallaCompleta &&
-              miRutaPx.length > 1 &&
-              miRutaPx.slice(1).map((b, i) => {
-                const a = miRutaPx[i];
-                return (
-                  <Line
-                    key={`ruta-${i}`}
-                    x1={a.left}
-                    y1={a.top}
-                    x2={b.left}
-                    y2={b.top}
-                    stroke={colors.info}
-                    strokeWidth={2.5}
-                    strokeDasharray="7 6"
-                    strokeLinecap="round"
-                  />
-                );
-              })}
-          </Svg>
-
-          {/* Modo trabajo: el contorno se dibuja con vistas comunes (un
+          {/* El contorno del lote se dibuja con vistas comunes (un
               rectángulo finito por lado, rotado para calzar con el ángulo
-              de cada arista), no con SVG — ni <Polygon>, ni <Path>, ni
-              <Line> sueltas dibujaban bien las dos aristas que tocan un
-              vértice en particular, con datos reales de un lote real y la
-              rotación grande que aplica seguir el rumbo. Las vistas
-              comunes sí vienen andando perfecto en todo este mapa (los
-              puntos, "Yo", los marcadores de prueba), así que el contorno
-              pasa a usar el mismo mecanismo. */}
-          {pantallaCompleta &&
-            piezasPx.map((piezaPx, pi) =>
-              piezaPx.map((a, i) => {
-                const b = piezaPx[(i + 1) % piezaPx.length];
-                const dx = b.left - a.left;
-                const dy = b.top - a.top;
-                const longitud = Math.hypot(dx, dy);
-                const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
-                const grosor = 2.5;
-                return (
-                  <View
-                    key={`lado-${pi}-${i}`}
-                    style={{
-                      position: "absolute",
-                      left: (a.left + b.left) / 2 - longitud / 2,
-                      top: (a.top + b.top) / 2 - grosor / 2,
-                      width: longitud,
-                      height: grosor,
-                      backgroundColor: colors.primary,
-                      transform: [{ rotate: `${angulo}deg` }],
-                    }}
-                  />
-                );
-              })
-            )}
+              de cada arista), NO con SVG — dos motivos, uno viejo y uno
+              nuevo. El viejo (por el que ya se había pasado a esto en modo
+              trabajo): ni <Polygon>, ni <Path>, ni <Line> sueltas dibujaban
+              bien las dos aristas que tocan un vértice en particular, con
+              datos reales de un lote real y la rotación grande que aplica
+              seguir el rumbo. El nuevo (por el que ahora también se saca de
+              VISTA GENERAL, que hasta acá seguía con SVG): mezclar SVG con
+              vistas nativas comunes DENTRO del mismo grupo que se pellizca/
+              escala (ver estiloAnimado, más abajo) parece forzar a iOS a
+              componer todo ese grupo como una sola imagen ya renderizada
+              ANTES de aplicarle el zoom — en vez de tratar cada vista por
+              separado — lo que anula por completo el arreglo de nitidez de
+              cada punto (ver tamPuntoFinal, más abajo: sirve de nada
+              dibujar cada círculo ya a su tamaño final si el grupo ENTERO
+              se aplana a una imagen chica de todos modos). Sacando el SVG
+              de acá (en los dos modos, no solo en modo trabajo) el grupo
+              entero queda armado solo con vistas nativas, que sí vienen
+              nítidas a cualquier zoom en todo el resto del mapa (los
+              puntos, "Yo"), así que no hay motivo para que el contorno sea
+              la excepción.
+              Costo de este cambio: se pierde el sombreado verde clarito de
+              relleno que tenía el interior del lote en vista general (una
+              <Path> con fill, imposible de imitar con vistas comunes sin
+              mucho más código) — queda el contorno punteado nomás, igual
+              que ya tenía modo trabajo (ahí nunca hubo relleno, mismo
+              motivo). */}
+          {piezasPx.map((piezaPx, pi) =>
+            piezaPx.map((a, i) => {
+              const b = piezaPx[(i + 1) % piezaPx.length];
+              const dx = b.left - a.left;
+              const dy = b.top - a.top;
+              const longitud = Math.hypot(dx, dy);
+              const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
+              const grosor = pantallaCompleta ? 2.5 : 1.5;
+              return (
+                <View
+                  key={`lado-${pi}-${i}`}
+                  style={{
+                    position: "absolute",
+                    left: (a.left + b.left) / 2 - longitud / 2,
+                    top: (a.top + b.top) / 2 - grosor / 2,
+                    width: longitud,
+                    height: grosor,
+                    backgroundColor: colors.primary,
+                    transform: [{ rotate: `${angulo}deg` }],
+                  }}
+                />
+              );
+            })
+          )}
 
-          {/* Recorrido personal en modo trabajo — de solo lectura (se marca
-              y edita siempre desde vista general), mismas vistas comunes
-              rotadas que el perímetro. */}
-          {pantallaCompleta &&
-            miRutaPx.length > 1 &&
+          {/* Recorrido personal — mismas vistas comunes rotadas que el
+              perímetro, ahora en los dos modos por el mismo motivo de
+              arriba (antes solo modo trabajo tenía esto; vista general
+              seguía con <Line> de SVG). En modo trabajo sigue siendo de
+              solo lectura (se marca y edita siempre desde vista general). */}
+          {miRutaPx.length > 1 &&
             miRutaPx.slice(1).map((b, i) => {
               const a = miRutaPx[i];
               const dx = b.left - a.left;
               const dy = b.top - a.top;
               const longitud = Math.hypot(dx, dy);
               const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
-              const grosor = 3;
+              const grosor = pantallaCompleta ? 3 : 2.5;
               return (
                 <View
                   key={`ruta-${i}`}
