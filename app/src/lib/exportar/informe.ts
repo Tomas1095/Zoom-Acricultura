@@ -146,8 +146,11 @@ export function construirInformeHtml({
           </div>`;
         })
         .join("");
+      // Sin el nombre del lote acá arriba (antes `z.loteNombre`) — a
+      // pedido del usuario: el informe ya es de un solo lote (el del
+      // encabezado, más arriba), repetirlo en cada tarjeta era redundante
+      // (ver el comentario de zonaInicial en salidas-view.tsx).
       return `<div class="zonaCard">
-        <div class="zonaNombre">${escapeHtml(z.loteNombre || "Lote")}</div>
         ${productosHtml}
       </div>`;
     })
@@ -233,7 +236,6 @@ export function construirInformeHtml({
      se perdía un poco en el recuadro con tanto aire. */
   .zonaCard { border: 1px solid #EDE0B8; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid; }
   .zonaCard:last-of-type { margin-bottom: 0; }
-  .zonaNombre { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
   /* Nombre del producto arriba, cantidad justo debajo (no en el mismo
      renglón) — con un espacio más grande entre un producto y el
      siguiente para no confundirlos. */
@@ -275,11 +277,11 @@ export function construirInformeHtml({
     <div class="card">
       <div class="cardTitulo">Recomendación de aplicación de cebo</div>
       ${notaCebo && notaCebo.trim() ? `<div class="notaBox">${escapeHtml(notaCebo)}</div>` : ""}
-      ${zonasHtml || `<div class="vacio">Sin lotes cargados.</div>`}
+      ${zonasHtml || `<div class="vacio">Sin productos cargados.</div>`}
       ${
         resumen.length > 0
           ? `<div class="resumenBox">
-        <div class="resumenTitulo">Total a comprar</div>
+        <div class="resumenTitulo">Total producto a utilizar</div>
         ${resumenHtml}
       </div>`
           : ""
@@ -397,14 +399,16 @@ export function construirInformeHtmlNuevo({
       </div>`
         )
         .join("");
+      // Sin el nombre del lote acá arriba (antes `z.loteNombre`) — mismo
+      // motivo que en construirInformeHtml: es redundante con el
+      // encabezado del informe, que ya es de un solo lote.
       return `<div class="nLoteCard">
-        <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:5px;">${escapeHtml(z.loteNombre || "Lote")}</div>
         ${productos}
       </div>`;
     })
     .join("");
 
-  // "Total a comprar" pasa de una lista plana a una tira de tarjetas tipo
+  // "Total producto a utilizar" pasa de una lista plana a una tira de tarjetas tipo
   // indicador (nombre chico arriba, número grande abajo) — es el dato que
   // más le importa a la persona (cuánto tiene que comprar de cada cosa),
   // así que es lo que más debe saltar a la vista en toda la hoja.
@@ -449,7 +453,7 @@ export function construirInformeHtmlNuevo({
      queda pegado cerca (gap chico) en vez de estirado a todo el ancho. */
   .nProductoFila { display: flex; justify-content: flex-start; align-items: baseline; gap: 20px; padding: 10px 0; }
   .nVacio { font-size: 14.5px; color: ${NUEVO_MUTED}; }
-  /* Tira de tarjetas del resumen final ("Total a comprar") — una por
+  /* Tira de tarjetas del resumen final ("Total producto a utilizar") — una por
      producto, envuelve si no entran todas en una fila. */
   .nTotalTiles { display: flex; flex-wrap: wrap; gap: 12px; }
   .nTotalTile { flex: 1 1 160px; background: ${NUEVO_BANDA_BG}; border-radius: 11px; padding: 16px 18px; border-top: 3px solid ${NUEVO_DORADO}; }
@@ -475,12 +479,12 @@ export function construirInformeHtmlNuevo({
 
     ${nuevoSeccionLabel("Recomendación de aplicación de cebo", true)}
     ${notaCebo && notaCebo.trim() ? `<div style="font-size:13px;font-style:italic;color:${NUEVO_MUTED};line-height:1.6;margin-bottom:16px;">${escapeHtml(notaCebo)}</div>` : ""}
-    ${filasProductos || `<div class="nVacio">Sin lotes cargados.</div>`}
+    ${filasProductos || `<div class="nVacio">Sin productos cargados.</div>`}
 
     ${
       resumen.length > 0
         ? `<div style="margin-top:10px;">
-      <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:9px;">Total a comprar</div>
+      <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:9px;">Total producto a utilizar</div>
       <div class="nTotalTiles">${filasResumen}</div>
     </div>`
         : ""

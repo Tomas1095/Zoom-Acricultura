@@ -102,12 +102,21 @@ function limitarUnDecimal(valor: string): string {
   return resultado;
 }
 
+/** Antes se podían armar VARIAS de estas (una por lote, cada una con su
+ * propio nombre libre — "Agregar lote") para juntar en un mismo informe
+ * la recomendación de más de un lote a la vez. A pedido del usuario, esa
+ * idea se sacó: el informe ya es de UN solo lote (el del encabezado), así
+ * que repetir su nombre acá era redundante — ahora hay una sola de estas
+ * siempre, sin nombre propio (`loteNombre` queda vacío y ya no se
+ * muestra ni se edita en ningún lado, ver ZonaFila/informe.ts), y lo que
+ * la persona ve es directo la lista de productos. El campo se mantiene
+ * en el tipo `ZonaCebo` sin usar para no tener que tocar el resto de la
+ * cadena (resumenPorProducto, el PDF), pero no debería mostrarse en
+ * ningún lado — si en algún momento hace falta de nuevo, revisar los
+ * commits que sacan "Agregar lote"/`zonaNombre`. */
 function zonaInicial(lote: Lote): ZonaCebo {
   return {
     id: "1",
-    // En blanco a propósito — la persona escribe lo que quiera acá (el
-    // nombre del lote, una zona dentro del lote, lo que sea), no un lote
-    // elegido de una lista fija.
     loteNombre: "",
     // Dosis/superficie arrancan vacíos, no en 0 — la persona carga sus
     // propios números desde cero, sin nada que borrar antes.
@@ -238,9 +247,6 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
   const [notaCebo, setNotaCebo] = useState("");
   const [notaCeboVisible, setNotaCeboVisible] = useState(true);
 
-  function actualizarZonaNombre(id: string, valor: string) {
-    setZonas((zs) => zs.map((z) => (z.id === id ? { ...z, loteNombre: valor } : z)));
-  }
   // "producto" | "dosis" | "superficie" — la superficie va por producto,
   // no una sola compartida entre todos los productos del lote (dos
   // productos del mismo lote pueden cubrir superficies distintas).
@@ -274,12 +280,6 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
     setZonas((zs) =>
       zs.map((z) => (z.id === zonaId ? { ...z, productos: z.productos.filter((p) => p.id !== productoId) } : z))
     );
-  }
-  function agregarZona() {
-    setZonas((zs) => [...zs, { ...zonaInicial(lote), id: String(Date.now()) }]);
-  }
-  function quitarZona(id: string) {
-    setZonas((zs) => zs.filter((z) => z.id !== id));
   }
 
   const [exportando, setExportando] = useState<"pdf" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null>(null);
@@ -661,29 +661,21 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
               <ZonaFila
                 key={z.id}
                 zona={z}
-                onCambiarNombre={(v) => actualizarZonaNombre(z.id, v)}
                 onCambiarProducto={(prodId, campo, v) => actualizarProducto(z.id, prodId, campo, v)}
                 onAgregarProducto={() => agregarProducto(z.id)}
                 onQuitarProducto={(prodId) => quitarProducto(z.id, prodId)}
-                onQuitar={() => quitarZona(z.id)}
               />
             ))}
-            <View style={styles.agregarBotonesFila}>
-              {!notaCeboVisible && (
-                <Pressable style={[styles.agregarZonaBtn, styles.agregarBotonFlex]} onPress={() => setNotaCeboVisible(true)}>
-                  <Plus size={14} color={colors.primaryDark} />
-                  <Text style={styles.agregarZonaTexto}>Agregar cuadro de texto</Text>
-                </Pressable>
-              )}
-              <Pressable style={[styles.agregarZonaBtn, styles.agregarBotonFlex]} onPress={agregarZona}>
+            {!notaCeboVisible && (
+              <Pressable style={styles.agregarZonaBtn} onPress={() => setNotaCeboVisible(true)}>
                 <Plus size={14} color={colors.primaryDark} />
-                <Text style={styles.agregarZonaTexto}>Agregar lote</Text>
+                <Text style={styles.agregarZonaTexto}>Agregar cuadro de texto</Text>
               </Pressable>
-            </View>
+            )}
 
             {resumen.length > 0 && (
               <View style={styles.resumenBox}>
-                <Text style={styles.resumenTitulo}>Total a comprar</Text>
+                <Text style={styles.resumenTitulo}>Total producto a utilizar</Text>
                 {resumen.map((r) => (
                   <View key={r.producto} style={styles.resumenFila}>
                     <Text style={styles.resumenProducto}>{r.producto}</Text>
@@ -1019,18 +1011,6 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 8,
   },
-  zonaFilaSuperior: { flexDirection: "row", alignItems: "center", gap: 8 },
-  zonaNombreInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
-  },
   zonaQuitarBtn: { padding: 6 },
   productoFila: { gap: 6 },
   zonaProductoFilaSuperior: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -1085,8 +1065,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  agregarBotonesFila: { flexDirection: "row", gap: 8 },
-  agregarBotonFlex: { flex: 1 },
   agregarZonaBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1185,36 +1163,25 @@ const styles = StyleSheet.create({
 
 interface ZonaFilaProps {
   zona: ZonaCebo;
-  onCambiarNombre: (valor: string) => void;
   onCambiarProducto: (productoId: string, campo: "producto" | "dosis" | "superficie", valor: string) => void;
   onAgregarProducto: () => void;
   onQuitarProducto: (productoId: string) => void;
-  onQuitar: () => void;
 }
 
-/** Una fila = un lote (nombre libre, no una lista fija — se puede armar un
- * informe que junte varios lotes de un mismo establecimiento con nombres
- * cualquiera), con uno o más productos aplicados — cada uno con su propia
- * dosis Y su propia superficie (dos productos del mismo lote pueden cubrir
+/** Lista de productos aplicados para el lote de este informe — cada uno
+ * con su propia dosis Y su propia superficie (dos productos pueden cubrir
  * superficies distintas, no necesariamente el lote entero cada uno) —
  * portado y extendido de `ZonaFila` del prototipo (ahí solo había un
- * producto por zona, con una única superficie). */
-function ZonaFila({ zona, onCambiarNombre, onCambiarProducto, onAgregarProducto, onQuitarProducto, onQuitar }: ZonaFilaProps) {
+ * producto por zona, con una única superficie). Antes esto vivía dentro
+ * de una tarjeta con su propio nombre libre de lote (se podían agregar
+ * varias, para juntar más de un lote en un mismo informe) — a pedido del
+ * usuario esa idea se sacó (ver el comentario de `zonaInicial`, más
+ * arriba): el nombre del lote ya está en el encabezado del informe,
+ * repetirlo acá era redundante, así que ahora es directo la lista de
+ * productos, sin nombre ni forma de agregar otro lote. */
+function ZonaFila({ zona, onCambiarProducto, onAgregarProducto, onQuitarProducto }: ZonaFilaProps) {
   return (
     <View style={styles.zonaCard}>
-      <View style={styles.zonaFilaSuperior}>
-        <TextInput
-          style={styles.zonaNombreInput}
-          value={zona.loteNombre}
-          placeholder="Nombre del lote"
-          placeholderTextColor={colors.textMuted}
-          onChangeText={onCambiarNombre}
-        />
-        <Pressable style={styles.zonaQuitarBtn} onPress={onQuitar}>
-          <X size={13} color={colors.danger} />
-        </Pressable>
-      </View>
-
       {zona.productos.map((p, i) => (
         <ProductoFila
           key={p.id}
