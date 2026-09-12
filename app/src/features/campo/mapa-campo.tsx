@@ -471,9 +471,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // dibujan nítido) en vez de con un transform, que es lo que los
   // pixelaba. La rotación no tiene ese problema (rotar no pixela, solo
   // estirar/agrandar), así que sigue con Reanimated como siempre, en vivo.
+  // Suma, además de la contra-rotación de siempre, una contra-escala — ver
+  // el comentario grande junto a `tamPuntoFinal`, más abajo, en el .map()
+  // de puntos: mismo arreglo que el círculo, mismo motivo (número dibujado
+  // grande de una en vez de chico y después estirado). `zoomEfectivo` es
+  // un valor común a TODAS las etiquetas en un mismo render (no cambia de
+  // punto a punto), así que entra bien acá aunque este estilo se comparta
+  // entre todas (no se puede llamar useAnimatedStyle adentro del .map()).
   const estiloContraRotacionEtiqueta = useAnimatedStyle(() => {
     "worklet";
-    return { transform: [{ rotateZ: `${-rotacion.value}rad` }] };
+    return { transform: [{ rotateZ: `${-rotacion.value}rad` }, { scale: 1 / zoomEfectivo }] };
   });
 
   // Brújula fija en pantalla (la "N", ver JSX) — a pedido del usuario, para
@@ -834,12 +841,17 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     {marcadoEnRuta && <Check size={tamPuntoFinal * 0.6} color="#FFFFFF" strokeWidth={3} />}
                   </View>
                 </View>
-                {/* Mismo motivo que el círculo de arriba: vista nativa
-                    (Text), no SVG — ya sin la sombra puesta de más, un
-                    <Text> no se pixela con el zoom de vista general
-                    (`tamFuente` ya viene ajustado, amortiguado, contra el
-                    zoom asentado), y de paso evita el bug de SVG con la
-                    rotación de dos dedos, que vista general también tiene.
+                {/* Mismo motivo y misma técnica que el círculo de arriba
+                    (ver el comentario grande de `tamPuntoFinal`): el
+                    número se dibuja directo a su tamaño final en pantalla
+                    (fontSize × zoomEfectivo, siempre nítido) adentro de
+                    una vista chica que mantiene la posición/el ancho de
+                    siempre (`styles.puntoLabel`, sin tocar) — la
+                    contra-escala que lo trae de vuelta a su tamaño real va
+                    en `estiloContraRotacionEtiqueta`, junto con la
+                    contra-rotación que ya tenía. Vista nativa (Text), no
+                    SVG, por el mismo motivo que el círculo (bug de SVG con
+                    rotaciones grandes).
 
                     Si `mostrarEtiqueta` da false (el número, ya recortado
                     por su vecino más cercano, quedaría demasiado chico para
@@ -850,16 +862,17 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     acercando el zoom en esa zona puntual el número vuelve a
                     aparecer solo. */}
                 {mostrarEtiqueta && (
-                  <Animated.Text
-                    numberOfLines={1}
-                    style={[
-                      styles.puntoLabel,
-                      { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
-                      estiloContraRotacionEtiqueta,
-                    ]}
-                  >
-                    {p.id}
-                  </Animated.Text>
+                  <View style={[styles.puntoLabel, { top: tamPunto + 1, left: tamPunto / 2 - 20 }]}>
+                    <Animated.Text
+                      numberOfLines={1}
+                      style={[
+                        { color: colorEtiqueta, fontWeight: "700", textAlign: "center", fontSize: tamFuente * zoomEfectivo },
+                        estiloContraRotacionEtiqueta,
+                      ]}
+                    >
+                      {p.id}
+                    </Animated.Text>
+                  </View>
                 )}
               </Pressable>
             );
@@ -1068,11 +1081,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Ahora es el wrapper que mantiene la posición/el ancho de siempre —
+  // fontWeight/textAlign se movieron al <Animated.Text> de adentro (ver
+  // el comentario grande junto a `mostrarEtiqueta`, en el .map() de
+  // puntos), que es donde corresponden de verdad. alignItems/
+  // justifyContent centran ese texto (ahora dibujado más grande, para
+  // que no se pixele, y después contra-escalado) adentro de este mismo
+  // lugar de siempre.
   puntoLabel: {
     position: "absolute",
     width: 40,
-    fontWeight: "700",
-    textAlign: "center",
+    alignItems: "center",
+    justifyContent: "center",
   },
   yoMarker: {
     position: "absolute",
