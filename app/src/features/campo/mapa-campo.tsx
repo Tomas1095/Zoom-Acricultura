@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Svg, { Line, Path } from "react-native-svg";
 import { Check, Navigation } from "lucide-react-native";
 
 import type { XY } from "@/lib/geo/geometria";
@@ -245,36 +246,48 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // svg/Text terminan dibujando siempre es del tamaño final real en
   // pantalla — nítido a cualquier zoom.
   //
-  // Vista general tuvo, durante un tiempo, un tamaño AMORTIGUADO (crecía
-  // un poco con el zoom, no quedaba constante como en modo trabajo) — a
-  // pedido del usuario en su momento, para que el número no quedara chico
-  // en pellizcos fuertes. Ahora, a pedido del usuario otra vez (probando
-  // el arreglo de nitidez de modo trabajo, notó que acá seguía faltando:
-  // vista general también llega a 900% de zoom, y sin la cancelación
-  // completa el tamaño real de cada punto se hacía chico de más igual),
-  // los dos modos usan EXACTAMENTE la misma cuenta — cancelación total
-  // (`base / zoomEfectivo`), círculo/número siempre del mismo tamaño en
-  // pantalla sea cual sea el zoom, en los dos modos por igual. Si en algún
-  // momento hace falta volver a algo intermedio, la cuenta con exponente
-  // amortiguado (`Math.pow(zoomEfectivo, 1 - X)`) sigue en el historial de
-  // este archivo.
+  // El tamaño en pantalla crece con el zoom, pero AMORTIGUADO (no 1 a 1):
+  // a zoom bajo casi no se nota, a zoom alto sí crece bastante — así en
+  // una grilla densa recién separada (zoom bajo) los puntos no se
+  // agrandan tanto como para pisarse entre ellos de nuevo, pero en un
+  // pellizco fuerte (varios cientos por ciento, campos grandes) el número
+  // sigue siendo chico en TÉRMINOS RELATIVOS y se vuelve difícil de leer
+  // si se lo deja fijo — el usuario lo pidió así después de confirmar que
+  // ya no se pixela ni se ve estirado a ningún zoom.
+  // CRECIMIENTO_ZOOM (exponente) controla cuánto: 0 = tamaño constante
+  // (lo de antes), 1 = crece exactamente proporcional al zoom (por eso
+  // haría falta un tamaño real MENOR cuanto más lejos esté el zoom de 1x,
+  // para terminar en el tamaño final ya amortiguado — de ahí el exponente
+  // `1 - CRECIMIENTO_ZOOM` en vez de dividir directo por zoomEfectivo).
+  const CRECIMIENTO_ZOOM = 0.35;
+  // Con `NIVELES_ZOOM[nivelZoomIndex]` acá (en vez de un `1` fijo), esta
+  // cuenta usa el zoom REAL de modo trabajo — hace falta para dos cosas:
+  // que "mostrarEtiqueta" (más abajo, en el .map() de puntos) sepa cuándo
+  // un número vuelve a entrar al acercar con los botones +/- en una zona
+  // densa, y para el contra-escalado de tamPuntoBase, justo abajo.
   const zoomEfectivo = pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado;
+  const amortiguador = Math.pow(zoomEfectivo, 1 - CRECIMIENTO_ZOOM);
   // "Base": el tamaño que tendría cada punto si no hubiera vecinos cerca —
   // el tope real, por vecino más cercano, se aplica más abajo (dentro del
   // .map() de puntos, ver tamPuntoTope) porque es DISTINTO para cada punto.
   //
-  // El círculo de "Yo" (ver yoMarker, más abajo) tiene un tamaño FIJO en
-  // pantalla (24px en modo trabajo, vive afuera del grupo que se escala,
-  // ver estiloYoArrastrado) — dividir acá por `zoomEfectivo` cancela
-  // exactamente la multiplicación que aplica después el transform `scale`
-  // del grupo entero (ver estiloAnimado): el tamaño FINAL en pantalla de
-  // un punto suelto (sin vecinos cerca que lo recorten) da siempre el
-  // mismo valor, constante a cualquier zoom. El recorte por vecino más
-  // cercano (tamPuntoTope) sigue funcionando igual arriba de esto: en una
-  // zona densa, un punto puede terminar más chico (nunca más grande) —
-  // así que esto pasa a ser el techo, no un tamaño fijo.
-  const tamPuntoBase = (pantallaCompleta ? 24 : 18) / zoomEfectivo;
-  const tamFuenteBase = (pantallaCompleta ? 11 : 8.5) / zoomEfectivo;
+  // En modo trabajo, a pedido del usuario: el círculo de "Yo" (ver
+  // yoMarker, más abajo) tiene un tamaño FIJO en pantalla (24px, nunca
+  // cambia con el zoom — vive afuera del grupo que se escala, ver
+  // estiloYoArrastrado) y los puntos se veían desproporcionados al lado
+  // — chicos "Yo" y enormes los círculos apenas acercabas, porque el
+  // tamaño real de un punto (acá) quedaba fijo en 24 mientras el
+  // transform `scale` del grupo entero (ver estiloAnimado) lo agrandaba
+  // 1 a 1 con el zoom. Dividiendo acá por `zoomEfectivo` se cancela
+  // exactamente esa multiplicación: el tamaño FINAL en pantalla de un
+  // punto suelto (sin vecinos cerca que lo recorten) da siempre 24,
+  // constante a cualquier zoom — igual que "Yo", sea cual sea el % en el
+  // que estés. El recorte por vecino más cercano (tamPuntoTope) sigue
+  // funcionando igual arriba de esto: en una zona densa, un punto puede
+  // terminar más chico que 24 (nunca más grande) — así que 24 pasa a ser
+  // el techo, no un tamaño fijo.
+  const tamPuntoBase = pantallaCompleta ? 24 / zoomEfectivo : 18 / amortiguador;
+  const tamFuenteBase = pantallaCompleta ? 11 / zoomEfectivo : 8.5 / amortiguador;
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
@@ -458,16 +471,9 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // dibujan nítido) en vez de con un transform, que es lo que los
   // pixelaba. La rotación no tiene ese problema (rotar no pixela, solo
   // estirar/agrandar), así que sigue con Reanimated como siempre, en vivo.
-  // Suma, además de la contra-rotación de siempre, una contra-escala — ver
-  // el comentario grande junto a `tamPuntoFinal`, más abajo, en el .map()
-  // de puntos: mismo arreglo que el círculo, mismo motivo (número dibujado
-  // grande de una en vez de chico y después estirado). `zoomEfectivo` es
-  // un valor común a TODAS las etiquetas en un mismo render (no cambia de
-  // punto a punto), así que entra bien acá aunque este estilo se comparta
-  // entre todas (no se puede llamar useAnimatedStyle adentro del .map()).
   const estiloContraRotacionEtiqueta = useAnimatedStyle(() => {
     "worklet";
-    return { transform: [{ rotateZ: `${-rotacion.value}rad` }, { scale: 1 / zoomEfectivo }] };
+    return { transform: [{ rotateZ: `${-rotacion.value}rad` }] };
   });
 
   // Brújula fija en pantalla (la "N", ver JSX) — a pedido del usuario, para
@@ -501,10 +507,29 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
   // Una lista de puntos-en-pantalla por pieza (ver `perimetro` — casi
   // siempre una sola pieza, más de una en un campo con lotes no
-  // contiguos). Ya no se arma acá un `d` de SVG para el contorno — ver el
-  // comentario grande junto al contorno, más abajo, sobre por qué el SVG
-  // se sacó de los dos modos.
+  // contiguos).
   const piezasPx = perimetro.map((pieza) => pieza.map((p) => toPx(p.x, p.y)));
+  // El relleno usa Path (M...L...Z, uno por pieza, todo en el mismo `d`)
+  // armado a mano con las mismas coordenadas — sirve para el área
+  // sombreada, pero el CONTORNO (lo que de verdad se está evaluando acá)
+  // se dibuja aparte, como líneas sueltas (ver más abajo): con datos
+  // reales de un lote real, tanto Polygon como Path (como un solo trazo
+  // con stroke) dejaban alguna arista sin dibujar — un bug de esta
+  // versión de react-native-svg al armar una figura de varios segmentos
+  // de una sola vez. Una <Line> por lado, cada una con sus 4 números
+  // sueltos (nada de texto para parsear), es lo más básico que se puede
+  // pedirle a la librería — si esto también falla, el problema no está en
+  // cómo se arma la figura.
+  const perimetroPath = piezasPx
+    .filter((pieza) => pieza.length > 0)
+    .map(
+      (pieza) =>
+        `M ${pieza[0].left},${pieza[0].top} L ${pieza
+          .slice(1)
+          .map((p) => `${p.left},${p.top}`)
+          .join(" L ")} Z`
+    )
+    .join(" ");
 
   const posMi = miPos ? toPx(miPos.x, miPos.y) : null;
   // Mientras se está marcando el recorrido (no una vez confirmado — ver
@@ -529,72 +554,116 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     >
       <GestureDetector gesture={gestoCompuesto}>
         <Animated.View style={[{ position: "absolute", top: 0, left: 0, width: ancho, height: altoGrupo }, estiloAnimado]}>
-          {/* El contorno del lote se dibuja con vistas comunes (un
-              rectángulo finito por lado, rotado para calzar con el ángulo
-              de cada arista), NO con SVG — dos motivos, uno viejo y uno
-              nuevo. El viejo (por el que ya se había pasado a esto en modo
-              trabajo): ni <Polygon>, ni <Path>, ni <Line> sueltas dibujaban
-              bien las dos aristas que tocan un vértice en particular, con
-              datos reales de un lote real y la rotación grande que aplica
-              seguir el rumbo. El nuevo (por el que ahora también se saca de
-              VISTA GENERAL, que hasta acá seguía con SVG): mezclar SVG con
-              vistas nativas comunes DENTRO del mismo grupo que se pellizca/
-              escala (ver estiloAnimado, más abajo) parece forzar a iOS a
-              componer todo ese grupo como una sola imagen ya renderizada
-              ANTES de aplicarle el zoom — en vez de tratar cada vista por
-              separado — lo que anula por completo el arreglo de nitidez de
-              cada punto (ver tamPuntoFinal, más abajo: sirve de nada
-              dibujar cada círculo ya a su tamaño final si el grupo ENTERO
-              se aplana a una imagen chica de todos modos). Sacando el SVG
-              de acá (en los dos modos, no solo en modo trabajo) el grupo
-              entero queda armado solo con vistas nativas, que sí vienen
-              nítidas a cualquier zoom en todo el resto del mapa (los
-              puntos, "Yo"), así que no hay motivo para que el contorno sea
-              la excepción.
-              Costo de este cambio: se pierde el sombreado verde clarito de
-              relleno que tenía el interior del lote en vista general (una
-              <Path> con fill, imposible de imitar con vistas comunes sin
-              mucho más código) — queda el contorno punteado nomás, igual
-              que ya tenía modo trabajo (ahí nunca hubo relleno, mismo
-              motivo). */}
-          {piezasPx.map((piezaPx, pi) =>
-            piezaPx.map((a, i) => {
-              const b = piezaPx[(i + 1) % piezaPx.length];
-              const dx = b.left - a.left;
-              const dy = b.top - a.top;
-              const longitud = Math.hypot(dx, dy);
-              const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
-              const grosor = pantallaCompleta ? 2.5 : 1.5;
-              return (
-                <View
-                  key={`lado-${pi}-${i}`}
-                  style={{
-                    position: "absolute",
-                    left: (a.left + b.left) / 2 - longitud / 2,
-                    top: (a.top + b.top) / 2 - grosor / 2,
-                    width: longitud,
-                    height: grosor,
-                    backgroundColor: colors.primary,
-                    transform: [{ rotate: `${angulo}deg` }],
-                  }}
-                />
-              );
-            })
-          )}
+          {/* El width/height del SVG tienen que coincidir con el tamaño real
+              de esta vista (altoGrupo, no el `alto` de la pantalla) — si no
+              coinciden, el SVG reescala su contenido para "entrar" en el
+              tamaño real, desalineando el perímetro de los puntos (que se
+              posicionan aparte, con estilos normales, sin ese reescalado). */}
+          <Svg width={ancho} height={altoGrupo} style={{ position: "absolute", top: 0, left: 0 }}>
+            {/* El relleno sombreado (Path con fill) tenía el mismo problema
+                que el contorno — se veía "cortado" en franjas, con datos
+                reales de un lote real. El contorno con vistas comunes (ver
+                más abajo) ya se ve perfecto y es lo que de verdad importa
+                para saber si estás adentro o afuera, así que en modo
+                trabajo se saca el relleno en vez de seguir peleando con la
+                misma librería. Vista general sí lo mantiene — ahí nunca
+                dio problema. */}
+            {!pantallaCompleta && <Path d={perimetroPath} fill="rgba(59,143,92,0.08)" stroke="none" />}
+            {/* Vista general: el contorno con <Line> anda bien acá (lote
+                chico, sin la rotación grande de seguir rumbo) — se deja
+                como estaba. Un loop por pieza (el `(i+1) % length` de
+                adentro cierra CADA pieza sobre sí misma, nunca salta de
+                una pieza a la siguiente). */}
+            {!pantallaCompleta &&
+              piezasPx.map((piezaPx, pi) =>
+                piezaPx.map((a, i) => {
+                  const b = piezaPx[(i + 1) % piezaPx.length];
+                  return (
+                    <Line
+                      key={`lado-${pi}-${i}`}
+                      x1={a.left}
+                      y1={a.top}
+                      x2={b.left}
+                      y2={b.top}
+                      stroke={colors.primary}
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
+                    />
+                  );
+                })
+              )}
 
-          {/* Recorrido personal — mismas vistas comunes rotadas que el
-              perímetro, ahora en los dos modos por el mismo motivo de
-              arriba (antes solo modo trabajo tenía esto; vista general
-              seguía con <Line> de SVG). En modo trabajo sigue siendo de
-              solo lectura (se marca y edita siempre desde vista general). */}
-          {miRutaPx.length > 1 &&
+            {/* Recorrido personal — vista general nomás (en modo trabajo se
+                dibuja con vistas comunes más abajo, mismo motivo que el
+                perímetro: SVG con la rotación grande de seguir rumbo no
+                dibuja bien todos los tramos). */}
+            {!pantallaCompleta &&
+              miRutaPx.length > 1 &&
+              miRutaPx.slice(1).map((b, i) => {
+                const a = miRutaPx[i];
+                return (
+                  <Line
+                    key={`ruta-${i}`}
+                    x1={a.left}
+                    y1={a.top}
+                    x2={b.left}
+                    y2={b.top}
+                    stroke={colors.info}
+                    strokeWidth={2.5}
+                    strokeDasharray="7 6"
+                    strokeLinecap="round"
+                  />
+                );
+              })}
+          </Svg>
+
+          {/* Modo trabajo: el contorno se dibuja con vistas comunes (un
+              rectángulo finito por lado, rotado para calzar con el ángulo
+              de cada arista), no con SVG — ni <Polygon>, ni <Path>, ni
+              <Line> sueltas dibujaban bien las dos aristas que tocan un
+              vértice en particular, con datos reales de un lote real y la
+              rotación grande que aplica seguir el rumbo. Las vistas
+              comunes sí vienen andando perfecto en todo este mapa (los
+              puntos, "Yo", los marcadores de prueba), así que el contorno
+              pasa a usar el mismo mecanismo. */}
+          {pantallaCompleta &&
+            piezasPx.map((piezaPx, pi) =>
+              piezaPx.map((a, i) => {
+                const b = piezaPx[(i + 1) % piezaPx.length];
+                const dx = b.left - a.left;
+                const dy = b.top - a.top;
+                const longitud = Math.hypot(dx, dy);
+                const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
+                const grosor = 2.5;
+                return (
+                  <View
+                    key={`lado-${pi}-${i}`}
+                    style={{
+                      position: "absolute",
+                      left: (a.left + b.left) / 2 - longitud / 2,
+                      top: (a.top + b.top) / 2 - grosor / 2,
+                      width: longitud,
+                      height: grosor,
+                      backgroundColor: colors.primary,
+                      transform: [{ rotate: `${angulo}deg` }],
+                    }}
+                  />
+                );
+              })
+            )}
+
+          {/* Recorrido personal en modo trabajo — de solo lectura (se marca
+              y edita siempre desde vista general), mismas vistas comunes
+              rotadas que el perímetro. */}
+          {pantallaCompleta &&
+            miRutaPx.length > 1 &&
             miRutaPx.slice(1).map((b, i) => {
               const a = miRutaPx[i];
               const dx = b.left - a.left;
               const dy = b.top - a.top;
               const longitud = Math.hypot(dx, dy);
               const angulo = (Math.atan2(dy, dx) * 180) / Math.PI;
-              const grosor = pantallaCompleta ? 3 : 2.5;
+              const grosor = 3;
               return (
                 <View
                   key={`ruta-${i}`}
@@ -651,34 +720,6 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             // que importa para decidir si el número, ya en pantalla, se
             // puede leer o no.
             const mostrarEtiqueta = tamFuente * zoomEfectivo >= UMBRAL_LEGIBLE_PX;
-            // Tamaño real en pantalla del círculo (después de que el grupo
-            // entero se escale con el zoom, ver estiloAnimado/scale.value)
-            // — a pedido del usuario, que mandó capturas mostrando el
-            // círculo pixelado/"comido" por el borde a mucho zoom en modo
-            // trabajo. La causa: a zoom alto `tamPunto` (el tamaño ANTES
-            // de esa escala) se hace chiquito a propósito (para que el
-            // círculo, ya escalado, dé siempre ~24px) — pero el sistema
-            // dibuja la vista nativa a ESE tamaño chico de verdad (unos
-            // pocos píxeles físicos) y RECIÉN DESPUÉS la estira con la
-            // transformación del grupo: estirar algo dibujado tan chico es
-            // lo que se ve pixelado/en bloques. Y el borde (fijo, 2-3px)
-            // quedaba multiplicado por el mismo zoom, comiéndose el
-            // círculo entero a partir de cierto punto.
-            //
-            // Se arregla dibujando el círculo directo a SU TAMAÑO FINAL en
-            // pantalla (tamPuntoFinal) — nítido, porque el sistema lo
-            // dibuja grande de una — y contrarrestando la transformación
-            // del grupo con una propia, inversa (`transform: scale(1 /
-            // zoomEfectivo)`), puesta en esta misma vista. Las dos
-            // transformaciones (la del grupo y esta) se combinan en una
-            // sola antes de dibujar nada en pantalla (no es "dibujar,
-            // agrandar, volver a achicar" en pasos separados), así que el
-            // resultado final es matemáticamente idéntico a como se veía
-            // antes en el resto del zoom — nada más cambia CÓMO se llega
-            // ahí, evitando el paso intermedio (dibujar chico) que
-            // pixelaba. El resto de la lógica (tamPunto en sí, la
-            // posición, el área de toque) sigue exactamente igual.
-            const tamPuntoFinal = tamPunto * zoomEfectivo;
             return (
               <Pressable
                 key={p.id}
@@ -725,13 +766,11 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     toque, que mantiene su tamaño/posición real siempre) —
                     en vista general, `tamPunto` ya viene ajustado (amortiguado,
                     no 1 a 1) contra el zoom asentado (ver el comentario de
-                    tamPunto/tamFuente más arriba). El único transform de
-                    más que sí lleva (ver `tamPuntoFinal`/`transform` en el
-                    style, abajo) es a propósito, para dibujar el círculo
-                    nítido a cualquier zoom — sin eso, acercar con el
-                    pellizco agranda el círculo tanto como separa los
-                    puntos entre sí, y con una grilla densa terminan
-                    tapándose igual por más zoom que se haga.
+                    tamPunto/tamFuente más arriba), así que acá no hace falta
+                    ningún transform de más: sin eso, acercar con el pellizco
+                    agranda el círculo tanto como separa los puntos entre sí,
+                    y con una grilla densa terminan tapándose igual por más
+                    zoom que se haga.
 
                     Vista nativa (borderRadius/backgroundColor/borderWidth),
                     no SVG, en los dos modos — se había probado con SVG acá
@@ -743,39 +782,31 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     dos dedos, no solo pellizcar. Una vista nativa con
                     borderRadius no tiene ese problema (son propiedades que
                     dibuja el sistema directo, no una imagen que se pueda
-                    corromper con la rotación) — y sin la sombra puesta de
-                    más (ver estilo `punto`, arriba), sumado al
-                    "dibujar-a-tamaño-final" de acá abajo (ver
-                    `tamPuntoFinal`, más arriba), tampoco se pixela con el
-                    zoom, así que no hacía falta el SVG para nada. */}
+                    corromper con la rotación) — y ya sin la sombra puesta
+                    de más (ver estilo `punto`, arriba) tampoco se pixela
+                    con el zoom, así que no hacía falta el SVG para nada. */}
                 <View style={[styles.puntoCirculo, { width: tamPunto, height: tamPunto }]}>
                   <View
                     style={{
-                      width: tamPuntoFinal,
-                      height: tamPuntoFinal,
-                      borderRadius: tamPuntoFinal / 2,
+                      width: tamPunto,
+                      height: tamPunto,
+                      borderRadius: tamPunto / 2,
                       backgroundColor: colorFondo,
                       borderColor: colorBorde,
                       borderWidth: pantallaCompleta ? 3 : 2,
                       alignItems: "center",
                       justifyContent: "center",
-                      transform: [{ scale: 1 / zoomEfectivo }],
                     }}
                   >
-                    {marcadoEnRuta && <Check size={tamPuntoFinal * 0.6} color="#FFFFFF" strokeWidth={3} />}
+                    {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
                   </View>
                 </View>
-                {/* Mismo motivo y misma técnica que el círculo de arriba
-                    (ver el comentario grande de `tamPuntoFinal`): el
-                    número se dibuja directo a su tamaño final en pantalla
-                    (fontSize × zoomEfectivo, siempre nítido) adentro de
-                    una vista chica que mantiene la posición/el ancho de
-                    siempre (`styles.puntoLabel`, sin tocar) — la
-                    contra-escala que lo trae de vuelta a su tamaño real va
-                    en `estiloContraRotacionEtiqueta`, junto con la
-                    contra-rotación que ya tenía. Vista nativa (Text), no
-                    SVG, por el mismo motivo que el círculo (bug de SVG con
-                    rotaciones grandes).
+                {/* Mismo motivo que el círculo de arriba: vista nativa
+                    (Text), no SVG — ya sin la sombra puesta de más, un
+                    <Text> no se pixela con el zoom de vista general
+                    (`tamFuente` ya viene ajustado, amortiguado, contra el
+                    zoom asentado), y de paso evita el bug de SVG con la
+                    rotación de dos dedos, que vista general también tiene.
 
                     Si `mostrarEtiqueta` da false (el número, ya recortado
                     por su vecino más cercano, quedaría demasiado chico para
@@ -786,17 +817,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     acercando el zoom en esa zona puntual el número vuelve a
                     aparecer solo. */}
                 {mostrarEtiqueta && (
-                  <View style={[styles.puntoLabel, { top: tamPunto + 1, left: tamPunto / 2 - 20 }]}>
-                    <Animated.Text
-                      numberOfLines={1}
-                      style={[
-                        { color: colorEtiqueta, fontWeight: "700", textAlign: "center", fontSize: tamFuente * zoomEfectivo },
-                        estiloContraRotacionEtiqueta,
-                      ]}
-                    >
-                      {p.id}
-                    </Animated.Text>
-                  </View>
+                  <Animated.Text
+                    numberOfLines={1}
+                    style={[
+                      styles.puntoLabel,
+                      { color: colorEtiqueta, fontSize: tamFuente, top: tamPunto + 1, left: tamPunto / 2 - 20 },
+                      estiloContraRotacionEtiqueta,
+                    ]}
+                  >
+                    {p.id}
+                  </Animated.Text>
                 )}
               </Pressable>
             );
@@ -1005,18 +1035,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Ahora es el wrapper que mantiene la posición/el ancho de siempre —
-  // fontWeight/textAlign se movieron al <Animated.Text> de adentro (ver
-  // el comentario grande junto a `mostrarEtiqueta`, en el .map() de
-  // puntos), que es donde corresponden de verdad. alignItems/
-  // justifyContent centran ese texto (ahora dibujado más grande, para
-  // que no se pixele, y después contra-escalado) adentro de este mismo
-  // lugar de siempre.
   puntoLabel: {
     position: "absolute",
     width: 40,
-    alignItems: "center",
-    justifyContent: "center",
+    fontWeight: "700",
+    textAlign: "center",
   },
   yoMarker: {
     position: "absolute",
