@@ -511,6 +511,14 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // que ya se recorta cualquier otro contenido que se sale al girar/hacer
   // zoom.
   const altoGrupo = pantallaCompleta ? anclaY * 2 : alto;
+  // Margen extra alrededor de la caja del SVG del contorno (vista general
+  // — ver el comentario grande junto al <Svg>, en el JSX) — con el zoom
+  // horneado en la posición (toPx, más arriba), un vértice que arranca en
+  // el borde mismo del recuadro puede terminar, al zoom máximo
+  // (ZOOM_MAX_VISTA_GENERAL), varias veces más lejos del centro que el
+  // recuadro original. Multiplicar por ese mismo techo de zoom cubre ese
+  // peor caso con comodidad.
+  const margenSvg = Math.max(ancho, altoGrupo) * ZOOM_MAX_VISTA_GENERAL;
   const estiloAnimado = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
@@ -613,12 +621,36 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
     >
       <GestureDetector gesture={gestoCompuesto}>
         <Animated.View style={[{ position: "absolute", top: 0, left: 0, width: ancho, height: altoGrupo }, estiloAnimado]}>
-          {/* El width/height del SVG tienen que coincidir con el tamaño real
-              de esta vista (altoGrupo, no el `alto` de la pantalla) — si no
-              coinciden, el SVG reescala su contenido para "entrar" en el
-              tamaño real, desalineando el perímetro de los puntos (que se
-              posicionan aparte, con estilos normales, sin ese reescalado). */}
-          <Svg width={ancho} height={altoGrupo} style={{ position: "absolute", top: 0, left: 0 }}>
+          {/* El width/height "de base" del SVG tienen que coincidir con el
+              tamaño real de esta vista (altoGrupo, no el `alto` de la
+              pantalla) — si no coinciden, el SVG reescala su contenido
+              para "entrar" en el tamaño real, desalineando el perímetro de
+              los puntos (que se posicionan aparte, con estilos normales,
+              sin ese reescalado).
+              `margenSvg`: a diferencia de los puntos (que sólo pintan un
+              puñado de vistas comunes, sin caja propia — la única que
+              recorta es `contenedor`, más abajo), el SVG SÍ recorta su
+              propio contenido en su propio borde — con el zoom horneado
+              en la posición de cada punto (ver toPx, más arriba) las
+              esquinas del contorno del lote, a mucho zoom, terminan MUY
+              lejos de esta caja (`ancho`×`altoGrupo`) y quedaban cortadas.
+              Se agranda la caja del SVG bastante más allá de lo que
+              cualquier zoom real puede llegar a necesitar (con
+              ZOOM_MAX_VISTA_GENERAL de margen, para cubrir con comodidad
+              el peor caso: un vértice en el borde mismo del recuadro,
+              pellizcado hasta el tope) y se la recentra con `viewBox`, así
+              las coordenadas de `piezasPx`/`miRutaPx` (que no cambian)
+              siguen cayendo en el mismo lugar de siempre — la única
+              diferencia es que ahora hay margen de sobra alrededor antes
+              de que algo se corte. El recorte real y visible en pantalla
+              lo sigue haciendo `contenedor` (una vista común, sin este
+              problema), así que agrandar esto no muestra nada de más. */}
+          <Svg
+            width={ancho + 2 * margenSvg}
+            height={altoGrupo + 2 * margenSvg}
+            viewBox={`${-margenSvg} ${-margenSvg} ${ancho + 2 * margenSvg} ${altoGrupo + 2 * margenSvg}`}
+            style={{ position: "absolute", top: -margenSvg, left: -margenSvg }}
+          >
             {/* El relleno sombreado (Path con fill) tenía el mismo problema
                 que el contorno — se veía "cortado" en franjas, con datos
                 reales de un lote real. El contorno con vistas comunes (ver
