@@ -168,14 +168,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // puntos esto es una cuenta trivial para el dispositivo, así que no hace
   // falta nada más sofisticado (una grilla en cuadrantes, etc.).
   //
-  // La cuenta clave (por qué el tope de tamaño NO depende del zoom actual,
-  // solo de esta distancia): tanto el círculo como la separación entre
-  // puntos en pantalla se multiplican por el MISMO factor cuando el grupo
-  // entero se escala (ver estiloAnimado/scale.value) — entonces, si el
-  // tamaño "real" (antes de esa escala) de un punto nunca supera una
-  // fracción fija de la distancia "real" a su vecino, esa proporción se
-  // mantiene sin importar cuánto se acerque o aleje el zoom: los círculos
-  // JAMÁS se llegan a tocar, en vez de solo "tocarse menos" a más zoom.
+  // La cuenta clave (por qué el tope de tamaño mantiene la MISMA
+  // proporción sea cual sea el zoom, ver el `* zoomEfectivo` en el tope,
+  // más abajo en el .map() de puntos): tanto el círculo como la
+  // separación entre puntos en pantalla se multiplican por el MISMO
+  // factor de zoom (uno viene horneado en la posición — ver toPx, más
+  // abajo — el otro en este mismo tope) — entonces, si el tamaño de un
+  // punto nunca supera una fracción fija de la distancia (ya en pantalla,
+  // a ese zoom) a su vecino, esa proporción se mantiene sin importar
+  // cuánto se acerque o aleje el zoom: los círculos JAMÁS se llegan a
+  // tocar, en vez de solo "tocarse menos" a más zoom.
   const distanciaVecinoPorId = useMemo(() => {
     const mapa = new Map<string, number>();
     for (let i = 0; i < puntos.length; i++) {
@@ -202,24 +204,56 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   const anclaX = ancho / 2;
   const anclaY = alto * 0.72; // como en cualquier GPS de navegación: más lote "adelante" que "atrás"
 
+  // El zoom (una vez asentado — ver `zoomAsentado`/`nivelZoomIndex`, justo
+  // abajo) ya viene HORNEADO acá adentro, en la POSICIÓN real de cada
+  // punto — no es más algo que se le aplica después con un transform. Ver
+  // el comentario grande, más abajo, junto a `pinch`/`irANivelZoom`, que
+  // explica el motivo (probado en un dispositivo real: dejar el zoom
+  // como una transformación pegada — aunque sea matemáticamente
+  // "cancelada" por otra transformación puesta a propósito en el círculo/
+  // número, ver el historial de este archivo — se ve peor cuanto más lejos
+  // esté el zoom de 1x, no mejor).
+  //
+  // `pivoteX`/`pivoteY`: el pellizco (o los botones +/- de modo trabajo)
+  // siempre agrandó/achicó alrededor del CENTRO de este grupo (el `scale`
+  // de `estiloAnimado`, más abajo, pivotea ahí por default — ver ese
+  // comentario) — para que hornear el zoom acá (adentro de `toPx`, justo
+  // debajo) se vea IDÉNTICO a como se veía con la transformación en vivo,
+  // el cálculo tiene que crecer/achicarse alrededor de ese MISMO punto. En
+  // modo trabajo ese centro YA es el ancla (anclaX/anclaY, más arriba);
+  // en vista general es el centro geométrico del recuadro (ancho/2,
+  // alto/2 — ahí `altoGrupo`, más abajo, coincide con `alto` a secas).
+  const pivoteX = anclaX;
+  const pivoteY = pantallaCompleta ? anclaY : alto / 2;
+
   function toPx(xm: number, ym: number): { left: number; top: number } {
+    let left: number, top: number;
     if (pantallaCompleta) {
       if (!miPos) return { left: anclaX, top: anclaY };
-      return { left: anclaX + (xm - miPos.x) * baseScale, top: anclaY + (ym - miPos.y) * baseScale };
+      left = anclaX + (xm - miPos.x) * baseScale;
+      top = anclaY + (ym - miPos.y) * baseScale;
+    } else {
+      left = MAP_PAD + (xm - bounds.minX) * baseScale;
+      top = MAP_PAD + (ym - bounds.minY) * baseScale;
     }
-    return { left: MAP_PAD + (xm - bounds.minX) * baseScale, top: MAP_PAD + (ym - bounds.minY) * baseScale };
+    return {
+      left: pivoteX + (left - pivoteX) * zoomEfectivo,
+      top: pivoteY + (top - pivoteY) * zoomEfectivo,
+    };
   }
 
   // Espejo en React state del zoom ya asentado (no el que se mueve en vivo
   // mientras pellizcás — ver `scale`, más abajo, junto al resto de los
-  // gestos) — un `useAnimatedStyle` no sirve acá porque lo que hace falta
-  // es que React vuelva a RENDERIZAR el círculo/número a su tamaño real
-  // nuevo (ver tamPunto/tamFuente, justo abajo), no que les aplique un
-  // transform de más. Mientras estás pellizcando el círculo/número quedan
-  // con el tamaño del último zoom ya asentado (un poco estirados por el
-  // zoom en vivo, nada distinto de cualquier foto que agrandás con dos
-  // dedos) — apenas soltás, éste se actualiza (ver pinch.onEnd) y quedan
-  // nítidos de nuevo.
+  // gestos). Mientras estás pellizcando, la POSICIÓN/TAMAÑO real de cada
+  // punto quedan con el zoom ya asentado (`toPx`/`tamPunto`, ver más
+  // abajo) — el pellizco en sí se ve como una transformación en vivo sobre
+  // ESE layout (ver `scale`/`estiloAnimado`, un poco más abajo), nada
+  // distinto de cualquier foto que agrandás con dos dedos. Apenas soltás
+  // (ver pinch.onEnd), el zoom nuevo se HORNEA acá (React vuelve a
+  // calcular posiciones/tamaños reales para el zoom nuevo) y la
+  // transformación en vivo se lleva de nuevo a su estado neutro — recién
+  // ahí queda nítido de nuevo, porque en reposo NO hay ninguna
+  // transformación de escala aplicada, todos son valores reales.
   const [zoomAsentado, setZoomAsentado] = useState(1);
 
   // Índice actual dentro de NIVELES_ZOOM (solo modo trabajo, con los
@@ -232,62 +266,26 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   const indiceZoomRef = useRef(NIVEL_ZOOM_INICIAL);
   const [nivelZoomIndex, setNivelZoomIndex] = useState(NIVEL_ZOOM_INICIAL);
 
-  // Tamaño REAL (no un transform) del círculo/número — ver `zoomAsentado`
-  // más arriba, que es la razón de todo esto: si el zoom del pellizco crece
-  // (hasta 9x) y el tamaño se ajusta con un transform de Reanimated en vez
-  // de con esto, react-native-svg/Text dibujan el círculo/número UNA vez a
-  // su tamaño base y esa imagen ya dibujada es la que se estira con el
-  // zoom — así, cuanto más lejos esté el zoom de 1x, más se nota que es
-  // una imagen estirada, no algo dibujado de nuevo a upa una resolución
-  // más alta (mismo motivo por el que pasaba esto tanto con vistas nativas
-  // como con SVG — cualquiera de las dos termina siendo una imagen ya
-  // dibujada por dentro). Achicando el tamaño REAL en la misma proporción
-  // en que el zoom lo va a agrandar (tamBase/zoom), lo que react-native-
-  // svg/Text terminan dibujando siempre es del tamaño final real en
-  // pantalla — nítido a cualquier zoom.
-  //
-  // El tamaño en pantalla crece con el zoom, pero AMORTIGUADO (no 1 a 1):
-  // a zoom bajo casi no se nota, a zoom alto sí crece bastante — así en
-  // una grilla densa recién separada (zoom bajo) los puntos no se
-  // agrandan tanto como para pisarse entre ellos de nuevo, pero en un
-  // pellizco fuerte (varios cientos por ciento, campos grandes) el número
-  // sigue siendo chico en TÉRMINOS RELATIVOS y se vuelve difícil de leer
-  // si se lo deja fijo — el usuario lo pidió así después de confirmar que
-  // ya no se pixela ni se ve estirado a ningún zoom.
-  // CRECIMIENTO_ZOOM (exponente) controla cuánto: 0 = tamaño constante
-  // (lo de antes), 1 = crece exactamente proporcional al zoom (por eso
-  // haría falta un tamaño real MENOR cuanto más lejos esté el zoom de 1x,
-  // para terminar en el tamaño final ya amortiguado — de ahí el exponente
-  // `1 - CRECIMIENTO_ZOOM` en vez de dividir directo por zoomEfectivo).
-  const CRECIMIENTO_ZOOM = 0.35;
-  // Con `NIVELES_ZOOM[nivelZoomIndex]` acá (en vez de un `1` fijo), esta
-  // cuenta usa el zoom REAL de modo trabajo — hace falta para dos cosas:
-  // que "mostrarEtiqueta" (más abajo, en el .map() de puntos) sepa cuándo
-  // un número vuelve a entrar al acercar con los botones +/- en una zona
-  // densa, y para el contra-escalado de tamPuntoBase, justo abajo.
+  // Zoom real actual — modo trabajo lo saca de NIVELES_ZOOM (botones +/-),
+  // vista general de `zoomAsentado` (pellizco, ya asentado). Se usa acá
+  // para el recorte por vecino más cercano (ver tamPunto, en el .map() de
+  // puntos) y en `toPx`, más arriba.
   const zoomEfectivo = pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado;
-  const amortiguador = Math.pow(zoomEfectivo, 1 - CRECIMIENTO_ZOOM);
   // "Base": el tamaño que tendría cada punto si no hubiera vecinos cerca —
   // el tope real, por vecino más cercano, se aplica más abajo (dentro del
-  // .map() de puntos, ver tamPuntoTope) porque es DISTINTO para cada punto.
-  //
-  // En modo trabajo, a pedido del usuario: el círculo de "Yo" (ver
-  // yoMarker, más abajo) tiene un tamaño FIJO en pantalla (24px, nunca
-  // cambia con el zoom — vive afuera del grupo que se escala, ver
-  // estiloYoArrastrado) y los puntos se veían desproporcionados al lado
-  // — chicos "Yo" y enormes los círculos apenas acercabas, porque el
-  // tamaño real de un punto (acá) quedaba fijo en 24 mientras el
-  // transform `scale` del grupo entero (ver estiloAnimado) lo agrandaba
-  // 1 a 1 con el zoom. Dividiendo acá por `zoomEfectivo` se cancela
-  // exactamente esa multiplicación: el tamaño FINAL en pantalla de un
-  // punto suelto (sin vecinos cerca que lo recorten) da siempre 24,
-  // constante a cualquier zoom — igual que "Yo", sea cual sea el % en el
-  // que estés. El recorte por vecino más cercano (tamPuntoTope) sigue
+  // .map() de puntos, ver tamPunto) porque es DISTINTO para cada punto.
+  // Ya NO se divide por zoomEfectivo acá (antes sí, en dos intentos
+  // distintos que terminaron ambos peor de lo que estaban — ver el
+  // historial de este archivo y el comentario grande junto a `toPx`, más
+  // arriba): como el zoom ahora se hornea en la POSICIÓN de cada punto, el
+  // tamaño del círculo/número puede ser directamente el valor final
+  // deseado en pantalla, constante a cualquier zoom (24px en modo
+  // trabajo, igual que "Yo" — ver yoMarker, más abajo; 18px en vista
+  // general) — el recorte por vecino más cercano (ver tamPunto) sigue
   // funcionando igual arriba de esto: en una zona densa, un punto puede
-  // terminar más chico que 24 (nunca más grande) — así que 24 pasa a ser
-  // el techo, no un tamaño fijo.
-  const tamPuntoBase = pantallaCompleta ? 24 / zoomEfectivo : 18 / amortiguador;
-  const tamFuenteBase = pantallaCompleta ? 11 / zoomEfectivo : 8.5 / amortiguador;
+  // terminar más chico (nunca más grande).
+  const tamPuntoBase = pantallaCompleta ? 24 : 18;
+  const tamFuenteBase = pantallaCompleta ? 11 : 8.5;
   const colorBorderPendiente = pantallaCompleta ? colors.text : colors.warning;
   const colorFillCompleto = pantallaCompleta ? "#6FCF5C" : colors.primaryConfirm;
   const colorBorderCompleto = pantallaCompleta ? colors.text : colors.primary;
@@ -301,8 +299,17 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
   // ---- Gestos: pinch (zoom, solo vista general) + pan (arrastrar) +
   // rotación con 2 dedos ----
+  // `scale`: YA NO es "el zoom actual" en reposo (antes sí, ver el
+  // historial) — ahora sólo se usa como transformación TRANSITORIA,
+  // mientras el zoom nuevo todavía no terminó de hornearse en las
+  // posiciones/tamaños reales (ver toPx/tamPunto, más arriba). En reposo
+  // vale 1 (ninguna transformación de escala aplicada) — ver el
+  // comentario grande junto a `pinch`, más abajo, con el detalle de por
+  // qué y cómo. Ya no hace falta un "savedScale" aparte (antes lo había,
+  // para acumular el pellizco entre gestos) — la base contra la que se
+  // pellizca ahora es directamente `zoomAsentado`/`nivelZoomIndex`
+  // (siempre al día, siempre el zoom real ya horneado).
   const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const savedTranslateX = useSharedValue(0);
@@ -320,8 +327,19 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   }
 
   function restablecer() {
+    // El destino es 1x — la proporción entre el zoom actual (ya horneado
+    // en las posiciones/tamaños reales) y ese destino es, justamente, el
+    // propio zoom actual (ver el comentario grande junto a `pinch`, más
+    // abajo, con el detalle completo de esta cuenta). Arrancar `scale`
+    // ahí y animarlo a 1 se ve como una transición suave de "achicarse
+    // hasta volver a 1x" — exactamente lo mismo que se veía antes, sólo
+    // que ahora, en cuanto la animación llega a 1, no queda pixelado:
+    // React ya actualizó (ver setZoomAsentado/setNivelZoomIndex, abajo)
+    // las posiciones/tamaños reales al destino, así que a partir de ahí
+    // no hay ninguna transformación de escala de más aplicada.
+    const zoomActual = pantallaCompleta ? NIVELES_ZOOM[nivelZoomIndex] : zoomAsentado;
+    scale.value = zoomActual;
     scale.value = withTiming(1);
-    savedScale.value = 1;
     translateX.value = withTiming(0);
     savedTranslateX.value = 0;
     translateY.value = withTiming(0);
@@ -337,11 +355,20 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
 
   function irANivelZoom(indice: number) {
     const clamped = Math.max(0, Math.min(NIVELES_ZOOM.length - 1, indice));
+    const actual = NIVELES_ZOOM[indiceZoomRef.current];
+    const destino = NIVELES_ZOOM[clamped];
     indiceZoomRef.current = clamped;
+    // Ver el comentario grande junto a `pinch`, más abajo: acá también el
+    // zoom nuevo ya queda horneado (este `setNivelZoomIndex` hace que
+    // toPx/tamPunto recalculen posiciones/tamaños reales al nuevo nivel),
+    // y `scale` sólo sirve para la SENSACIÓN de transición animada — arranca
+    // en la proporción vieja/nueva (coincide exacto con cómo se veía el
+    // frame anterior) y se anima hasta 1, momento en el que el transform
+    // deja de sumar nada sobre el layout ya recalculado: ahí el render
+    // vuelve a ser 100% nativo, nítido a cualquier zoom.
+    scale.value = actual / destino;
+    scale.value = withTiming(1);
     setNivelZoomIndex(clamped);
-    const nuevaEscala = NIVELES_ZOOM[clamped];
-    scale.value = withTiming(nuevaEscala);
-    savedScale.value = nuevaEscala;
     // A propósito NO se llama avisarInteraccion acá — acercar/alejar con
     // los botones no tiene que pausar el seguimiento de rumbo ni mostrar
     // "Volver a mi marcha", que era justo la queja con el pellizco.
@@ -388,22 +415,54 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   // así que acá directamente no hay gesto de pinch que pueda pisar el
   // seguimiento de rumbo por accidente (era el reclamo: pellizcar
   // disparaba "Volver a mi marcha" sin querer).
+  //
+  // Probado en un dispositivo real (los dos modos): dejar el zoom
+  // aplicado como una transformación en vivo TODO el tiempo — aunque en
+  // el círculo/número se ponga, a propósito, una segunda transformación
+  // que la cancele matemáticamente (se probaron dos variantes de esto en
+  // esta misma sesión) — se ve CADA VEZ PEOR cuanto más lejos esté el
+  // zoom de 1x, arrancando desde zooms bastante bajos (130-140%). La
+  // composición de transformaciones (por más que el resultado matemático
+  // sea "neutro") no se termina dibujando nítido en este dispositivo/
+  // versión de React Native — algo que solo se pudo confirmar probando
+  // en un celular real, no leyendo el código.
+  //
+  // El cambio de fondo: en reposo (dedos sueltos, sin pellizcar) el zoom
+  // ya NO es una transformación — está HORNEADO directo en la posición y
+  // el tamaño reales de cada punto (ver toPx/tamPunto, más arriba),
+  // recalculados por React con el zoom nuevo apenas soltás los dedos
+  // (ver onEnd, acá abajo). En ese momento no queda NINGUNA
+  // transformación de escala puesta sobre nada — el sistema dibuja cada
+  // círculo/número de una, ya a su tamaño/posición final, sin componer
+  // nada — así no hay margen para que se pixele, sea cual sea el zoom.
+  //
+  // `scale` (ver más arriba) pasa a usarse solo DURANTE el pellizco en
+  // sí (para que se sienta en vivo, con los dedos) — `e.scale` de
+  // react-native-gesture-handler ya viene como la proporción respecto al
+  // COMIENZO del gesto (arranca en 1 y crece/achica desde ahí), que es
+  // justo la proporción respecto al último zoom ya asentado (la base de
+  // ahora en más es siempre `zoomAsentado`, no un "savedScale" propio) —
+  // por eso no hace falta multiplicar por nada más. Al soltar los dedos,
+  // se calcula el zoom nuevo (zoomAsentado × la proporción del pellizco)
+  // y se manda a React (setZoomAsentado) para que hornee las posiciones/
+  // tamaños reales — `scale` se resetea a 1 en el mismo instante: como el
+  // pellizco YA terminó justo en ese punto (nada sigue animándose), no
+  // hay salto visible, sólo pasa de "transformación en vivo" a "valores
+  // reales ya recalculados", que dan exactamente lo mismo en pantalla.
   const pinch = Gesture.Pinch()
     .enabled(!pantallaCompleta)
     .onUpdate((e) => {
       "worklet";
-      const nuevo = savedScale.value * e.scale;
-      scale.value = Math.min(ZOOM_MAX_VISTA_GENERAL, Math.max(ZOOM_MIN, nuevo));
+      const minRatio = ZOOM_MIN / zoomAsentado;
+      const maxRatio = ZOOM_MAX_VISTA_GENERAL / zoomAsentado;
+      scale.value = Math.min(maxRatio, Math.max(minRatio, e.scale));
     })
     .onEnd(() => {
       "worklet";
-      savedScale.value = scale.value;
+      const nuevoZoom = Math.min(ZOOM_MAX_VISTA_GENERAL, Math.max(ZOOM_MIN, zoomAsentado * scale.value));
+      scale.value = 1;
       runOnJS(avisarInteraccion)();
-      // Recién ACÁ (al soltar, no en cada frame del pellizco) se
-      // actualiza el zoom asentado — ver el comentario de `zoomAsentado`
-      // más arriba, es lo que dispara volver a dibujar el círculo/número
-      // nítidos a su tamaño real nuevo.
-      runOnJS(setZoomAsentado)(scale.value);
+      runOnJS(setZoomAsentado)(nuevoZoom);
     });
 
   const pan = Gesture.Pan()
@@ -705,21 +764,26 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
             // que la fracción permitida de la distancia real a su vecino.
             // dVecino === Infinity (un solo punto en toda la grilla, sin
             // nadie más cerca) deja pasar el tamaño base sin tocar nada.
+            // Ahora multiplicado por zoomEfectivo (antes no hacía falta):
+            // como la posición de cada punto ya viene horneada con el zoom
+            // (ver toPx, más arriba), la distancia EN PANTALLA a un vecino
+            // también crece con el zoom — este tope tiene que reflejar esa
+            // distancia real, no la de 1x.
             const dVecino = distanciaVecinoPorId.get(p.id) ?? Infinity;
             const tamPunto = Number.isFinite(dVecino)
-              ? Math.min(tamPuntoBase, Math.max(3, FRACCION_MAX_CIRCULO * dVecino * baseScale))
+              ? Math.min(tamPuntoBase, Math.max(3, FRACCION_MAX_CIRCULO * dVecino * baseScale * zoomEfectivo))
               : tamPuntoBase;
             // La letra se achica en la misma proporción que el círculo, así
             // el número sigue "calzando" adentro/al lado del círculo como
             // siempre.
             const tamFuente = tamFuenteBase * (tamPunto / tamPuntoBase);
-            // Legibilidad en pantalla de VERDAD: acá se multiplica por
-            // zoomEfectivo porque tamFuente es el tamaño ANTES de que el
-            // grupo entero se escale con el zoom actual (ver
-            // estiloAnimado/scale.value) — es esa multiplicación final la
-            // que importa para decidir si el número, ya en pantalla, se
-            // puede leer o no.
-            const mostrarEtiqueta = tamFuente * zoomEfectivo >= UMBRAL_LEGIBLE_PX;
+            // Legibilidad en pantalla de VERDAD — ya NO hace falta
+            // multiplicar por zoomEfectivo acá (antes sí: tamFuente era un
+            // tamaño "antes" de que el grupo entero se escalara con el
+            // zoom, ver el historial). Ahora tamFuente YA es el tamaño
+            // final real en pantalla (el zoom viene horneado más arriba,
+            // en tamPunto), así que se compara directo contra el umbral.
+            const mostrarEtiqueta = tamFuente >= UMBRAL_LEGIBLE_PX;
             return (
               <Pressable
                 key={p.id}
@@ -764,13 +828,16 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
               >
                 {/* El círculo va en una vista aparte (adentro del área de
                     toque, que mantiene su tamaño/posición real siempre) —
-                    en vista general, `tamPunto` ya viene ajustado (amortiguado,
-                    no 1 a 1) contra el zoom asentado (ver el comentario de
-                    tamPunto/tamFuente más arriba), así que acá no hace falta
-                    ningún transform de más: sin eso, acercar con el pellizco
-                    agranda el círculo tanto como separa los puntos entre sí,
-                    y con una grilla densa terminan tapándose igual por más
-                    zoom que se haga.
+                    `tamPunto` ya es directamente el tamaño FINAL deseado en
+                    pantalla (ver el comentario grande de tamPuntoBase, más
+                    arriba: el zoom viene horneado en la posición, no hace
+                    falta cancelar nada acá) así que esta vista no lleva
+                    ningún transform — se dibuja nativo, nítido, a
+                    cualquier zoom. Sin el recorte por vecino más cercano
+                    (ver dVecino, más arriba) el círculo se agrandaría
+                    tanto como separa a los puntos entre sí y, en una
+                    grilla densa, terminarían tapándose igual por más zoom
+                    que se haga — por eso el tope, no por esto.
 
                     Vista nativa (borderRadius/backgroundColor/borderWidth),
                     no SVG, en los dos modos — se había probado con SVG acá
@@ -801,12 +868,13 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
                     {marcadoEnRuta && <Check size={tamPunto * 0.6} color="#FFFFFF" strokeWidth={3} />}
                   </View>
                 </View>
-                {/* Mismo motivo que el círculo de arriba: vista nativa
-                    (Text), no SVG — ya sin la sombra puesta de más, un
-                    <Text> no se pixela con el zoom de vista general
-                    (`tamFuente` ya viene ajustado, amortiguado, contra el
-                    zoom asentado), y de paso evita el bug de SVG con la
-                    rotación de dos dedos, que vista general también tiene.
+                {/* Mismo motivo que el círculo de arriba: `tamFuente` ya
+                    es el tamaño final real en pantalla (el zoom viene
+                    horneado en la posición, no en un transform), así que
+                    tampoco lleva ningún transform de escala — Vista
+                    nativa (Text), no SVG, de paso evita el bug de SVG con
+                    la rotación de dos dedos, que vista general también
+                    tiene.
 
                     Si `mostrarEtiqueta` da false (el número, ya recortado
                     por su vecino más cercano, quedaría demasiado chico para
@@ -1029,8 +1097,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   // El área de toque (`punto`, arriba) mantiene el tamaño/posición real
-  // siempre; este círculo visual va adentro, ya con el tamaño ajustado
-  // (amortiguado) contra el zoom (ver tamPunto, más arriba).
+  // siempre; este círculo visual va adentro, ya con el tamaño final real
+  // en pantalla (ver tamPunto, más arriba — el zoom viene horneado ahí,
+  // no en un transform).
   puntoCirculo: {
     alignItems: "center",
     justifyContent: "center",
