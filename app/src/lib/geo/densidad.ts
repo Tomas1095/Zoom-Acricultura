@@ -18,7 +18,7 @@
 // prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
-import { intersection as interseccionPoligonos, union as unionPoligonos } from "polygon-clipping";
+import { intersection as interseccionPoligonos } from "polygon-clipping";
 import type { XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
@@ -200,12 +200,23 @@ export function calcularCeldasDensidad(
   // Formato que espera polygon-clipping: un Polygon es una lista de
   // anillos (Ring[]), el primero el contorno exterior — acá siempre un
   // solo anillo, sin agujeros propios (los agujeros del lote, si los hay,
-  // ya vienen resueltos como el "entrante" de la pieza misma). Unión de
-  // TODAS las piezas en un solo MultiPolygon — ver el comentario de arriba
-  // sobre por qué el recorte va contra esto y no contra la pieza de cada
-  // punto en particular.
+  // ya vienen resueltos como el "entrante" de la pieza misma).
+  //
+  // Antes esto se pasaba por `unionPoligonos()` para fusionar todas las
+  // piezas en un solo MultiPolygon antes de recortar — pero esa fusión
+  // previa no hace falta para que el recorte salga bien: `intersection()`
+  // ya trata una lista de piezas simples como "la unión de todas" de por
+  // sí (es la semántica normal de un MultiPolygon para estas operaciones
+  // booleanas), se toquen entre sí o no. Y ese `union()` de entrada podía
+  // tirar una excepción con ciertas geometrías reales (perímetros con
+  // muchos vértices y esquinas casi colineales, típico de un lote
+  // importado de KMZ) — como el cálculo entero estaba en un único
+  // try/catch (ver quien llama a esta función), una excepción ahí tiraba
+  // abajo el mapa COMPLETO: ni un cuadradito, ni siquiera en los puntos
+  // con datos bien arriba de cero. Sacando el paso de unión de acá se
+  // evita ese disparador sin cambiar el resultado (las piezas, unidas o
+  // no, cubren la misma área a los fines del recorte).
   const piezasPoly: Tupla[][][] = piezasValidas.map((pz) => [pz.map((v): Tupla => [v.x, v.y])]);
-  const piezasUnion = unionPoligonos(piezasPoly[0], ...piezasPoly.slice(1));
 
   const celdas: CeldaDensidad[] = [];
   puntos.forEach((p, i) => {
@@ -221,21 +232,31 @@ export function calcularCeldasDensidad(
       if (d < dVecino) dVecino = d;
     }
 
-    const celdaPoly: Tupla[][] = [celda as Tupla[]];
-    const interseccion = Number.isFinite(dVecino)
-      ? interseccionPoligonos(celdaPoly, piezasUnion, [circulo(p.x, p.y, dVecino * FACTOR_RADIO_MAXIMO)])
-      : interseccionPoligonos(celdaPoly, piezasUnion);
-    interseccion.forEach((poligono, r) => {
-      const anilloExterior = poligono[0]; // sin agujeros propios en este caso, ver arriba
-      if (!anilloExterior || anilloExterior.length < 3) return;
-      celdas.push({
-        id: interseccion.length > 1 ? `${p.id}-${r}` : p.id,
-        poligono: anilloExterior.map(([x, y]) => ({ x, y })),
-        valorM2: p.valor,
-        nivel: clasificarNivel(p.valor, rangos),
-        cargado: p.cargado ?? true,
+    // Cada celda se recorta por separado, con su propio try/catch: si
+    // `polygon-clipping` tropieza con la geometría puntual de ESTE punto
+    // (dos puntos casi pegados, una celda casi degenerada), se salta solo
+    // esa celda en vez de perder el mapa entero — antes un solo punto
+    // problemático (de 130, en un caso real) podía dejar la pantalla
+    // completamente vacía.
+    try {
+      const celdaPoly: Tupla[][] = [celda as Tupla[]];
+      const interseccion = Number.isFinite(dVecino)
+        ? interseccionPoligonos(celdaPoly, piezasPoly, [circulo(p.x, p.y, dVecino * FACTOR_RADIO_MAXIMO)])
+        : interseccionPoligonos(celdaPoly, piezasPoly);
+      interseccion.forEach((poligono, r) => {
+        const anilloExterior = poligono[0]; // sin agujeros propios en este caso, ver arriba
+        if (!anilloExterior || anilloExterior.length < 3) return;
+        celdas.push({
+          id: interseccion.length > 1 ? `${p.id}-${r}` : p.id,
+          poligono: anilloExterior.map(([x, y]) => ({ x, y })),
+          valorM2: p.valor,
+          nivel: clasificarNivel(p.valor, rangos),
+          cargado: p.cargado ?? true,
+        });
       });
-    });
+    } catch (e) {
+      console.warn(`calcularCeldasDensidad: se salteó la celda del punto ${p.id}`, e);
+    }
   });
   return celdas;
 }
