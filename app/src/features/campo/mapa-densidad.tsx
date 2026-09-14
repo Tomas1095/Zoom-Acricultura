@@ -142,6 +142,16 @@ export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDen
   // oscuros de siempre.
   const mostrandoSatelital = !!satUrl && satelitalOk;
   const colorPerimetro = mostrandoSatelital ? "#FFFFFF" : colors.primaryDark;
+  // Borde de cada celda del Voronoi: a propósito NO usa `colorPerimetro`.
+  // Ese contrasta contra la FOTO (blanco sobre satelital, verde oscuro
+  // sobre fondo liso) — pero el borde de una celda queda pegado contra
+  // el RELLENO de la celda de al lado (nunca se ve la foto ahí, el
+  // relleno es opaco), y el primer rango (0-30) se pinta blanco. En modo
+  // satelital `colorPerimetro` también es blanco, así que quedaba blanco
+  // sobre blanco de nuevo — el mismo bug de antes, corrido a este modo.
+  // Un verde oscuro fijo, en los dos modos, sí se distingue del relleno
+  // blanco (y del resto de la paleta, que es todo tonos cálidos).
+  const colorBordeCelda = colors.primaryDark;
   const colorTexto = mostrandoSatelital ? "#FFFFFF" : colors.text;
   const sombraTexto = mostrandoSatelital
     ? { textShadowColor: "rgba(0,0,0,0.65)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }
@@ -158,25 +168,21 @@ export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDen
         />
       )}
       <Svg width={ancho} height={alto} style={{ position: "absolute", top: 0, left: 0 }}>
-        {/* `stroke` iba con `colors.surface` (blanco) — a pedido del
-            usuario: con un lote de densidad muy baja (todo el primer
-            rango, 0-30, que se pinta blanco — ver NIVEL_COLORES_BICHO/
-            BABOSA) el borde quedaba del MISMO blanco que el relleno, y
-            casi el mismo que el fondo de la pantalla (colors.background)
-            — el resultado se veía como si no hubiera ningún cuadradito
-            dibujado, en vez de "está todo bien, densidad baja en todo el
-            lote". Reusa `colorPerimetro` (ya calculado arriba para el
-            contorno del lote, que ya resuelve el mismo problema de fondo
-            variable: blanco sobre la foto satelital, verde oscuro sobre
-            el fondo liso) — así el borde de cada celda SIEMPRE se
-            distingue de su propio relleno y del fondo, sea cual sea el
+        {/* `stroke` iba con `colors.surface` (blanco) — con un lote de
+            densidad muy baja (todo el primer rango, 0-30, que se pinta
+            blanco — ver NIVEL_COLORES_BICHO/BABOSA) el borde quedaba del
+            MISMO blanco que el relleno, y el resultado se veía como si no
+            hubiera ningún cuadradito dibujado. `colorBordeCelda` es un
+            verde oscuro fijo (no depende de si hay foto satelital de
+            fondo o no — ver el comentario donde se define, arriba) que
+            siempre se distingue del relleno de la celda, sea cual sea el
             nivel/color que le toque. */}
         {celdas.map((c) => (
           <Polygon
             key={c.id}
             points={c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
             fill={nivelColores[c.nivel]}
-            stroke={colorPerimetro}
+            stroke={colorBordeCelda}
             strokeWidth={0.25}
           />
         ))}

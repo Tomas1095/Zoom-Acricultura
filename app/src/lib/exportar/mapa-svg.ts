@@ -90,16 +90,22 @@ export function construirMapaDensidadHtml(
     celdas = [];
   }
 
-  // El borde iba fijo en blanco — mismo problema y mismo arreglo que en
-  // pantalla (ver mapa-densidad.tsx): con densidad baja (primer rango,
+  // El borde iba fijo en blanco — con densidad baja (primer rango,
   // pintado blanco) el borde quedaba del mismo blanco que el relleno, y
   // las celdas se veían como si no estuvieran dibujadas en el PDF.
-  // `colorPerimetro` (ya calculado arriba, blanco sobre la foto satelital
-  // / oscuro sobre fondo liso) se distingue siempre del relleno.
+  // OJO: acá NO se puede reusar `colorPerimetro` como arreglo (a
+  // diferencia del contorno del lote, que sí lo usa un poco más abajo)
+  // — `colorPerimetro` es blanco cuando hay foto satelital de fondo, y
+  // el borde de una celda queda pegado contra el RELLENO opaco de la
+  // celda de al lado (nunca contra la foto), así que en modo satelital
+  // quedaba blanco sobre blanco de nuevo. Un verde oscuro fijo, en los
+  // dos modos, sí se distingue del relleno blanco (y del resto de la
+  // paleta, que es todo tonos cálidos).
+  const colorBordeCelda = "#155C35";
   const poligonos = celdas
     .map(
       (c) =>
-        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="${colorPerimetro}" stroke-width="0.25" />`
+        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="${colorBordeCelda}" stroke-width="0.25" />`
     )
     .join("");
 
