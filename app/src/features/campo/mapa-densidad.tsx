@@ -149,9 +149,14 @@ export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDen
   // relleno es opaco), y el primer rango (0-30) se pinta blanco. En modo
   // satelital `colorPerimetro` también es blanco, así que quedaba blanco
   // sobre blanco de nuevo — el mismo bug de antes, corrido a este modo.
-  // Un verde oscuro fijo, en los dos modos, sí se distingue del relleno
-  // blanco (y del resto de la paleta, que es todo tonos cálidos).
-  const colorBordeCelda = colors.primaryDark;
+  // `colors.borderStrong` (el dorado/tostado que ya usa la app para
+  // bordes marcados) es fijo en los dos modos, se distingue siempre del
+  // relleno blanco y del resto de la paleta — probamos primero
+  // `colors.primaryDark` (verde oscuro) pero con 130+ celdas juntas se
+  // leía como una cuadrícula negra encima de todo, mucho más marcada de
+  // lo que hacía falta para simplemente separar una celda de la
+  // siguiente.
+  const colorBordeCelda = colors.borderStrong;
   const colorTexto = mostrandoSatelital ? "#FFFFFF" : colors.text;
   const sombraTexto = mostrandoSatelital
     ? { textShadowColor: "rgba(0,0,0,0.65)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }
@@ -183,7 +188,7 @@ export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDen
             points={c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
             fill={nivelColores[c.nivel]}
             stroke={colorBordeCelda}
-            strokeWidth={0.25}
+            strokeWidth={0.12}
           />
         ))}
 

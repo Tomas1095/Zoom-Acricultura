@@ -98,14 +98,16 @@ export function construirMapaDensidadHtml(
   // — `colorPerimetro` es blanco cuando hay foto satelital de fondo, y
   // el borde de una celda queda pegado contra el RELLENO opaco de la
   // celda de al lado (nunca contra la foto), así que en modo satelital
-  // quedaba blanco sobre blanco de nuevo. Un verde oscuro fijo, en los
-  // dos modos, sí se distingue del relleno blanco (y del resto de la
-  // paleta, que es todo tonos cálidos).
-  const colorBordeCelda = "#155C35";
+  // quedaba blanco sobre blanco de nuevo. "#D9C078" (colors.borderStrong,
+  // el dorado/tostado que ya usa la app para bordes marcados) es fijo en
+  // los dos modos y se distingue siempre del relleno — un verde oscuro
+  // fijo (probado primero) se leía como una cuadrícula negra encima de
+  // todo con muchas celdas juntas, mismo criterio que en mapa-densidad.tsx.
+  const colorBordeCelda = "#D9C078";
   const poligonos = celdas
     .map(
       (c) =>
-        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="${colorBordeCelda}" stroke-width="0.25" />`
+        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="${colorBordeCelda}" stroke-width="0.12" />`
     )
     .join("");
 
