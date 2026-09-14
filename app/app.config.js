@@ -12,12 +12,15 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.1 (no solo el buildNumber, que ya se incrementa solo
-    // vía EAS) para esta segunda entrega — Apple cierra el "tren" de una
-    // versión ya aprobada (acá, la 1.0.0) para nuevos builds: hace falta
-    // subir esto a mano cada vez que se manda una actualización real a
-    // revisión (no en los builds de preview, que nunca llegan a Apple).
-    version: "1.0.1",
+    // Subida a 1.0.2 (no solo el buildNumber, que ya se incrementa solo
+    // vía EAS) para esta tercera entrega — Apple cierra el "tren" de una
+    // versión ya aprobada (acá, la 1.0.1, que quedó aprobada pero NUNCA
+    // se liberó al público — tenía el bug del pixelado en Vista general y
+    // los timeouts de la base de datos, arreglados recién acá) para
+    // nuevos builds: hace falta subir esto a mano cada vez que se manda
+    // una actualización real a revisión (no en los builds de preview, que
+    // nunca llegan a Apple).
+    version: "1.0.2",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",
