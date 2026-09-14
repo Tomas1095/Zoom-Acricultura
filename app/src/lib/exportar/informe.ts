@@ -180,14 +180,17 @@ export function construirInformeHtml({
 
   const resumen = resumenPorProducto(zonas);
   const resumenHtml = resumen
-    .map((r) => `<div class="resumenFila">${escapeHtml(r.producto)} ==&gt; <span class="resumenKg">${r.totalKg.toFixed(0)} kg</span></div>`)
+    .map(
+      (r) =>
+        `<div class="resumenFila"><span class="resumenProducto">${escapeHtml(r.producto)}</span><span class="resumenValor resumenValorKg">${r.totalKg.toFixed(0)} kg</span></div>`
+    )
     .join("");
 
   const resumenSuperficie = resumenSuperficiePorProducto(zonas);
   const resumenSuperficieHtml = resumenSuperficie
     .map(
       (r) =>
-        `<div class="resumenFila">${escapeHtml(r.producto)} ==&gt; <span class="resumenKg">${r.totalHa.toFixed(1).replace(".", ",")} ha</span></div>`
+        `<div class="resumenFila"><span class="resumenProducto">${escapeHtml(r.producto)}</span><span class="resumenValor resumenValorHa">${r.totalHa.toFixed(1).replace(".", ",")} ha</span></div>`
     )
     .join("");
 
@@ -276,11 +279,23 @@ export function construirInformeHtml({
   .productoBloque + .productoBloque { margin-top: 6px; }
   .productoNombre { font-size: 12.5px; font-weight: 700; }
   .productoDetalle { font-size: 12px; margin-top: 1px; }
-  .resumenBox { margin-top: 10px; border-top: 1px solid #EDE0B8; padding-top: 10px; }
-  .resumenTitulo { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; }
-  .resumenFila { font-size: 12.5px; padding: 2px 0; }
-  .resumenKg { font-weight: 700; color: #155C35; }
   .vacio { font-size: 12.5px; color: #6B5D2E; }
+  /* Los dos totales ("Total producto a utilizar" / "Total superficie a
+     aplicar") van en su propia card, separada de la de "Recomendación..."
+     — antes eran solo un renglón con una línea fina arriba, DENTRO de la
+     misma card que la lista de productos, y quedaba todo muy apretado
+     (a pedido del usuario, que "mareaba"). Reusar la clase card/cardTitulo
+     (el mismo lenguaje visual que ya usa el resto del informe) da el aire
+     y el límite visual que pedía, sin inventar un estilo nuevo. */
+  .resumenFila { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #F3ECD2; }
+  .resumenFila:last-child { border-bottom: none; }
+  .resumenProducto { font-size: 12.5px; font-weight: 600; }
+  /* Pastilla con fondo tenue en vez de texto suelto — y un tono distinto
+     para kg (verde, como el resto de la app) y ha (dorado) para que las
+     dos cards de total se distingan de un vistazo, no solo por el título. */
+  .resumenValor { font-size: 12.5px; font-weight: 800; padding: 3px 10px; border-radius: 100px; white-space: nowrap; }
+  .resumenValorKg { background: #E4F0E7; color: #155C35; }
+  .resumenValorHa { background: #F5EAC8; color: #A9752E; }
 </style>
 </head>
 <body>
@@ -311,23 +326,24 @@ export function construirInformeHtml({
       <div class="cardTitulo">Recomendación de aplicación de cebo</div>
       ${notaCebo && notaCebo.trim() ? `<div class="notaBox">${escapeHtml(notaCebo)}</div>` : ""}
       ${zonasHtml || `<div class="vacio">Sin productos cargados.</div>`}
-      ${
-        resumen.length > 0
-          ? `<div class="resumenBox">
-        <div class="resumenTitulo">Total producto a utilizar</div>
-        ${resumenHtml}
-      </div>`
-          : ""
-      }
-      ${
-        resumenSuperficie.length > 0
-          ? `<div class="resumenBox">
-        <div class="resumenTitulo">Total superficie a aplicar</div>
-        ${resumenSuperficieHtml}
-      </div>`
-          : ""
-      }
     </div>
+
+    ${
+      resumen.length > 0
+        ? `<div class="card cardTotal">
+      <div class="cardTitulo">Total producto a utilizar</div>
+      ${resumenHtml}
+    </div>`
+        : ""
+    }
+    ${
+      resumenSuperficie.length > 0
+        ? `<div class="card cardTotal">
+      <div class="cardTitulo">Total superficie a aplicar</div>
+      ${resumenSuperficieHtml}
+    </div>`
+        : ""
+    }
   </div>
 </body>
 </html>`;
@@ -473,13 +489,16 @@ export function construirInformeHtmlNuevo({
   // Misma tira de tarjetas que "Total producto a utilizar" (mismo diseño,
   // a pedido del usuario) para la superficie — otro apartado aparte, no
   // mezclado en la misma tarjeta, porque son dos totales distintos (un
-  // producto puede cubrir menos superficie que otro del mismo lote).
+  // producto puede cubrir menos superficie que otro del mismo lote). El
+  // número va en dorado en vez de verde (único cambio de color respecto a
+  // la tarjeta de kg) — mismo criterio que las dos cards de total del
+  // diseño tradicional, para que se distingan entre sí de un vistazo.
   const filasResumenSuperficie = resumenSuperficie
     .map(
       (r) => `
     <div class="nTotalTile">
       <div style="font-size:10.5px;font-weight:800;letter-spacing:0.07em;color:${NUEVO_MUTED};text-transform:uppercase;margin-bottom:6px;">${escapeHtml(r.producto)}</div>
-      <div style="font-size:29px;font-weight:900;color:${NUEVO_VERDE_ACENTO};line-height:1;">${r.totalHa.toFixed(1).replace(".", ",")} <span style="font-size:13px;font-weight:700;color:${NUEVO_MUTED};">ha</span></div>
+      <div style="font-size:29px;font-weight:900;color:${NUEVO_DORADO};line-height:1;">${r.totalHa.toFixed(1).replace(".", ",")} <span style="font-size:13px;font-weight:700;color:${NUEVO_MUTED};">ha</span></div>
     </div>`
     )
     .join("");
@@ -544,8 +563,12 @@ export function construirInformeHtmlNuevo({
     ${filasProductos || `<div class="nVacio">Sin productos cargados.</div>`}
 
     ${
+      // Línea fina arriba (mismo recurso que ya separa un producto del
+      // siguiente, ver .nProductoFila) + más aire que antes (margin-top
+      // 10px → 26px) — a pedido del usuario, quedaba todo muy pegado a la
+      // lista de productos de arriba.
       resumen.length > 0
-        ? `<div style="margin-top:10px;">
+        ? `<div style="margin-top:26px;padding-top:18px;border-top:1px solid ${NUEVO_LINEA};">
       <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:9px;">Total producto a utilizar</div>
       <div class="nTotalTiles">${filasResumen}</div>
     </div>`
@@ -553,7 +576,7 @@ export function construirInformeHtmlNuevo({
     }
     ${
       resumenSuperficie.length > 0
-        ? `<div style="margin-top:16px;">
+        ? `<div style="margin-top:22px;padding-top:18px;border-top:1px solid ${NUEVO_LINEA};">
       <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:9px;">Total superficie a aplicar</div>
       <div class="nTotalTiles">${filasResumenSuperficie}</div>
     </div>`
