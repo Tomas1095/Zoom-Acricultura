@@ -726,24 +726,29 @@ const styles = StyleSheet.create({
   // Barra "Listo" propia, posicionada a mano justo arriba del teclado (ver
   // alturaTeclado) — reemplaza a InputAccessoryView, que resultó poco
   // confiable con varios campos de texto en la misma pantalla. Altura fija
-  // (no por contenido) para que ALTURA_BARRA sea siempre exacta, y con
-  // padding generoso para que aunque el teclado tape algún pixel de más
-  // (el iOS a veces no reporta el alto exacto del todo, ej. con la barra
-  // de sugerencias) el texto del botón no quede cortado.
+  // (no por contenido) para que ALTURA_BARRA sea siempre exacta.
+  // Antes ocupaba TODO el ancho de pantalla (left: 0, right: 0) como una
+  // franja blanca completa — tapaba "Adjuntar foto" y "Confirmar y cerrar
+  // punto" que quedaban justo debajo. Ahora es una píldora chica, pegada
+  // a la derecha (sin `left`, así el View se achica al contenido en vez
+  // de estirarse) con sombra propia para distinguirse del fondo — deja
+  // ver todo lo que está debajo salvo el rincón donde vive el botón.
   barraFlotante: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    right: 16,
     height: ALTURA_BARRA,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
+    borderRadius: ALTURA_BARRA / 2,
+    justifyContent: "center",
     backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  botonListoFlotante: { paddingHorizontal: 14, paddingVertical: 10 },
+  botonListoFlotante: { paddingHorizontal: 18, paddingVertical: 10 },
   botonListoFlotanteTexto: { color: colors.primary, fontWeight: "700", fontSize: 18 },
   fotosFila: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   fotoItem: { width: 64, height: 64 },
