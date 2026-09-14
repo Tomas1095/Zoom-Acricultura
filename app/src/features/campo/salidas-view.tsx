@@ -28,6 +28,7 @@ import {
   exportarInformePdf,
   kgDeProducto,
   resumenPorProducto,
+  resumenSuperficiePorProducto,
   type ProductoAplicado,
   type ZonaCebo,
 } from "@/lib/exportar/informe";
@@ -460,6 +461,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
         const datosInforme = {
           loteNombre: lote.nombre,
           establecimientoNombre,
+          hectareas: lote.hectareas,
           situacion,
           zonas,
           notaCebo: notaCeboVisible ? notaCebo : "",
@@ -517,6 +519,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
   }
 
   const resumen = useMemo(() => resumenPorProducto(zonas), [zonas]);
+  const resumenSuperficie = useMemo(() => resumenSuperficiePorProducto(zonas), [zonas]);
 
   // Ancho real del card de mapas, medido en vivo — así el mapa usa todo el
   // espacio disponible en vez de un tamaño achicado a mano (que apretaba
@@ -680,6 +683,17 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
                   <View key={r.producto} style={styles.resumenFila}>
                     <Text style={styles.resumenProducto}>{r.producto}</Text>
                     <Text style={styles.resumenKg}>{r.totalKg.toFixed(0)} kg</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {resumenSuperficie.length > 0 && (
+              <View style={styles.resumenBox}>
+                <Text style={styles.resumenTitulo}>Total superficie a aplicar</Text>
+                {resumenSuperficie.map((r) => (
+                  <View key={r.producto} style={styles.resumenFila}>
+                    <Text style={styles.resumenProducto}>{r.producto}</Text>
+                    <Text style={styles.resumenKg}>{r.totalHa.toFixed(1).replace(".", ",")} ha</Text>
                   </View>
                 ))}
               </View>

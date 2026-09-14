@@ -60,9 +60,30 @@ export function resumenPorProducto(zonas: ZonaCebo[]): Array<{ producto: string;
   return Array.from(totales.entries()).map(([producto, totalKg]) => ({ producto, totalKg }));
 }
 
+/** Igual que `resumenPorProducto` pero sumando hectáreas en vez de kg — un
+ * mismo producto puede aparecer en más de una zona del lote (o cubrir solo
+ * parte de él, ver el comentario de `ProductoAplicado`), así que la
+ * superficie total a aplicar de CADA producto no es necesariamente la
+ * misma que la del lote entero. */
+export function resumenSuperficiePorProducto(zonas: ZonaCebo[]): Array<{ producto: string; totalHa: number }> {
+  const totales = new Map<string, number>();
+  for (const z of zonas) {
+    for (const p of z.productos) {
+      if (p.producto === "No aplicar") continue;
+      totales.set(p.producto, (totales.get(p.producto) ?? 0) + numero(p.superficie));
+    }
+  }
+  return Array.from(totales.entries()).map(([producto, totalHa]) => ({ producto, totalHa }));
+}
+
 interface DatosInforme {
   loteNombre: string;
   establecimientoNombre?: string;
+  /** Superficie del lote en hectáreas (ver Lote["hectareas"]) — se muestra
+   * redondeada, sin decimales, entre paréntesis al lado del nombre en el
+   * título del informe (a pedido del usuario: "Lote Arroyo - Sullivan (40
+   * has)"). */
+  hectareas: number;
   situacion: string;
   zonas: ZonaCebo[];
   /** Bloque de mapa ya armado (título/norte/leyenda/escala incluidos, ver
@@ -123,6 +144,7 @@ const LOGO_HTML = `<div style="display:flex;align-items:center;gap:9px;">
 export function construirInformeHtml({
   loteNombre,
   establecimientoNombre,
+  hectareas,
   situacion,
   zonas,
   mapaBichoHtml,
@@ -161,9 +183,20 @@ export function construirInformeHtml({
     .map((r) => `<div class="resumenFila">${escapeHtml(r.producto)} ==&gt; <span class="resumenKg">${r.totalKg.toFixed(0)} kg</span></div>`)
     .join("");
 
+  const resumenSuperficie = resumenSuperficiePorProducto(zonas);
+  const resumenSuperficieHtml = resumenSuperficie
+    .map(
+      (r) =>
+        `<div class="resumenFila">${escapeHtml(r.producto)} ==&gt; <span class="resumenKg">${r.totalHa.toFixed(1).replace(".", ",")} ha</span></div>`
+    )
+    .join("");
+
   // Encabezado repetido en las dos hojas (mapas y situación/recomendación)
   // — a pedido del usuario, para que la segunda hoja también quede
-  // identificada si se imprime o comparte suelta.
+  // identificada si se imprime o comparte suelta. La superficie va SIEMPRE
+  // entre paréntesis al final (aunque no haya establecimiento distinto),
+  // redondeada sin decimales — a pedido del usuario, un número entero se
+  // lee más rápido en el título que "40,3 has".
   const encabezadoHtml = `<div class="encabezado">
     <div>
       <div class="eyebrow">INFORME TÉCNICO</div>
@@ -171,7 +204,7 @@ export function construirInformeHtml({
         establecimientoNombre && !esMismoNombreLoteEstablecimiento(loteNombre, establecimientoNombre)
           ? ` - ${escapeHtml(establecimientoNombre)}`
           : ""
-      }</h1>
+      } (${Math.round(hectareas)} has)</h1>
     </div>
     ${LOGO_HTML}
   </div>`;
@@ -286,6 +319,14 @@ export function construirInformeHtml({
       </div>`
           : ""
       }
+      ${
+        resumenSuperficie.length > 0
+          ? `<div class="resumenBox">
+        <div class="resumenTitulo">Total superficie a aplicar</div>
+        ${resumenSuperficieHtml}
+      </div>`
+          : ""
+      }
     </div>
   </div>
 </body>
@@ -339,7 +380,7 @@ function nuevoSeccionLabel(texto: string, grande = false): string {
   </div>`;
 }
 
-function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | undefined): string {
+function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | undefined, hectareas: number): string {
   // El guion queda chico (solo el signo, no el nombre) pero el nombre del
   // establecimiento va al mismo tamaño que el del lote — a pedido del
   // usuario, los dos son igual de importantes. Se distingue del nombre del
@@ -349,13 +390,18 @@ function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | und
     establecimientoNombre && !esMismoNombreLoteEstablecimiento(loteNombre, establecimientoNombre)
       ? ` <span style="font-size:0.55em;color:${NUEVO_DORADO};">–</span> <span style="font-style:italic;color:${NUEVO_DORADO};">${escapeHtml(establecimientoNombre)}</span>`
       : "";
+  // Superficie redondeada entre paréntesis, siempre al final — a pedido
+  // del usuario, sin decimales ("(40 has)"). Tono apagado y sin negrita
+  // (NUEVO_MUTED, no NUEVO_DORADO) para que quede como un dato aclaratorio
+  // al lado del nombre, no compitiendo con él.
+  const superficieHtml = ` <span style="font-size:0.6em;font-weight:600;color:${NUEVO_MUTED};">(${Math.round(hectareas)} has)</span>`;
   // Mismo tamaño y mismo padding en las dos hojas (antes la hoja 2 achicaba
   // el encabezado) — a pedido del usuario, la "portada" se repite igual en
   // las dos.
   return `<div style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:16px;border-bottom:2px solid ${NUEVO_VERDE};">
     <div>
       <div style="font-size:11px;font-weight:800;letter-spacing:0.14em;color:${NUEVO_DORADO};text-transform:uppercase;">Informe técnico</div>
-      <div style="font-size:22px;font-weight:800;color:${NUEVO_VERDE};margin-top:3px;letter-spacing:-0.2px;">${escapeHtml(loteNombre)}${establecimientoHtml}</div>
+      <div style="font-size:22px;font-weight:800;color:${NUEVO_VERDE};margin-top:3px;letter-spacing:-0.2px;">${escapeHtml(loteNombre)}${establecimientoHtml}${superficieHtml}</div>
     </div>
     ${LOGO_MINI_HTML}
   </div>`;
@@ -371,6 +417,7 @@ function nuevoEncabezado(loteNombre: string, establecimientoNombre: string | und
 export function construirInformeHtmlNuevo({
   loteNombre,
   establecimientoNombre,
+  hectareas,
   situacion,
   zonas,
   mapaBichoHtml,
@@ -378,6 +425,7 @@ export function construirInformeHtmlNuevo({
   notaCebo,
 }: DatosInforme): string {
   const resumen = resumenPorProducto(zonas);
+  const resumenSuperficie = resumenSuperficiePorProducto(zonas);
 
   // Rediseño de "Recomendación de aplicación de cebo" a pedido del usuario
   // ("algo llamativo pero fácil de entender"): cada lote es ahora su propia
@@ -422,6 +470,20 @@ export function construirInformeHtmlNuevo({
     )
     .join("");
 
+  // Misma tira de tarjetas que "Total producto a utilizar" (mismo diseño,
+  // a pedido del usuario) para la superficie — otro apartado aparte, no
+  // mezclado en la misma tarjeta, porque son dos totales distintos (un
+  // producto puede cubrir menos superficie que otro del mismo lote).
+  const filasResumenSuperficie = resumenSuperficie
+    .map(
+      (r) => `
+    <div class="nTotalTile">
+      <div style="font-size:10.5px;font-weight:800;letter-spacing:0.07em;color:${NUEVO_MUTED};text-transform:uppercase;margin-bottom:6px;">${escapeHtml(r.producto)}</div>
+      <div style="font-size:29px;font-weight:900;color:${NUEVO_VERDE_ACENTO};line-height:1;">${r.totalHa.toFixed(1).replace(".", ",")} <span style="font-size:13px;font-weight:700;color:${NUEVO_MUTED};">ha</span></div>
+    </div>`
+    )
+    .join("");
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -462,7 +524,7 @@ export function construirInformeHtmlNuevo({
 <body>
 
   <div class="nHoja nHojaMapas">
-    ${nuevoEncabezado(loteNombre, establecimientoNombre)}
+    ${nuevoEncabezado(loteNombre, establecimientoNombre, hectareas)}
 
     ${nuevoSeccionLabel("Resultado monitoreo — Bichos bolita")}
     <div class="nMapaBloque">${mapaBichoHtml}</div>
@@ -472,7 +534,7 @@ export function construirInformeHtmlNuevo({
   </div>
 
   <div class="nHoja nHojaSegunda">
-    ${nuevoEncabezado(loteNombre, establecimientoNombre)}
+    ${nuevoEncabezado(loteNombre, establecimientoNombre, hectareas)}
 
     ${nuevoSeccionLabel("Situación de plagas de suelo", true)}
     <div style="border-left:3px solid ${NUEVO_DORADO};padding:3px 0 3px 18px;font-size:14.5px;line-height:1.7;color:${NUEVO_VERDE};white-space:pre-wrap;">${escapeHtml(situacion)}</div>
@@ -486,6 +548,14 @@ export function construirInformeHtmlNuevo({
         ? `<div style="margin-top:10px;">
       <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:9px;">Total producto a utilizar</div>
       <div class="nTotalTiles">${filasResumen}</div>
+    </div>`
+        : ""
+    }
+    ${
+      resumenSuperficie.length > 0
+        ? `<div style="margin-top:16px;">
+      <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${NUEVO_DORADO};text-transform:uppercase;margin-bottom:9px;">Total superficie a aplicar</div>
+      <div class="nTotalTiles">${filasResumenSuperficie}</div>
     </div>`
         : ""
     }
