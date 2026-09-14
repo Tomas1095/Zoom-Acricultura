@@ -182,7 +182,7 @@ export function construirInformeHtml({
   const resumenHtml = resumen
     .map(
       (r) =>
-        `<div class="resumenFila"><span class="resumenProducto">${escapeHtml(r.producto)}</span><span class="resumenValor resumenValorKg">${r.totalKg.toFixed(0)} kg</span></div>`
+        `<div class="resumenFila"><span class="resumenProducto">${escapeHtml(r.producto)}</span><span class="resumenValor">${r.totalKg.toFixed(0)} kg</span></div>`
     )
     .join("");
 
@@ -190,7 +190,7 @@ export function construirInformeHtml({
   const resumenSuperficieHtml = resumenSuperficie
     .map(
       (r) =>
-        `<div class="resumenFila"><span class="resumenProducto">${escapeHtml(r.producto)}</span><span class="resumenValor resumenValorHa">${r.totalHa.toFixed(1).replace(".", ",")} ha</span></div>`
+        `<div class="resumenFila"><span class="resumenProducto">${escapeHtml(r.producto)}</span><span class="resumenValor">${r.totalHa.toFixed(1).replace(".", ",")} ha</span></div>`
     )
     .join("");
 
@@ -286,16 +286,17 @@ export function construirInformeHtml({
      misma card que la lista de productos, y quedaba todo muy apretado
      (a pedido del usuario, que "mareaba"). Reusar la clase card/cardTitulo
      (el mismo lenguaje visual que ya usa el resto del informe) da el aire
-     y el límite visual que pedía, sin inventar un estilo nuevo. */
+     y el límite visual que pedía, sin inventar un estilo nuevo. Borde
+     verde clarito (en vez del dorado/tostado de una card común) para que
+     las dos se noten como el mismo tipo de bloque — a pedido del usuario,
+     mismo verde para las dos, tanto en el número como en el borde. */
+  .cardTotal { border-color: #BFE3CC; }
   .resumenFila { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #F3ECD2; }
   .resumenFila:last-child { border-bottom: none; }
   .resumenProducto { font-size: 12.5px; font-weight: 600; }
-  /* Pastilla con fondo tenue en vez de texto suelto — y un tono distinto
-     para kg (verde, como el resto de la app) y ha (dorado) para que las
-     dos cards de total se distingan de un vistazo, no solo por el título. */
-  .resumenValor { font-size: 12.5px; font-weight: 800; padding: 3px 10px; border-radius: 100px; white-space: nowrap; }
-  .resumenValorKg { background: #E4F0E7; color: #155C35; }
-  .resumenValorHa { background: #F5EAC8; color: #A9752E; }
+  /* Pastilla verde con fondo tenue en vez de texto suelto — mismo color
+     para kg y para ha (a pedido del usuario, antes ha iba en dorado). */
+  .resumenValor { font-size: 12.5px; font-weight: 800; padding: 3px 10px; border-radius: 100px; white-space: nowrap; background: #E4F0E7; color: #155C35; }
 </style>
 </head>
 <body>
@@ -375,6 +376,9 @@ const LOGO_MINI_HTML = `<div style="display:flex;align-items:center;gap:11px;">
 
 const NUEVO_VERDE = "#1B2E1F";
 const NUEVO_VERDE_ACENTO = "#155C35";
+// Verde clarito para el borde de las tarjetas de total (kg y ha) — a
+// pedido del usuario, mismo verde en las dos (antes ha llevaba dorado).
+const NUEVO_VERDE_CLARO = "#BFE3CC";
 const NUEVO_DORADO = "#A9752E";
 const NUEVO_MUTED = "#7A6F52";
 const NUEVO_LINEA = "#E4DEC9";
@@ -489,16 +493,15 @@ export function construirInformeHtmlNuevo({
   // Misma tira de tarjetas que "Total producto a utilizar" (mismo diseño,
   // a pedido del usuario) para la superficie — otro apartado aparte, no
   // mezclado en la misma tarjeta, porque son dos totales distintos (un
-  // producto puede cubrir menos superficie que otro del mismo lote). El
-  // número va en dorado en vez de verde (único cambio de color respecto a
-  // la tarjeta de kg) — mismo criterio que las dos cards de total del
-  // diseño tradicional, para que se distingan entre sí de un vistazo.
+  // producto puede cubrir menos superficie que otro del mismo lote).
+  // Mismo verde que la tarjeta de kg (a pedido del usuario, antes iba en
+  // dorado para distinguirlas — ahora se distinguen solo por el título).
   const filasResumenSuperficie = resumenSuperficie
     .map(
       (r) => `
     <div class="nTotalTile">
       <div style="font-size:10.5px;font-weight:800;letter-spacing:0.07em;color:${NUEVO_MUTED};text-transform:uppercase;margin-bottom:6px;">${escapeHtml(r.producto)}</div>
-      <div style="font-size:29px;font-weight:900;color:${NUEVO_DORADO};line-height:1;">${r.totalHa.toFixed(1).replace(".", ",")} <span style="font-size:13px;font-weight:700;color:${NUEVO_MUTED};">ha</span></div>
+      <div style="font-size:29px;font-weight:900;color:${NUEVO_VERDE_ACENTO};line-height:1;">${r.totalHa.toFixed(1).replace(".", ",")} <span style="font-size:13px;font-weight:700;color:${NUEVO_MUTED};">ha</span></div>
     </div>`
     )
     .join("");
@@ -537,7 +540,9 @@ export function construirInformeHtmlNuevo({
   /* Tira de tarjetas del resumen final ("Total producto a utilizar") — una por
      producto, envuelve si no entran todas en una fila. */
   .nTotalTiles { display: flex; flex-wrap: wrap; gap: 12px; }
-  .nTotalTile { flex: 1 1 160px; background: ${NUEVO_BANDA_BG}; border-radius: 11px; padding: 16px 18px; border-top: 3px solid ${NUEVO_DORADO}; }
+  /* Borde verde clarito (antes dorado) — a pedido del usuario, mismo verde
+     que el número tanto en la tarjeta de kg como en la de ha. */
+  .nTotalTile { flex: 1 1 160px; background: ${NUEVO_BANDA_BG}; border-radius: 11px; padding: 16px 18px; border-top: 3px solid ${NUEVO_VERDE_CLARO}; }
 </style>
 </head>
 <body>

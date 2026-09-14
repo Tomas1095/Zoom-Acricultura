@@ -682,7 +682,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
                 {resumen.map((r) => (
                   <View key={r.producto} style={styles.resumenFila}>
                     <Text style={styles.resumenProducto}>{r.producto}</Text>
-                    <Text style={[styles.resumenValor, styles.resumenValorKg]}>{r.totalKg.toFixed(0)} kg</Text>
+                    <Text style={styles.resumenValor}>{r.totalKg.toFixed(0)} kg</Text>
                   </View>
                 ))}
               </View>
@@ -693,9 +693,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
                 {resumenSuperficie.map((r) => (
                   <View key={r.producto} style={styles.resumenFila}>
                     <Text style={styles.resumenProducto}>{r.producto}</Text>
-                    <Text style={[styles.resumenValor, styles.resumenValorHa]}>
-                      {r.totalHa.toFixed(1).replace(".", ",")} ha
-                    </Text>
+                    <Text style={styles.resumenValor}>{r.totalHa.toFixed(1).replace(".", ",")} ha</Text>
                   </View>
                 ))}
               </View>
@@ -1094,11 +1092,13 @@ const styles = StyleSheet.create({
   },
   agregarZonaTexto: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark, textAlign: "center" },
   // marginTop subido (4 → 14) a pedido del usuario — quedaba todo muy
-  // pegado a la lista de productos de arriba y "mareaba".
+  // pegado a la lista de productos de arriba y "mareaba". Borde verde
+  // clarito (antes tostado, igual al resto de las cards) — mismo verde
+  // para las dos (producto y superficie), a pedido del usuario.
   resumenBox: {
     marginTop: 14,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: "#BFE3CC",
     paddingTop: 10,
     gap: 6,
   },
@@ -1108,13 +1108,19 @@ const styles = StyleSheet.create({
   resumenTitulo: { fontSize: 12.5, fontWeight: "700", color: colors.text, marginBottom: 2 },
   resumenFila: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   resumenProducto: { fontSize: 12.5, color: colors.text },
-  // Pastilla con fondo tenue en vez de texto suelto — un tono distinto para
-  // kg (verde, como el resto de la app) y ha (dorado) para que las dos
-  // cards de total se distingan de un vistazo, no solo por el título.
+  // Pastilla verde con fondo tenue en vez de texto suelto — mismo color
+  // para kg y para ha (a pedido del usuario, antes ha iba en dorado).
   // Mismo criterio que en el informe PDF (lib/exportar/informe.ts).
-  resumenValor: { fontSize: 12, fontWeight: "800", paddingVertical: 2, paddingHorizontal: 8, borderRadius: 100, overflow: "hidden" },
-  resumenValorKg: { color: colors.primaryDark, backgroundColor: colors.successBg },
-  resumenValorHa: { color: colors.accentGold, backgroundColor: "#F5EAC8" },
+  resumenValor: {
+    fontSize: 12,
+    fontWeight: "800",
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 100,
+    overflow: "hidden",
+    color: colors.primaryDark,
+    backgroundColor: colors.successBg,
+  },
   botonPdf: {
     flexDirection: "row",
     alignItems: "center",
