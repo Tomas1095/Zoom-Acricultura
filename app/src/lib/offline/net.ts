@@ -21,27 +21,30 @@ const TIMEOUT_MS = 10000;
 export async function hayConexion(): Promise<boolean> {
   try {
     const estado = await NetInfo.fetch();
-    // `isConnected` (el radio de wifi/datos está prendido y asociado a
-    // una red) no alcanza para saber si hay INTERNET DE VERDAD — con
-    // señal débil (el caso típico en el campo) o un wifi sin salida real
-    // (portal cautivo, router sin internet), el teléfono se sigue
-    // mostrando "conectado" aunque ningún pedido real vaya a funcionar.
-    // Con solo `isConnected`, la app igual intentaba el pedido real y se
-    // quedaba colgada hasta que venciera el timeout completo (10s, ver
-    // `conTimeout` más abajo) antes de recién ahí caer al respaldo
-    // local — un caso real reportado por un usuario: entrar a un lote o
-    // abrir un punto se sentía "muy lento" en el campo con señal débil,
-    // exactamente este síntoma, multiplicado por cada pantalla que hace
-    // su propio chequeo (ver dónde se usa `hayConexion` — el árbol de
-    // lotes, la pantalla del lote, la del punto, el login).
-    // `isInternetReachable` es la propia verificación de NetInfo, con un
-    // pedido liviano de verdad (no el pedido real nuestro, mucho más
-    // pesado) — cuando da explícitamente `false` (confirmado sin
-    // internet) no tiene sentido ni probar. Si todavía no se determinó
-    // (`null`, recién arrancando la app) se deja pasar igual — el
-    // timeout de `conTimeout` sigue siendo la red de contención para ese
-    // caso.
-    return !!estado.isConnected && estado.isInternetReachable !== false;
+    // Antes acá también se exigía `estado.isInternetReachable !== false`
+    // (además de `isConnected`) — la idea (ver el historial de este
+    // archivo) era filtrar el caso de wifi "conectado" pero sin salida
+    // real (portal cautivo, router sin internet, señal muy débil en el
+    // campo), para no quedarse colgado el timeout completo antes de caer
+    // al respaldo local. En la práctica terminó siendo AL REVÉS de
+    // problemático: `isInternetReachable` es la propia sonda de NetInfo
+    // (no nuestro pedido real) y es conocida por dar `false` de pedo en
+    // iOS — sobre todo recién al volver la app de segundo plano, o en
+    // wifis hogareños de lo más normales — mientras el resto del
+    // teléfono (WhatsApp, el navegador) sigue navegando sin drama. El
+    // resultado real, reportado por un usuario: carteles de "sin señal"
+    // seguidos con wifi andando perfecto, y pantallas que ni siquiera
+    // intentaban el pedido real (se iban directo a la cache) por esta
+    // falsa alarma.
+    // `isConnected` (el radio de wifi/datos prendido y asociado a una
+    // red) es una señal más básica, pero muchísimo más confiable — el
+    // costo de quedarse sin este filtro extra es volver al
+    // comportamiento de antes de que existiera (un lote/punto sin
+    // internet real tarda el timeout completo en caer al respaldo local,
+    // en vez de detectarlo al instante) — más lento en ese caso puntual,
+    // pero sin falsos positivos en el caso muchísimo más común de wifi
+    // que sí funciona.
+    return !!estado.isConnected;
   } catch {
     // Si falla el chequeo en sí (raro), que decida el fetch real en vez
     // de asumir que no hay señal.
