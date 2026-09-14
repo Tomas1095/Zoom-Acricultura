@@ -158,12 +158,25 @@ export const MapaDensidad = forwardRef<View, MapaDensidadProps>(function MapaDen
         />
       )}
       <Svg width={ancho} height={alto} style={{ position: "absolute", top: 0, left: 0 }}>
+        {/* `stroke` iba con `colors.surface` (blanco) — a pedido del
+            usuario: con un lote de densidad muy baja (todo el primer
+            rango, 0-30, que se pinta blanco — ver NIVEL_COLORES_BICHO/
+            BABOSA) el borde quedaba del MISMO blanco que el relleno, y
+            casi el mismo que el fondo de la pantalla (colors.background)
+            — el resultado se veía como si no hubiera ningún cuadradito
+            dibujado, en vez de "está todo bien, densidad baja en todo el
+            lote". Reusa `colorPerimetro` (ya calculado arriba para el
+            contorno del lote, que ya resuelve el mismo problema de fondo
+            variable: blanco sobre la foto satelital, verde oscuro sobre
+            el fondo liso) — así el borde de cada celda SIEMPRE se
+            distingue de su propio relleno y del fondo, sea cual sea el
+            nivel/color que le toque. */}
         {celdas.map((c) => (
           <Polygon
             key={c.id}
             points={c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
             fill={nivelColores[c.nivel]}
-            stroke={colors.surface}
+            stroke={colorPerimetro}
             strokeWidth={0.25}
           />
         ))}

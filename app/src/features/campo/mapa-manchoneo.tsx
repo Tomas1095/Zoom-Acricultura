@@ -134,12 +134,19 @@ export function MapaManchoneo({
     >
       <View style={{ width: ancho, height: alto }}>
         <Svg width={ancho} height={alto} style={{ position: "absolute", top: 0, left: 0 }}>
+          {/* `stroke` iba con `colors.surface` (blanco) — mismo problema y
+              mismo arreglo que en mapa-densidad.tsx: con densidad baja
+              (primer rango, pintado blanco) el borde quedaba del mismo
+              blanco que el relleno, y las celdas se veían como si no
+              estuvieran dibujadas. `colors.primaryDark`, el mismo tono
+              que ya usa el contorno del lote acá abajo, se distingue
+              siempre del relleno. */}
           {celdas.map((c) => (
             <Polygon
               key={c.id}
               points={c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}
               fill={nivelColores[c.nivel]}
-              stroke={colors.surface}
+              stroke={colors.primaryDark}
               strokeWidth={0.25}
             />
           ))}

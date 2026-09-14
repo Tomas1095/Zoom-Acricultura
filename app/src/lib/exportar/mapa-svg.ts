@@ -90,10 +90,16 @@ export function construirMapaDensidadHtml(
     celdas = [];
   }
 
+  // El borde iba fijo en blanco — mismo problema y mismo arreglo que en
+  // pantalla (ver mapa-densidad.tsx): con densidad baja (primer rango,
+  // pintado blanco) el borde quedaba del mismo blanco que el relleno, y
+  // las celdas se veían como si no estuvieran dibujadas en el PDF.
+  // `colorPerimetro` (ya calculado arriba, blanco sobre la foto satelital
+  // / oscuro sobre fondo liso) se distingue siempre del relleno.
   const poligonos = celdas
     .map(
       (c) =>
-        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="#FFFFFF" stroke-width="0.25" />`
+        `<polygon points="${c.poligono.map((p) => `${toPx(p.x, p.y).left},${toPx(p.x, p.y).top}`).join(" ")}" fill="${nivelColores[c.nivel]}" stroke="${colorPerimetro}" stroke-width="0.25" />`
     )
     .join("");
 
