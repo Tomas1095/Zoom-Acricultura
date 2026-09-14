@@ -18,7 +18,7 @@
 // prototipo pero nunca se usaba ahí).
 
 import { Delaunay } from "d3-delaunay";
-import { intersection as interseccionPoligonos } from "polygon-clipping";
+import { intersection as interseccionPoligonos, union as unionPoligonos } from "polygon-clipping";
 import type { XY } from "./geometria";
 
 export type Plaga = "bicho" | "babosa";
@@ -202,21 +202,31 @@ export function calcularCeldasDensidad(
   // solo anillo, sin agujeros propios (los agujeros del lote, si los hay,
   // ya vienen resueltos como el "entrante" de la pieza misma).
   //
-  // Antes esto se pasaba por `unionPoligonos()` para fusionar todas las
-  // piezas en un solo MultiPolygon antes de recortar — pero esa fusión
-  // previa no hace falta para que el recorte salga bien: `intersection()`
-  // ya trata una lista de piezas simples como "la unión de todas" de por
-  // sí (es la semántica normal de un MultiPolygon para estas operaciones
-  // booleanas), se toquen entre sí o no. Y ese `union()` de entrada podía
-  // tirar una excepción con ciertas geometrías reales (perímetros con
-  // muchos vértices y esquinas casi colineales, típico de un lote
-  // importado de KMZ) — como el cálculo entero estaba en un único
-  // try/catch (ver quien llama a esta función), una excepción ahí tiraba
-  // abajo el mapa COMPLETO: ni un cuadradito, ni siquiera en los puntos
-  // con datos bien arriba de cero. Sacando el paso de unión de acá se
-  // evita ese disparador sin cambiar el resultado (las piezas, unidas o
-  // no, cubren la misma área a los fines del recorte).
+  // OJO con sacar este paso (ya se probó y salió mal): `unionPoligonos()`
+  // no es solo un "fusionar piezas que no hacía falta" — de paso NORMALIZA
+  // la geometría (resuelve auto-intersecciones, fuerza el sentido de giro
+  // que espera `polygon-clipping`) antes de recortar. Sin esa limpieza
+  // previa, `intersection()` recortaba cada celda MAL en vez de fallar:
+  // en vez de tirar una excepción visible, partía cada celda cuadrada en
+  // dos triángulos sueltos (con la diagonal de más dibujada) — un lote
+  // real de 130 puntos en grilla se veía entero cruzado por una trama en
+  // "X" en lugar de cuadraditos limpios. Un bug silencioso y peor que el
+  // que se había ido a arreglar.
+  //
+  // Por eso union() vuelve a ser el camino normal — con su PROPIO
+  // try/catch (no el de toda la función) como red de seguridad: si
+  // igual llega a tirar una excepción con algún perímetro real (muchos
+  // vértices, esquinas casi colineales, típico de un KMZ), se cae a las
+  // piezas sin fusionar en vez de perder el mapa completo — peor que un
+  // recorte de más, pero mejor que nada.
   const piezasPoly: Tupla[][][] = piezasValidas.map((pz) => [pz.map((v): Tupla => [v.x, v.y])]);
+  let piezasParaRecortar: Tupla[][][];
+  try {
+    piezasParaRecortar = unionPoligonos(piezasPoly[0], ...piezasPoly.slice(1));
+  } catch (e) {
+    console.warn("calcularCeldasDensidad: unionPoligonos falló, se usan las piezas sin fusionar", e);
+    piezasParaRecortar = piezasPoly;
+  }
 
   const celdas: CeldaDensidad[] = [];
   puntos.forEach((p, i) => {
@@ -241,8 +251,8 @@ export function calcularCeldasDensidad(
     try {
       const celdaPoly: Tupla[][] = [celda as Tupla[]];
       const interseccion = Number.isFinite(dVecino)
-        ? interseccionPoligonos(celdaPoly, piezasPoly, [circulo(p.x, p.y, dVecino * FACTOR_RADIO_MAXIMO)])
-        : interseccionPoligonos(celdaPoly, piezasPoly);
+        ? interseccionPoligonos(celdaPoly, piezasParaRecortar, [circulo(p.x, p.y, dVecino * FACTOR_RADIO_MAXIMO)])
+        : interseccionPoligonos(celdaPoly, piezasParaRecortar);
       interseccion.forEach((poligono, r) => {
         const anilloExterior = poligono[0]; // sin agujeros propios en este caso, ver arriba
         if (!anilloExterior || anilloExterior.length < 3) return;
