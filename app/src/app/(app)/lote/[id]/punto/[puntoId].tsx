@@ -108,17 +108,61 @@ export default function PuntoScreen() {
   useEffect(() => {
     const mostrar = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const ocultar = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    // Reportado por el usuario, reproducible siempre: tocando "Listo" el
+    // teclado baja y sube solo al instante, como un flash — la única forma
+    // de cerrarlo de verdad era tocar dos veces afuera, en un lugar en
+    // blanco. La barra "Listo" ya tenía tres disparadores de toque
+    // redundantes (ver más abajo) para que el TOQUE en sí nunca se
+    // perdiera — y no se pierde: el problema no es que "Listo" falle en
+    // registrar el toque, es que UN SEGUNDO toque se genera solo, sobre
+    // OTRA cosa.
+    //
+    // La sospecha (consistente con que sea reproducible SIEMPRE, no
+    // intermitente): los disparadores de la barra "Listo" están en
+    // onTouchStart/onResponderGrant — se disputan apenas el dedo TOCA la
+    // pantalla, antes de levantarlo. Ese toque llama a Keyboard.dismiss(),
+    // que dispara este mismo listener (keyboardWillHide) EN EL MISMO
+    // INSTANTE en que arranca la animación nativa del teclado — o sea,
+    // mientras el dedo todavía está apoyado. Hasta acá, `alturaTeclado`
+    // pasaba a 0 en ese momento, y esta pantalla reacciona a eso corriendo
+    // la barra "Listo" fuera de pantalla Y sacándole el padding extra al
+    // ScrollView — un cambio de layout real, debajo del dedo, ANTES de que
+    // el dedo se levante. En iOS, si lo que hay debajo de un dedo apoyado
+    // cambia de golpe, el sistema puede terminar entregando el toque (al
+    // levantar el dedo) al elemento NUEVO que quedó ahí — que en este caso
+    // puede ser el propio campo de texto, recién revelado por el
+    // corrimiento — enfocándolo de nuevo y volviendo a abrir el teclado.
+    // Con un toque en un lugar en blanco (sin nada reposicionándose debajo)
+    // esto no pasa, por eso esa alternativa sí "funcionaba" (a las
+    // cansadoras).
+    //
+    // El arreglo: no tocar el layout (ni la barra ni el padding) hasta que
+    // el teclado realmente termine de esconderse de verdad — así, cuando
+    // el dedo se levanta, todavía no cambió nada debajo. `e.duration` es
+    // la duración real de la animación nativa que Apple reporta en este
+    // mismo evento (no un número inventado); el colchón de más es por las
+    // dudas el toque tarde un poco más en resolverse del todo.
+    let temporizadorOcultar: ReturnType<typeof setTimeout> | null = null;
     const subMostrar = Keyboard.addListener(mostrar, (e) => {
+      if (temporizadorOcultar) {
+        clearTimeout(temporizadorOcultar);
+        temporizadorOcultar = null;
+      }
       alturaTecladoRef.current = e.endCoordinates.height;
       setAlturaTeclado(e.endCoordinates.height);
     });
-    const subOcultar = Keyboard.addListener(ocultar, () => {
+    const subOcultar = Keyboard.addListener(ocultar, (e) => {
       alturaTecladoRef.current = 0;
-      setAlturaTeclado(0);
+      const demora = Math.max((e?.duration ?? 0.25) * 1000, 250) + 120;
+      temporizadorOcultar = setTimeout(() => {
+        setAlturaTeclado(0);
+        temporizadorOcultar = null;
+      }, demora);
     });
     return () => {
       subMostrar.remove();
       subOcultar.remove();
+      if (temporizadorOcultar) clearTimeout(temporizadorOcultar);
     };
   }, []);
 
