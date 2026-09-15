@@ -90,29 +90,57 @@ export function ResultadosView({
   const puntosDensidad = plaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa;
 
   // El Voronoi de cada plaga (calcularCeldasDensidad, con su recorte de
-  // polygon-clipping) es la parte que de verdad tarda acá — con un
-  // useMemo compartido entre las dos plagas, cambiar de Bichos bolita a
-  // Babosas y volver lo recalculaba las DOS veces (el useMemo solo
-  // recuerda el último resultado, no uno por cada valor de `plaga`). Con
-  // un useMemo propio para cada una, cada plaga se calcula una sola vez
-  // (la primera vez que se la mira) y después de eso alternar entre las
-  // dos es instantáneo — es lo que hacía sentir lenta la pantalla al tocar
-  // "Babosas"/"Bichos bolita" varias veces seguidas.
-  const celdasBicho = useMemo(() => {
-    try {
-      return calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"));
-    } catch {
-      return [];
+  // polygon-clipping) es la parte que de verdad tarda acá — con un lote
+  // grande (200+ puntos, sobre todo si el perímetro tiene varias piezas)
+  // puede tardar bastante de verdad. Antes acá había DOS useMemo (uno por
+  // plaga) — pero un useMemo NO es perezoso por rama: React ejecuta las
+  // DOS funciones apenas se monta la pantalla (cada una declarada sin
+  // condición), aunque solo una de las dos plagas se esté mirando. Eso
+  // significaba pagar el cálculo completo DOS VECES (bicho y babosa)
+  // para simplemente abrir Resultados por primera vez — con un lote
+  // grande, el doble de espera de la que hacía falta.
+  //
+  // Acá abajo, un cache manual en un ref: solo se calcula la plaga que
+  // se está mirando ahora, la primera vez que se la mira — la otra
+  // queda sin tocar hasta que la persona realmente toque "Babosas"/
+  // "Bichos bolita". Cambiar de plaga y volver sigue siendo instantáneo
+  // (el resultado ya calculado se guarda acá), igual que antes.
+  const cacheCeldasRef = useRef<{
+    puntosBicho?: PuntoDensidad[];
+    perimetroBicho?: Lote["perimetro"];
+    celdasBicho?: CeldaDensidad[];
+    puntosBabosa?: PuntoDensidad[];
+    perimetroBabosa?: Lote["perimetro"];
+    celdasBabosa?: CeldaDensidad[];
+  }>({});
+  const celdas: CeldaDensidad[] = useMemo(() => {
+    const cache = cacheCeldasRef.current;
+    if (plaga === "bicho") {
+      if (cache.puntosBicho !== puntosDensidadBicho || cache.perimetroBicho !== lote.perimetro) {
+        try {
+          cache.celdasBicho = calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"));
+        } catch {
+          cache.celdasBicho = [];
+        }
+        cache.puntosBicho = puntosDensidadBicho;
+        cache.perimetroBicho = lote.perimetro;
+      }
+      return cache.celdasBicho ?? [];
     }
-  }, [puntosDensidadBicho, lote.perimetro]);
-  const celdasBabosa = useMemo(() => {
-    try {
-      return calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
-    } catch {
-      return [];
+    if (cache.puntosBabosa !== puntosDensidadBabosa || cache.perimetroBabosa !== lote.perimetro) {
+      try {
+        cache.celdasBabosa = calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
+      } catch {
+        cache.celdasBabosa = [];
+      }
+      cache.puntosBabosa = puntosDensidadBabosa;
+      cache.perimetroBabosa = lote.perimetro;
     }
-  }, [puntosDensidadBabosa, lote.perimetro]);
-  const celdas: CeldaDensidad[] = plaga === "bicho" ? celdasBicho : celdasBabosa;
+    return cache.celdasBabosa ?? [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- el cache
+    // manual de acá arriba ya cubre puntosDensidadBicho/Babosa y
+    // lote.perimetro; no hace falta que React los vuelva a comparar acá.
+  }, [plaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]);
 
   const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
   const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);

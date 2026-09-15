@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,7 +20,7 @@ import {
   type EstacionAplicacion,
 } from "@/lib/geo/zona-aplicacion";
 import { inferirOrigenDesdePuntos, type XY } from "@/lib/geo/geometria";
-import { calcularCeldasDensidad, coloresDe, rangosDe } from "@/lib/geo/densidad";
+import { calcularCeldasDensidad, coloresDe, rangosDe, type CeldaDensidad } from "@/lib/geo/densidad";
 import { resumenPlaga, resumenPresencias, textoSituacion } from "@/lib/informe/situacion";
 import {
   construirInformeHtml,
@@ -341,29 +341,61 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
   const etiquetaActiva = manchoneoPlaga === "bicho" ? "Bicho bolita" : "Babosas";
   const prefijoExportActivo = manchoneoPlaga === "bicho" ? "BB" : "BAB";
 
-  // Celdas del mapa de densidad de cada plaga — un useMemo por plaga (no
-  // uno solo con `manchoneoPlaga` en las dependencias), mismo motivo que
-  // celdasBicho/celdasBabosa en resultados-view.tsx: así cada Voronoi se
-  // calcula una sola vez y alternar entre Bicho bolita y Babosas (acá
-  // arriba, el toggle "Manchoneo — Bicho bolita/Babosas") no repite el
-  // recorte de polygon-clipping cada toque. Además de dibujarse en
-  // pantalla (MapaManchoneo), esta misma celda activa se usa para
-  // "Exportar Manchón + Mapa" (ver exportarKMZManchonYMapa).
-  const celdasManchoneoBicho = useMemo(() => {
-    try {
-      return calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"));
-    } catch {
-      return [];
+  // Celdas del mapa de densidad de cada plaga — antes esto eran DOS
+  // useMemo (uno por plaga) declarados sin condición, así que React
+  // calculaba las DOS apenas se monta la pantalla, aunque el toggle
+  // "Manchoneo — Bicho bolita/Babosas" solo muestra una a la vez: con un
+  // lote grande (200+ puntos, sobre todo con el perímetro en varias
+  // piezas) eso significaba pagar el cálculo completo DOS veces para
+  // simplemente abrir Salidas. Acá abajo, un cache manual en un ref
+  // (mismo criterio que celdas en resultados-view.tsx): cada plaga se
+  // calcula solo la primera vez que hace falta — ya sea porque se la
+  // mira en pantalla, o porque el informe en PDF (que sí necesita las
+  // DOS siempre) la pide — y después queda guardada.
+  const cacheCeldasManchoneoRef = useRef<{
+    puntosBicho?: typeof puntosDensidadBicho;
+    perimetroBicho?: Lote["perimetro"];
+    celdasBicho?: CeldaDensidad[];
+    puntosBabosa?: typeof puntosDensidadBabosa;
+    perimetroBabosa?: Lote["perimetro"];
+    celdasBabosa?: CeldaDensidad[];
+  }>({});
+  function obtenerCeldasManchoneo(p: "bicho" | "babosa"): CeldaDensidad[] {
+    const cache = cacheCeldasManchoneoRef.current;
+    if (p === "bicho") {
+      if (cache.puntosBicho !== puntosDensidadBicho || cache.perimetroBicho !== lote.perimetro) {
+        try {
+          cache.celdasBicho = calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"));
+        } catch {
+          cache.celdasBicho = [];
+        }
+        cache.puntosBicho = puntosDensidadBicho;
+        cache.perimetroBicho = lote.perimetro;
+      }
+      return cache.celdasBicho ?? [];
     }
-  }, [puntosDensidadBicho, lote.perimetro]);
-  const celdasManchoneoBabosa = useMemo(() => {
-    try {
-      return calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
-    } catch {
-      return [];
+    if (cache.puntosBabosa !== puntosDensidadBabosa || cache.perimetroBabosa !== lote.perimetro) {
+      try {
+        cache.celdasBabosa = calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
+      } catch {
+        cache.celdasBabosa = [];
+      }
+      cache.puntosBabosa = puntosDensidadBabosa;
+      cache.perimetroBabosa = lote.perimetro;
     }
-  }, [puntosDensidadBabosa, lote.perimetro]);
-  const celdasManchoneoActivo = manchoneoPlaga === "bicho" ? celdasManchoneoBicho : celdasManchoneoBabosa;
+    return cache.celdasBabosa ?? [];
+  }
+  // Esta es la única que se calcula sola, al renderizar — la que se está
+  // mirando en pantalla ahora mismo (dibujada en MapaManchoneo y usada
+  // por "Exportar Manchón + Mapa"). La otra plaga queda sin tocar hasta
+  // que el informe en PDF la pida explícitamente (ver confirmarExport).
+  const celdasManchoneoActivo = useMemo(
+    () => obtenerCeldasManchoneo(manchoneoPlaga),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- el cache
+    // manual de obtenerCeldasManchoneo ya cubre puntosDensidadBicho/Babosa
+    // y lote.perimetro; no hace falta que React los vuelva a comparar acá.
+    [manchoneoPlaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]
+  );
 
   // Manchones/hectáreas que de verdad se muestran, exportan, etc.: el
   // cálculo automático tal cual, salvo que la persona ya haya editado un
@@ -474,11 +506,12 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             MAPA_PDF_ANCHO,
             MAPA_PDF_ALTO,
             origenDensidad,
-            // Ya calculado más arriba (celdasManchoneoBicho, para el mapa
-            // de manchoneo en pantalla) — reusarlo acá evita repetir el
-            // recorte de polygon-clipping de cero, que con un lote de
-            // muchos puntos era la parte pesada de exportar el informe.
-            celdasManchoneoBicho
+            // Si ya se calculó (porque se miró esa plaga en Manchoneo, ver
+            // obtenerCeldasManchoneo arriba) lo reusa; si no, lo calcula
+            // acá mismo — evita repetir el recorte de polygon-clipping de
+            // cero cuando ya estaba hecho, que con un lote de muchos
+            // puntos era la parte pesada de exportar el informe.
+            obtenerCeldasManchoneo("bicho")
           ),
           mapaBabosaHtml: construirMapaDensidadHtml(
             puntosDensidadBabosa,
@@ -489,7 +522,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             MAPA_PDF_ANCHO,
             MAPA_PDF_ALTO,
             origenDensidad,
-            celdasManchoneoBabosa
+            obtenerCeldasManchoneo("babosa")
           ),
         };
         // Mismos datos para las dos versiones — solo cambia qué armador de
