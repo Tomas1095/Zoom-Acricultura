@@ -250,6 +250,38 @@ export function calcularCeldasDensidad(
     piezasParaRecortar = piezasPoly;
   }
 
+  // Caja delimitadora de cada parte de piezasParaRecortar — se calcula UNA
+  // sola vez acá (no por punto). Sirve para el filtro de abajo: con un
+  // lote partido en varias piezas (un camino, un arroyo, etc. — ver el
+  // comentario grande de calcularCeldasDensidad), la mayoría de los
+  // puntos solo está cerca de UNA pieza, la suya. Pasarle a
+  // interseccionPoligonos() TODAS las piezas para cada punto — aunque la
+  // mayoría esté clarísimamente afuera del círculo de recorte y no pueda
+  // aportar nada al resultado — hace que la librería procese mucha más
+  // geometría de la necesaria en cada una de las N llamadas. Encontrado
+  // con un lote real de 208 puntos en varias piezas: la app quedaba
+  // colgada varios minutos (nunca llegó a terminar) — contra 20-30
+  // segundos de un lote de una sola pieza con una cantidad de puntos
+  // parecida. Con una sola pieza esto no cambia nada (se salta el
+  // filtro entero, ver más abajo).
+  const cajasPiezas =
+    piezasParaRecortar.length > 1
+      ? piezasParaRecortar.map((poligono) => {
+          const anillo = poligono[0] ?? [];
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+          for (const [x, y] of anillo) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+          return { minX, minY, maxX, maxY, poligono };
+        })
+      : null;
+
   const celdas: CeldaDensidad[] = [];
   puntos.forEach((p, i) => {
     const celda = voronoi.cellPolygon(i);
@@ -284,9 +316,26 @@ export function calcularCeldasDensidad(
     // color que corresponde al dato real, nunca un hueco.
     try {
       const celdaPoly: Tupla[][] = [celda as Tupla[]];
+      // Filtro espacial: con más de una pieza, este punto solo se recorta
+      // contra las piezas cuya caja delimitadora entra en el círculo de
+      // recorte de ESTE punto — mismo resultado que usar todas (las
+      // demás están geométricamente demasiado lejos para aportar algo
+      // dentro del círculo), mucho más rápido con muchas piezas. Con una
+      // sola pieza (cajasPiezas === null) no hay nada que filtrar.
+      let piezasCercanas = piezasParaRecortar;
+      if (cajasPiezas && Number.isFinite(dVecino)) {
+        const r = dVecino * FACTOR_RADIO_MAXIMO;
+        const filtradas = cajasPiezas
+          .filter((c) => p.x + r >= c.minX && p.x - r <= c.maxX && p.y + r >= c.minY && p.y - r <= c.maxY)
+          .map((c) => c.poligono);
+        // Por las dudas (no debería pasar nunca: el punto siempre cae
+        // DENTRO de su propia pieza) — si el filtro deja todo afuera, se
+        // usan todas sin filtrar en vez de recortar contra nada.
+        if (filtradas.length > 0) piezasCercanas = filtradas;
+      }
       const interseccion = Number.isFinite(dVecino)
-        ? interseccionPoligonos(celdaPoly, piezasParaRecortar, [circulo(p.x, p.y, dVecino * FACTOR_RADIO_MAXIMO)])
-        : interseccionPoligonos(celdaPoly, piezasParaRecortar);
+        ? interseccionPoligonos(celdaPoly, piezasCercanas, [circulo(p.x, p.y, dVecino * FACTOR_RADIO_MAXIMO)])
+        : interseccionPoligonos(celdaPoly, piezasCercanas);
       interseccion.forEach((poligono, r) => {
         const anilloExterior = poligono[0]; // sin agujeros propios en este caso, ver arriba
         if (!anilloExterior || anilloExterior.length < 3) return;
