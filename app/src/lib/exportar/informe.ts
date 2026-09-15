@@ -155,6 +155,14 @@ export function construirInformeHtml({
     .map((z) => {
       const productosHtml = z.productos
         .map((p) => {
+          // "No aplicar" no tiene dosis/superficie que mostrar — a pedido
+          // del usuario ("queda feo"), mismo criterio que en pantalla
+          // (ver ProductoFila): sin la línea "0 kg/ha × 0 ha = 0 kg".
+          if (p.producto === "No aplicar") {
+            return `<div class="productoBloque">
+            <div class="productoNombre">${escapeHtml(p.producto)}</div>
+          </div>`;
+          }
           // Si todavía no cargó dosis/superficie, "kg/ha × ha" sin números
           // se ve roto — 0 como placeholder visual, igual que en pantalla.
           const dosis = p.dosis || "0";
@@ -456,16 +464,26 @@ export function construirInformeHtmlNuevo({
   const filasProductos = zonas
     .map((z) => {
       const productos = z.productos
-        .map(
-          (p, i) => `
-      <div class="nProductoFila" style="${i > 0 ? `border-top:1px dashed ${NUEVO_LINEA};` : ""}">
+        .map((p, i) => {
+          const borde = i > 0 ? `border-top:1px dashed ${NUEVO_LINEA};` : "";
+          // "No aplicar" no tiene dosis/superficie/kg que mostrar — a
+          // pedido del usuario ("queda feo"), mismo criterio que en
+          // pantalla y en el diseño tradicional (ver más arriba).
+          if (p.producto === "No aplicar") {
+            return `
+      <div class="nProductoFila" style="${borde}">
+        <div style="font-size:14.5px;font-weight:700;color:${NUEVO_VERDE};white-space:nowrap;">${escapeHtml(p.producto)}</div>
+      </div>`;
+          }
+          return `
+      <div class="nProductoFila" style="${borde}">
         <div style="display:flex;align-items:baseline;gap:11px;min-width:0;">
           <div style="font-size:14.5px;font-weight:700;color:${NUEVO_VERDE};white-space:nowrap;">${escapeHtml(p.producto)}</div>
           <div style="font-size:12px;color:${NUEVO_MUTED};white-space:nowrap;">${p.dosis || "0"} kg/ha × ${p.superficie || "0"} ha</div>
         </div>
         <div style="font-size:17px;font-weight:800;color:${NUEVO_VERDE_ACENTO};white-space:nowrap;">${kgDeProducto(p).toFixed(0)} <span style="font-size:11px;font-weight:700;">kg</span></div>
-      </div>`
-        )
+      </div>`;
+        })
         .join("");
       // Sin el nombre del lote acá arriba (antes `z.loteNombre`) — mismo
       // motivo que en construirInformeHtml: es redundante con el

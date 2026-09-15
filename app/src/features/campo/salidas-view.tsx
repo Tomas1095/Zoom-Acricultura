@@ -1282,27 +1282,35 @@ function ProductoFila({ producto, puedeQuitar, mostrarAgregar, onAgregarProducto
         )}
       </View>
 
-      <View style={styles.zonaNumRow}>
-        <TextInput
-          style={styles.zonaNumInput}
-          value={producto.dosis}
-          placeholder="0"
-          placeholderTextColor={colors.textMuted}
-          keyboardType="decimal-pad"
-          onChangeText={(v) => onCambiar("dosis", v)}
-        />
-        <Text style={styles.zonaUnidad}>kg/ha ×</Text>
-        <TextInput
-          style={styles.zonaNumInput}
-          value={producto.superficie}
-          placeholder="0"
-          placeholderTextColor={colors.textMuted}
-          keyboardType="decimal-pad"
-          onChangeText={(v) => onCambiar("superficie", v)}
-        />
-        <Text style={styles.zonaUnidad}>ha</Text>
-        <Text style={styles.zonaTotal}>= {kgDeProducto(producto).toFixed(0)} kg</Text>
-      </View>
+      {/* Con "No aplicar" elegido, dosis/superficie no significan nada —
+          antes igual quedaba el recuadro mostrando "0 kg/ha × 0 ha = 0 kg",
+          a pedido del usuario ("queda feo") ahora directamente no se
+          muestra. Los valores de dosis/superficie NO se borran acá (si la
+          persona vuelve a elegir un producto real, los recupera tal cual
+          los había cargado). */}
+      {producto.producto !== "No aplicar" && (
+        <View style={styles.zonaNumRow}>
+          <TextInput
+            style={styles.zonaNumInput}
+            value={producto.dosis}
+            placeholder="0"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="decimal-pad"
+            onChangeText={(v) => onCambiar("dosis", v)}
+          />
+          <Text style={styles.zonaUnidad}>kg/ha ×</Text>
+          <TextInput
+            style={styles.zonaNumInput}
+            value={producto.superficie}
+            placeholder="0"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="decimal-pad"
+            onChangeText={(v) => onCambiar("superficie", v)}
+          />
+          <Text style={styles.zonaUnidad}>ha</Text>
+          <Text style={styles.zonaTotal}>= {kgDeProducto(producto).toFixed(0)} kg</Text>
+        </View>
+      )}
     </View>
   );
 }
