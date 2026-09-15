@@ -44,7 +44,19 @@ export interface PuntoDensidadSvg {
  * título/rosa de los vientos/leyenda/escala superpuestos como HTML) — un
  * solo bloque listo para pegar en el HTML del informe. `origen` es
  * opcional: sin él (o sin señal en el momento de generar el PDF) el mapa
- * queda sobre fondo claro liso, igual que antes. */
+ * queda sobre fondo claro liso, igual que antes.
+ *
+ * `celdasPrecalculadas` — igual que en MapaDensidad (pantalla, ver
+ * mapa-densidad.tsx): si quien llama ya calculó el Voronoi de esta plaga
+ * para otra cosa (Resultados, Salidas), se lo pasa acá en vez de dejar
+ * que esta función lo recalcule de cero. A pedido de un usuario con un
+ * lote de muchos puntos: exportar el informe volvía a correr TODO el
+ * cálculo del Voronoi (Delaunay + recorte contra el perímetro, el paso
+ * más pesado) para bicho Y para babosa, aunque salidas-view.tsx ya lo
+ * tenía calculado de armar el mapa de manchoneo un instante antes — con
+ * muchos puntos esa repetición se notaba bastante. Sin este parámetro
+ * (el mapa del Informe en la pantalla vieja, si algún otro llamador
+ * quedó sin pasarlo), se comporta exactamente igual que antes. */
 export function construirMapaDensidadHtml(
   puntos: PuntoDensidadSvg[],
   perimetro: XY[][],
@@ -53,7 +65,8 @@ export function construirMapaDensidadHtml(
   etiquetaLeyenda: string,
   ancho: number,
   alto: number,
-  origen?: LatLon | null
+  origen?: LatLon | null,
+  celdasPrecalculadas?: ReturnType<typeof calcularCeldasDensidad>
 ): string {
   const todosLosVertices = perimetro.flat();
   const todasX = puntos.map((p) => p.x).concat(todosLosVertices.map((v) => v.x));
@@ -83,11 +96,19 @@ export function construirMapaDensidadHtml(
   const colorPerimetro = satUrl ? "#FFFFFF" : "#1B2E1F";
   const sombra = satUrl ? "text-shadow:0 1px 2px rgba(0,0,0,0.65);" : "";
 
-  let celdas: ReturnType<typeof calcularCeldasDensidad> = [];
-  try {
-    celdas = calcularCeldasDensidad(puntos, perimetro, rangos);
-  } catch {
-    celdas = [];
+  let celdas: ReturnType<typeof calcularCeldasDensidad>;
+  if (celdasPrecalculadas) {
+    celdas = celdasPrecalculadas;
+  } else {
+    // calcularCeldasDensidad ya no tira excepciones (se protege sola,
+    // celda por celda — ver el catch adentro de la función), así que
+    // este try/catch quedó de más protección nomás, no hace falta para
+    // el caso normal.
+    try {
+      celdas = calcularCeldasDensidad(puntos, perimetro, rangos);
+    } catch {
+      celdas = [];
+    }
   }
 
   // El borde iba fijo en blanco — con densidad baja (primer rango,

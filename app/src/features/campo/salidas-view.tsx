@@ -473,7 +473,12 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             "Nº BB/m²",
             MAPA_PDF_ANCHO,
             MAPA_PDF_ALTO,
-            origenDensidad
+            origenDensidad,
+            // Ya calculado más arriba (celdasManchoneoBicho, para el mapa
+            // de manchoneo en pantalla) — reusarlo acá evita repetir el
+            // recorte de polygon-clipping de cero, que con un lote de
+            // muchos puntos era la parte pesada de exportar el informe.
+            celdasManchoneoBicho
           ),
           mapaBabosaHtml: construirMapaDensidadHtml(
             puntosDensidadBabosa,
@@ -483,7 +488,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             "Nº Babosas/m²",
             MAPA_PDF_ANCHO,
             MAPA_PDF_ALTO,
-            origenDensidad
+            origenDensidad,
+            celdasManchoneoBabosa
           ),
         };
         // Mismos datos para las dos versiones — solo cambia qué armador de
