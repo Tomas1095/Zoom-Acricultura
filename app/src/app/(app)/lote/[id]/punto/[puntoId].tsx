@@ -96,6 +96,18 @@ export default function PuntoScreen() {
   const alturaTecladoRef = useRef(0);
   const altoScrollRef = useRef(0);
   const scrollYRef = useRef(0);
+  // Ver el useEffect de keyboardWillHide/keyboardDidHide más abajo: el
+  // colapso del layout se demora hasta que el teclado termina de
+  // esconderse DE VERDAD, pero con un toque sostenido (el dedo apoyado más
+  // tiempo antes de levantarlo) esa demora puede cumplirse mientras el
+  // dedo TODAVÍA sigue apoyado — el mismo problema de nuevo, no evitado,
+  // solo corrido en el tiempo. `dedoEnListoRef` dice si el dedo sigue
+  // sobre el botón; `colapsoPendienteRef` dice si el timer ya se cumplió
+  // pero tuvo que esperar porque el dedo seguía ahí — en ese caso el
+  // colapso se hace recién cuando el dedo se levanta de verdad (ver
+  // onTouchEnd/onResponderRelease en la barra "Listo").
+  const dedoEnListoRef = useRef(false);
+  const colapsoPendienteRef = useRef(false);
 
   // InputAccessoryView resultó poco confiable acá: con dos o más campos
   // apuntando al mismo nativeID, solo el primero que se enfocaba mostraba
@@ -155,8 +167,17 @@ export default function PuntoScreen() {
       alturaTecladoRef.current = 0;
       const demora = Math.max((e?.duration ?? 0.25) * 1000, 250) + 120;
       temporizadorOcultar = setTimeout(() => {
-        setAlturaTeclado(0);
         temporizadorOcultar = null;
+        // Toque sostenido (ver el comentario de dedoEnListoRef, arriba de
+        // los refs): el dedo TODAVÍA está apoyado cuando se cumple esta
+        // demora — colapsar el layout ahora sería el mismo bug de nuevo.
+        // Se marca como pendiente y el propio botón "Listo" lo termina de
+        // resolver apenas el dedo se levante de verdad.
+        if (dedoEnListoRef.current) {
+          colapsoPendienteRef.current = true;
+          return;
+        }
+        setAlturaTeclado(0);
       }, demora);
     });
     return () => {
@@ -193,6 +214,22 @@ export default function PuntoScreen() {
         () => {}
       );
     }, 300);
+  }
+
+  // Toque en la barra "Listo" — ver dedoEnListoRef/colapsoPendienteRef
+  // (declarados junto a los demás refs) y el timer de keyboardWillHide/
+  // keyboardDidHide: con un toque sostenido, el timer puede cumplirse
+  // mientras el dedo TODAVÍA está apoyado, y quedó pendiente de resolver.
+  function tocarListo() {
+    dedoEnListoRef.current = true;
+    Keyboard.dismiss();
+  }
+  function soltarListo() {
+    dedoEnListoRef.current = false;
+    if (colapsoPendienteRef.current) {
+      colapsoPendienteRef.current = false;
+      setAlturaTeclado(0);
+    }
   }
 
   function aplicarPuntoYCarga(p: Punto | null, c: Carga | null, usuarios: Usuario[]) {
@@ -628,13 +665,21 @@ export default function PuntoScreen() {
                había funcionado antes).
             3. onTouchStart, el evento de toque más crudo de todos — no
                depende para nada del sistema de responder ni de ninguna
-               negociación, dispara apenas el dedo toca la vista. */}
+               negociación, dispara apenas el dedo toca la vista.
+
+            Al soltar: mismo criterio, tres disparadores redundantes
+            (onResponderRelease/onResponderTerminate/onTouchEnd) — con
+            cualquiera de los tres alcanza para saber que el dedo YA no
+            está más apoyado (ver tocarListo/soltarListo, arriba). */}
         <View
           style={styles.botonListoFlotante}
           onStartShouldSetResponderCapture={() => true}
           onStartShouldSetResponder={() => true}
-          onResponderGrant={() => Keyboard.dismiss()}
-          onTouchStart={() => Keyboard.dismiss()}
+          onResponderGrant={tocarListo}
+          onTouchStart={tocarListo}
+          onResponderRelease={soltarListo}
+          onResponderTerminate={soltarListo}
+          onTouchEnd={soltarListo}
         >
           <Text style={styles.botonListoFlotanteTexto}>Listo</Text>
         </View>
