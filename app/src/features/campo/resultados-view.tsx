@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Image as ImageIcon } from "lucide-react-native";
 
@@ -92,19 +92,20 @@ export function ResultadosView({
   // El Voronoi de cada plaga (calcularCeldasDensidad, con su recorte de
   // polygon-clipping) es la parte que de verdad tarda acá — con un lote
   // grande (200+ puntos, sobre todo si el perímetro tiene varias piezas)
-  // puede tardar bastante de verdad. Antes acá había DOS useMemo (uno por
-  // plaga) — pero un useMemo NO es perezoso por rama: React ejecuta las
-  // DOS funciones apenas se monta la pantalla (cada una declarada sin
-  // condición), aunque solo una de las dos plagas se esté mirando. Eso
-  // significaba pagar el cálculo completo DOS VECES (bicho y babosa)
-  // para simplemente abrir Resultados por primera vez — con un lote
-  // grande, el doble de espera de la que hacía falta.
-  //
-  // Acá abajo, un cache manual en un ref: solo se calcula la plaga que
-  // se está mirando ahora, la primera vez que se la mira — la otra
-  // queda sin tocar hasta que la persona realmente toque "Babosas"/
-  // "Bichos bolita". Cambiar de plaga y volver sigue siendo instantáneo
-  // (el resultado ya calculado se guarda acá), igual que antes.
+  // puede tardar bastante de verdad. Antes esto era un useMemo (síncrono):
+  // React lo corre DURANTE el render, así que mientras tarda, la pantalla
+  // queda literalmente congelada — ni siquiera llega a pintar un círculo
+  // de carga antes de arrancar, porque el propio cálculo bloquea ese
+  // pintado. A pedido del usuario, que notó eso justo ("toco la pestaña y
+  // queda inmóvil, sin saber si tocó bien"): ahora el cálculo se hace en
+  // dos pasos —
+  //   1. Al cambiar de plaga (o de lote), si el resultado no está en el
+  //      cache de acá abajo, esto pinta `calculandoMapa = true` primero
+  //      — un render bien liviano, sale a pantalla al toque.
+  //   2. RECIÉN en el próximo tick (setTimeout 0, después de que ESE
+  //      render ya se pintó) arranca el cálculo pesado de verdad.
+  // Con una plaga ya calculada antes (cache con hit), no hay paso 1: se
+  // usa directo, instantáneo, sin mostrar el círculo de carga por nada.
   const cacheCeldasRef = useRef<{
     puntosBicho?: PuntoDensidad[];
     perimetroBicho?: Lote["perimetro"];
@@ -113,33 +114,43 @@ export function ResultadosView({
     perimetroBabosa?: Lote["perimetro"];
     celdasBabosa?: CeldaDensidad[];
   }>({});
-  const celdas: CeldaDensidad[] = useMemo(() => {
+  const [celdas, setCeldas] = useState<CeldaDensidad[]>([]);
+  const [calculandoMapa, setCalculandoMapa] = useState(false);
+  useEffect(() => {
     const cache = cacheCeldasRef.current;
-    if (plaga === "bicho") {
-      if (cache.puntosBicho !== puntosDensidadBicho || cache.perimetroBicho !== lote.perimetro) {
-        try {
-          cache.celdasBicho = calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"));
-        } catch {
-          cache.celdasBicho = [];
-        }
+    const enCache =
+      plaga === "bicho"
+        ? cache.puntosBicho === puntosDensidadBicho && cache.perimetroBicho === lote.perimetro
+        : cache.puntosBabosa === puntosDensidadBabosa && cache.perimetroBabosa === lote.perimetro;
+    if (enCache) {
+      setCeldas((plaga === "bicho" ? cache.celdasBicho : cache.celdasBabosa) ?? []);
+      setCalculandoMapa(false);
+      return;
+    }
+    setCalculandoMapa(true);
+    const temporizador = setTimeout(() => {
+      let resultado: CeldaDensidad[];
+      try {
+        resultado =
+          plaga === "bicho"
+            ? calcularCeldasDensidad(puntosDensidadBicho, lote.perimetro, rangosDe("bicho"))
+            : calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
+      } catch {
+        resultado = [];
+      }
+      if (plaga === "bicho") {
+        cache.celdasBicho = resultado;
         cache.puntosBicho = puntosDensidadBicho;
         cache.perimetroBicho = lote.perimetro;
+      } else {
+        cache.celdasBabosa = resultado;
+        cache.puntosBabosa = puntosDensidadBabosa;
+        cache.perimetroBabosa = lote.perimetro;
       }
-      return cache.celdasBicho ?? [];
-    }
-    if (cache.puntosBabosa !== puntosDensidadBabosa || cache.perimetroBabosa !== lote.perimetro) {
-      try {
-        cache.celdasBabosa = calcularCeldasDensidad(puntosDensidadBabosa, lote.perimetro, rangosDe("babosa"));
-      } catch {
-        cache.celdasBabosa = [];
-      }
-      cache.puntosBabosa = puntosDensidadBabosa;
-      cache.perimetroBabosa = lote.perimetro;
-    }
-    return cache.celdasBabosa ?? [];
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- el cache
-    // manual de acá arriba ya cubre puntosDensidadBicho/Babosa y
-    // lote.perimetro; no hace falta que React los vuelva a comparar acá.
+      setCeldas(resultado);
+      setCalculandoMapa(false);
+    }, 0);
+    return () => clearTimeout(temporizador);
   }, [plaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]);
 
   const cargados = puntos.filter((p) => cargas.get(p.id)?.cargado).length;
@@ -217,20 +228,29 @@ export function ResultadosView({
           </View>
 
           <View style={styles.marco} onLayout={onLayoutRecuadro}>
-            {mapaListo && (
-              <MapaDensidad
-                ref={mapaRef}
-                puntos={puntosDensidad}
-                celdasPrecalculadas={celdas}
-                perimetro={lote.perimetro}
-                rangos={rangos}
-                nivelColores={coloresDe(plaga)}
-                etiquetaLeyenda={etiqueta}
-                ancho={anchoMapa}
-                alto={altoMapa}
-                origen={origen}
-              />
-            )}
+            {mapaListo &&
+              (calculandoMapa ? (
+                // Mientras se calcula el Voronoi de esta plaga (puede
+                // tardar con un lote grande) — a pedido del usuario, que
+                // antes tocaba la pestaña/el selector de plaga y la
+                // pantalla quedaba inmóvil sin ningún indicio de que
+                // tenía que esperar, así que terminaba tocando de nuevo
+                // pensando que no había funcionado el primer toque.
+                <ActivityIndicator color={colors.primary} size="large" />
+              ) : (
+                <MapaDensidad
+                  ref={mapaRef}
+                  puntos={puntosDensidad}
+                  celdasPrecalculadas={celdas}
+                  perimetro={lote.perimetro}
+                  rangos={rangos}
+                  nivelColores={coloresDe(plaga)}
+                  etiquetaLeyenda={etiqueta}
+                  ancho={anchoMapa}
+                  alto={altoMapa}
+                  origen={origen}
+                />
+              ))}
           </View>
 
           <Text style={styles.pie} numberOfLines={2}>
@@ -242,7 +262,7 @@ export function ResultadosView({
               del usuario, para alguna situación puntual donde solo haga
               falta mandar eso. Aplica a la plaga que esté seleccionada
               arriba (bicho o babosa), no a las dos a la vez. */}
-          <Pressable style={styles.botonPng} onPress={exportarPng} disabled={!mapaListo || exportandoPng}>
+          <Pressable style={styles.botonPng} onPress={exportarPng} disabled={!mapaListo || calculandoMapa || exportandoPng}>
             <ImageIcon size={14} color={colors.primaryDark} />
             <Text style={styles.botonPngTexto}>{exportandoPng ? "Exportando…" : "Exportar PNG"}</Text>
           </Pressable>

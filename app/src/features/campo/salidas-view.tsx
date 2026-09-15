@@ -385,17 +385,38 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
     }
     return cache.celdasBabosa ?? [];
   }
-  // Esta es la única que se calcula sola, al renderizar — la que se está
-  // mirando en pantalla ahora mismo (dibujada en MapaManchoneo y usada
-  // por "Exportar Manchón + Mapa"). La otra plaga queda sin tocar hasta
-  // que el informe en PDF la pida explícitamente (ver confirmarExport).
-  const celdasManchoneoActivo = useMemo(
-    () => obtenerCeldasManchoneo(manchoneoPlaga),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- el cache
-    // manual de obtenerCeldasManchoneo ya cubre puntosDensidadBicho/Babosa
-    // y lote.perimetro; no hace falta que React los vuelva a comparar acá.
-    [manchoneoPlaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]
-  );
+  // La que se está mirando en pantalla ahora mismo (dibujada en
+  // MapaManchoneo y usada por "Exportar Manchón + Mapa"). La otra plaga
+  // queda sin tocar hasta que el informe en PDF la pida explícitamente
+  // (ver confirmarExport, que llama a obtenerCeldasManchoneo directo).
+  //
+  // Antes esto era un useMemo síncrono — con un lote grande, tocar
+  // "Bicho bolita"/"Babosas" en Manchoneo dejaba la pantalla congelada
+  // sin ningún indicio de que había que esperar (a pedido del usuario,
+  // que notó justo eso). Mismo criterio que celdas en
+  // resultados-view.tsx: si ya está en cache se usa al toque; si no,
+  // primero se pinta `calculandoManchoneo = true` (spinner) y el cálculo
+  // pesado arranca recién en el tick siguiente.
+  const [celdasManchoneoActivo, setCeldasManchoneoActivo] = useState<CeldaDensidad[]>([]);
+  const [calculandoManchoneo, setCalculandoManchoneo] = useState(false);
+  useEffect(() => {
+    const cache = cacheCeldasManchoneoRef.current;
+    const enCache =
+      manchoneoPlaga === "bicho"
+        ? cache.puntosBicho === puntosDensidadBicho && cache.perimetroBicho === lote.perimetro
+        : cache.puntosBabosa === puntosDensidadBabosa && cache.perimetroBabosa === lote.perimetro;
+    if (enCache) {
+      setCeldasManchoneoActivo(obtenerCeldasManchoneo(manchoneoPlaga));
+      setCalculandoManchoneo(false);
+      return;
+    }
+    setCalculandoManchoneo(true);
+    const temporizador = setTimeout(() => {
+      setCeldasManchoneoActivo(obtenerCeldasManchoneo(manchoneoPlaga));
+      setCalculandoManchoneo(false);
+    }, 0);
+    return () => clearTimeout(temporizador);
+  }, [manchoneoPlaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]);
 
   // Manchones/hectáreas que de verdad se muestran, exportan, etc.: el
   // cálculo automático tal cual, salvo que la persona ya haya editado un
@@ -540,7 +561,12 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
         else
           await exportarKMZManchonYMapa(
             manchonesActivos,
-            celdasManchoneoActivo,
+            // obtenerCeldasManchoneo (no el estado celdasManchoneoActivo
+            // directo) — si la persona llega a exportar justo mientras
+            // todavía se está calculando (calculandoManchoneo true), esto
+            // sigue dando el resultado correcto en vez de un array vacío
+            // o desactualizado.
+            obtenerCeldasManchoneo(manchoneoPlaga),
             coloresDe(manchoneoPlaga),
             lote.nombre,
             origen,
@@ -782,18 +808,28 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             </Text>
 
             <View style={styles.mapaMarco}>
-              <MapaManchoneo
-                perimetro={lote.perimetro}
-                manchones={manchonesActivos}
-                puntosDensidad={manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa}
-                celdasPrecalculadas={celdasManchoneoActivo}
-                rangos={rangosDe(manchoneoPlaga)}
-                nivelColores={coloresDe(manchoneoPlaga)}
-                ancho={320}
-                alto={320}
-                editable={editandoManchon}
-                onEditarVertice={onEditarVerticeManchon}
-              />
+              {calculandoManchoneo ? (
+                // Mismo criterio que en Resultados: mientras se calcula el
+                // Voronoi de esta plaga (puede tardar con un lote grande),
+                // un círculo de carga bien visible en vez de dejar la
+                // pantalla sin ningún indicio de que hay que esperar.
+                <View style={[styles.mapaMarcoCargando, { width: 320, height: 320 }]}>
+                  <ActivityIndicator color={colors.primary} size="large" />
+                </View>
+              ) : (
+                <MapaManchoneo
+                  perimetro={lote.perimetro}
+                  manchones={manchonesActivos}
+                  puntosDensidad={manchoneoPlaga === "bicho" ? puntosDensidadBicho : puntosDensidadBabosa}
+                  celdasPrecalculadas={celdasManchoneoActivo}
+                  rangos={rangosDe(manchoneoPlaga)}
+                  nivelColores={coloresDe(manchoneoPlaga)}
+                  ancho={320}
+                  alto={320}
+                  editable={editandoManchon}
+                  onEditarVertice={onEditarVerticeManchon}
+                />
+              )}
             </View>
             <Text style={styles.hint}>Pellizcá con dos dedos para acercar el mapa.</Text>
 
@@ -1176,6 +1212,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 8,
   },
+  mapaMarcoCargando: { alignItems: "center", justifyContent: "center" },
   statBox: { flexDirection: "row", alignItems: "baseline", justifyContent: "center", flexWrap: "wrap" },
   statValor: { fontSize: 18, fontWeight: "800", color: colors.text },
   statLabel: { fontSize: 12, color: colors.textMuted },
