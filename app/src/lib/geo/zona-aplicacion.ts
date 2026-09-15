@@ -13,7 +13,7 @@
 // que generó la grilla real (ver `generarGrillaDesdePerimetro` en
 // geometria.ts: `Math.sqrt(haPorPunto * 10000)`).
 
-import { areaPoligonoM2, puntoEnAlgunPoligono, type XY } from "./geometria";
+import { areaPoligonoM2, puntoEnPoligono, type XY } from "./geometria";
 
 // Los dos umbrales dejan afuera la primera categoría de cada mapa de
 // densidad (ver RANGOS_BABOSA/RANGOS_BICHO en lib/geo/densidad.ts) — a
@@ -223,7 +223,7 @@ export interface ZonaAplicacionResultado {
  * `piezas` es una lista de piezas de terreno (casi siempre una sola; más de
  * una si el campo tiene lotes no contiguos, ver geometria.ts). El
  * rasterizado ya separa solo las celdas que caen DENTRO DE ALGUNA pieza
- * (`puntoEnAlgunPoligono`) — el hueco entre piezas separadas nunca queda
+ * (`dentroDeAlgunaPiezaRapido`, ver más abajo) — el hueco entre piezas separadas nunca queda
  * marcado, así que el "componentes conexas" de más abajo (pensado
  * originalmente para separar sectores lejanos DENTRO de un mismo lote) ya
  * separa solo también, sin cambios, un manchón que caiga en una pieza de
@@ -258,11 +258,43 @@ export function calcularZonaAplicacion(
   let celdasIncluidas = 0;
   const radioTotal = spacingM / 2 + FRANJA_PROTECCION_M;
 
+  // Caja delimitadora de cada pieza — se calcula UNA vez, no por celda de
+  // la grilla de cálculo (que puede tener miles de celdas). Con un lote
+  // de varias piezas, probar cada celda contra TODAS las piezas con
+  // ray-casting completo (puntoEnAlgunPoligono, que recorre cada vértice
+  // de cada pieza) es carísimo cuando la enorme mayoría de esas celdas
+  // ni siquiera está cerca de la mayoría de las piezas — un chequeo de
+  // caja (comparar 4 números) descarta esos casos sin tener que recorrer
+  // ningún vértice. Mismo problema y mismo arreglo que en
+  // calcularCeldasDensidad (ver densidad.ts) — encontrado con un lote
+  // real de 208 puntos en varias piezas, varios minutos en esta cuenta.
+  const cajasPiezasR = piezasR.map((pz) => {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const v of pz) {
+      if (v.x < minX) minX = v.x;
+      if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y;
+      if (v.y > maxY) maxY = v.y;
+    }
+    return { minX, minY, maxX, maxY };
+  });
+  function dentroDeAlgunaPiezaRapido(x: number, y: number): boolean {
+    for (let i = 0; i < piezasR.length; i++) {
+      const c = cajasPiezasR[i];
+      if (x < c.minX || x > c.maxX || y < c.minY || y > c.maxY) continue;
+      if (puntoEnPoligono(x, y, piezasR[i])) return true;
+    }
+    return false;
+  }
+
   for (let ci = 0; ci < nCols; ci++) {
     for (let ri = 0; ri < nRows; ri++) {
       const cu = minU + ci * RASTER_RES_M + RASTER_RES_M / 2;
       const cv = minV + ri * RASTER_RES_M + RASTER_RES_M / 2;
-      if (!puntoEnAlgunPoligono(cu, cv, piezasR)) continue;
+      if (!dentroDeAlgunaPiezaRapido(cu, cv)) continue;
       const incluida = estacionesR.some(
         (e) => seleccionadas.has(e.id) && Math.max(Math.abs(cu - e.x), Math.abs(cv - e.y)) <= radioTotal
       );

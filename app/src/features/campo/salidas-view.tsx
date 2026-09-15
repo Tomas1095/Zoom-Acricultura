@@ -18,6 +18,7 @@ import {
   UMBRAL_APLICACION_BABOSA,
   UMBRAL_APLICACION_BICHO,
   type EstacionAplicacion,
+  type ZonaAplicacionResultado,
 } from "@/lib/geo/zona-aplicacion";
 import { inferirOrigenDesdePuntos, type XY } from "@/lib/geo/geometria";
 import { calcularCeldasDensidad, coloresDe, rangosDe, type CeldaDensidad } from "@/lib/geo/densidad";
@@ -70,6 +71,11 @@ type SubTab = "informe" | "manchoneo" | "datos";
 // la tabla de datos cruda), cada uno con su propio nombre por defecto y su
 // propio armador de HTML (ver nombreDefaultExport/confirmarExport).
 type PedidoExport = "pdf" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null;
+
+// Estado inicial de zonaAplicacionActiva, antes de que el primer cálculo
+// termine (ver el useEffect de calculandoZona) — mismo valor "vacío" que
+// devuelve calcularZonaAplicacion cuando no hay estaciones o piezas.
+const ZONA_APLICACION_VACIA: ZonaAplicacionResultado = { manchones: [], haIncluidas: 0, seleccionadas: new Set() };
 
 interface SalidasViewProps {
   lote: Lote;
@@ -308,14 +314,68 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
     () => puntosConValores.map((p) => ({ id: p.id, x: p.x, y: p.y, linea: p.linea, puntoNum: p.puntoNum, valorM2: p.babosa })),
     [puntosConValores]
   );
-  const zonaAplicacionBicho = useMemo(
-    () => calcularZonaAplicacion(estacionesBicho, UMBRAL_APLICACION_BICHO, lote.perimetro, spacingM),
-    [estacionesBicho, lote.perimetro, spacingM]
-  );
-  const zonaAplicacionBabosa = useMemo(
-    () => calcularZonaAplicacion(estacionesBabosa, UMBRAL_APLICACION_BABOSA, lote.perimetro, spacingM),
-    [estacionesBabosa, lote.perimetro, spacingM]
-  );
+  // La zona de aplicación (calcularZonaAplicacion, en zona-aplicacion.ts)
+  // usa una grilla de cálculo propia (RASTER_RES_M) — nada que ver con el
+  // Voronoi/polygon-clipping de arriba, pero para un lote grande, con
+  // muchas piezas y muchos puntos, TAMBIÉN es pesada de verdad: recorre
+  // cada celda de esa grilla y, para cada una, la compara contra el
+  // perímetro entero y contra TODAS las estaciones. Acá abajo también
+  // eran DOS useMemo (uno por plaga) sin condición — mismo problema que
+  // ya se arregló para celdasManchoneo más arriba, doble cálculo para
+  // simplemente abrir Salidas. A diferencia de celdasManchoneo, acá nunca
+  // hace falta la plaga que NO se está mirando (no la usa ni el PDF, ver
+  // los usos de zonaAplicacionActiva más abajo), así que no hace falta
+  // una función "obtener" aparte — directo un cache + cálculo perezoso de
+  // la única que hace falta cada vez.
+  const cacheZonaRef = useRef<{
+    estacionesBicho?: EstacionAplicacion[];
+    perimetroBicho?: Lote["perimetro"];
+    spacingBicho?: number;
+    zonaBicho?: ZonaAplicacionResultado;
+    estacionesBabosa?: EstacionAplicacion[];
+    perimetroBabosa?: Lote["perimetro"];
+    spacingBabosa?: number;
+    zonaBabosa?: ZonaAplicacionResultado;
+  }>({});
+  const [zonaAplicacionActiva, setZonaAplicacionActiva] = useState<ZonaAplicacionResultado>(ZONA_APLICACION_VACIA);
+  const [calculandoZona, setCalculandoZona] = useState(false);
+  useEffect(() => {
+    const cache = cacheZonaRef.current;
+    const enCache =
+      manchoneoPlaga === "bicho"
+        ? cache.estacionesBicho === estacionesBicho &&
+          cache.perimetroBicho === lote.perimetro &&
+          cache.spacingBicho === spacingM
+        : cache.estacionesBabosa === estacionesBabosa &&
+          cache.perimetroBabosa === lote.perimetro &&
+          cache.spacingBabosa === spacingM;
+    if (enCache) {
+      setZonaAplicacionActiva((manchoneoPlaga === "bicho" ? cache.zonaBicho : cache.zonaBabosa) ?? ZONA_APLICACION_VACIA);
+      setCalculandoZona(false);
+      return;
+    }
+    setCalculandoZona(true);
+    const temporizador = setTimeout(() => {
+      const resultado =
+        manchoneoPlaga === "bicho"
+          ? calcularZonaAplicacion(estacionesBicho, UMBRAL_APLICACION_BICHO, lote.perimetro, spacingM)
+          : calcularZonaAplicacion(estacionesBabosa, UMBRAL_APLICACION_BABOSA, lote.perimetro, spacingM);
+      if (manchoneoPlaga === "bicho") {
+        cache.zonaBicho = resultado;
+        cache.estacionesBicho = estacionesBicho;
+        cache.perimetroBicho = lote.perimetro;
+        cache.spacingBicho = spacingM;
+      } else {
+        cache.zonaBabosa = resultado;
+        cache.estacionesBabosa = estacionesBabosa;
+        cache.perimetroBabosa = lote.perimetro;
+        cache.spacingBabosa = spacingM;
+      }
+      setZonaAplicacionActiva(resultado);
+      setCalculandoZona(false);
+    }, 0);
+    return () => clearTimeout(temporizador);
+  }, [manchoneoPlaga, estacionesBicho, estacionesBabosa, lote.perimetro, spacingM]);
 
   // El manchón editado a mano (si lo hay) — un slot por plaga, así editar
   // bicho bolita no pisa lo que se haya tocado en babosas y viceversa. En
@@ -335,7 +395,6 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
 
   const manchonesManualActivo = manchoneoPlaga === "bicho" ? manchonesManualBicho : manchonesManualBabosa;
   const historialActivo = manchoneoPlaga === "bicho" ? historialBicho : historialBabosa;
-  const zonaAplicacionActiva = manchoneoPlaga === "bicho" ? zonaAplicacionBicho : zonaAplicacionBabosa;
   const umbralActivo = manchoneoPlaga === "bicho" ? UMBRAL_APLICACION_BICHO : UMBRAL_APLICACION_BABOSA;
   const unidadActiva = manchoneoPlaga === "bicho" ? "bichos bolita/m²" : "babosas/m²";
   const etiquetaActiva = manchoneoPlaga === "bicho" ? "Bicho bolita" : "Babosas";
@@ -417,6 +476,15 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
     }, 0);
     return () => clearTimeout(temporizador);
   }, [manchoneoPlaga, puntosDensidadBicho, puntosDensidadBabosa, lote.perimetro]);
+
+  // Las dos cargas de esta pestaña (el mapa de densidad y la zona de
+  // aplicación, cada una con su propio cálculo pesado — ver más arriba)
+  // combinadas en una sola bandera: mientras cualquiera de las dos siga
+  // en curso, todo lo que depende de sus resultados (el mapa en sí, el
+  // área en hectáreas, los botones de exportar el manchón) se muestra
+  // como "cargando" en vez de arriesgarse a mostrar un valor viejo o
+  // vacío de golpe.
+  const cargandoZonaAplicacion = calculandoManchoneo || calculandoZona;
 
   // Manchones/hectáreas que de verdad se muestran, exportan, etc.: el
   // cálculo automático tal cual, salvo que la persona ya haya editado un
@@ -808,11 +876,15 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             </Text>
 
             <View style={styles.mapaMarco}>
-              {calculandoManchoneo ? (
+              {cargandoZonaAplicacion ? (
                 // Mismo criterio que en Resultados: mientras se calcula el
-                // Voronoi de esta plaga (puede tardar con un lote grande),
-                // un círculo de carga bien visible en vez de dejar la
-                // pantalla sin ningún indicio de que hay que esperar.
+                // Voronoi y/o la zona de aplicación de esta plaga (puede
+                // tardar con un lote grande), un círculo de carga bien
+                // visible en vez de dejar la pantalla sin ningún indicio
+                // de que hay que esperar. Se muestra mientras CUALQUIERA
+                // de los dos cálculos siga en curso — mostrar el mapa con
+                // manchonesActivos todavía vacío (zona sin terminar)
+                // dibujaría igual el mapa sin el polígono del manchón.
                 <View style={[styles.mapaMarcoCargando, { width: 320, height: 320 }]}>
                   <ActivityIndicator color={colors.primary} size="large" />
                 </View>
@@ -833,111 +905,127 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             </View>
             <Text style={styles.hint}>Pellizcá con dos dedos para acercar el mapa.</Text>
 
-            {!sinEstaciones && (
-              <View style={styles.editarFila}>
-                <Pressable style={styles.editarBtn} onPress={() => setEditandoManchon((v) => !v)}>
-                  {editandoManchon ? (
-                    <Check size={12} color={colors.primaryDark} />
-                  ) : (
-                    <Pencil size={12} color={colors.primaryDark} />
-                  )}
-                  <Text style={styles.editarTexto}>{editandoManchon ? "Listo" : "Editar polígono"}</Text>
-                </Pressable>
-                {historialActivo.length > 0 && (
-                  <Pressable style={styles.editarBtn} onPress={deshacerManchon}>
-                    <Undo2 size={12} color={colors.primaryDark} />
-                    <Text style={styles.editarTexto}>Deshacer</Text>
-                  </Pressable>
-                )}
-                {manchonesManualActivo && (
-                  <Pressable style={styles.editarBtn} onPress={restablecerManchon}>
-                    <RotateCcw size={12} color={colors.primaryDark} />
-                    <Text style={styles.editarTexto}>Restablecer</Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
-            {editandoManchon && (
-              <Text style={styles.hint}>
-                Arrastrá los vértices para ajustar el polígono a mano — no se puede sacar del límite del lote.
-              </Text>
-            )}
-
-            <View style={styles.statBox}>
-              <Text style={styles.statValor}>{haActivas.toFixed(1)} ha</Text>
-              <Text style={styles.statLabel}> de polígono · lote de {formatearHectareas(lote.hectareas)} ha</Text>
-            </View>
-
-            {sinEstaciones ? (
-              <Text style={styles.hint}>
-                Ninguna estación superó el umbral de {umbralActivo} {unidadActiva} — con estos datos no hace falta
-                una aplicación sectorizada.
-              </Text>
+            {cargandoZonaAplicacion ? (
+              // Mientras se calcula la zona de aplicación de la plaga
+              // activa (ver cargandoZonaAplicacion más arriba) — sin esto,
+              // acá abajo se llegaba a ver un flash de "0,0 ha" o "ninguna
+              // estación superó el umbral" con el resultado todavía vacío
+              // (el de ANTES de calcular), antes de que el cálculo real
+              // terminara y lo pisara.
+              <Text style={styles.hint}>Calculando zona de aplicación…</Text>
             ) : (
               <>
-                <View style={styles.exportRow}>
-                  {/* "Exportar Manchón" con desplegable (GPX / KMZ) — a
-                      pedido del usuario, reemplaza a los dos botones que
-                      había antes (GPX y KML por separado). El menú es una
-                      vista propia (no un picker nativo) posicionada justo
-                      debajo del botón. */}
-                  <View style={styles.exportDropdownWrap}>
-                    <Pressable
-                      style={styles.botonExport}
-                      onPress={() => setMenuManchonAbierto((v) => !v)}
-                      disabled={exportando !== null}
-                    >
-                      {exportando === "gpx" || exportando === "kmz" ? (
-                        <ActivityIndicator color={colors.primaryDark} size="small" />
+                {!sinEstaciones && (
+                  <View style={styles.editarFila}>
+                    <Pressable style={styles.editarBtn} onPress={() => setEditandoManchon((v) => !v)}>
+                      {editandoManchon ? (
+                        <Check size={12} color={colors.primaryDark} />
                       ) : (
-                        <Upload size={13} color={colors.primaryDark} />
+                        <Pencil size={12} color={colors.primaryDark} />
                       )}
-                      <Text style={styles.botonExportTexto}>Exportar Manchón</Text>
-                      <ChevronDown size={13} color={colors.primaryDark} />
+                      <Text style={styles.editarTexto}>{editandoManchon ? "Listo" : "Editar polígono"}</Text>
                     </Pressable>
-                    {menuManchonAbierto && (
-                      <View style={styles.menuDesplegable}>
-                        <Pressable
-                          style={styles.menuItem}
-                          onPress={() => {
-                            setMenuManchonAbierto(false);
-                            setPedidoExport("gpx");
-                          }}
-                        >
-                          <Text style={styles.menuItemTexto}>GPX</Text>
-                        </Pressable>
-                        <View style={styles.menuSeparador} />
-                        <Pressable
-                          style={styles.menuItem}
-                          onPress={() => {
-                            setMenuManchonAbierto(false);
-                            setPedidoExport("kmz");
-                          }}
-                        >
-                          <Text style={styles.menuItemTexto}>KMZ</Text>
-                        </Pressable>
-                      </View>
+                    {historialActivo.length > 0 && (
+                      <Pressable style={styles.editarBtn} onPress={deshacerManchon}>
+                        <Undo2 size={12} color={colors.primaryDark} />
+                        <Text style={styles.editarTexto}>Deshacer</Text>
+                      </Pressable>
+                    )}
+                    {manchonesManualActivo && (
+                      <Pressable style={styles.editarBtn} onPress={restablecerManchon}>
+                        <RotateCcw size={12} color={colors.primaryDark} />
+                        <Text style={styles.editarTexto}>Restablecer</Text>
+                      </Pressable>
                     )}
                   </View>
-                  {/* KMZ con el manchón Y las celdas del mapa de densidad
-                      (como polígonos coloreados, no una imagen) — para
-                      abrir en Google Earth y retocar el manchón con más
-                      precisión que con el dedo en el celular, viendo la
-                      densidad de fondo (mismo flujo que el usuario ya usaba
-                      en ArcGIS). */}
-                  <Pressable style={styles.botonExport} onPress={() => setPedidoExport("kmzMapa")} disabled={exportando !== null}>
-                    {exportando === "kmzMapa" ? (
-                      <ActivityIndicator color={colors.primaryDark} size="small" />
-                    ) : (
-                      <Upload size={13} color={colors.primaryDark} />
-                    )}
-                    <Text style={styles.botonExportTexto}>Exportar Manchón + Mapa</Text>
-                  </Pressable>
+                )}
+                {editandoManchon && (
+                  <Text style={styles.hint}>
+                    Arrastrá los vértices para ajustar el polígono a mano — no se puede sacar del límite del lote.
+                  </Text>
+                )}
+
+                <View style={styles.statBox}>
+                  <Text style={styles.statValor}>{haActivas.toFixed(1)} ha</Text>
+                  <Text style={styles.statLabel}> de polígono · lote de {formatearHectareas(lote.hectareas)} ha</Text>
                 </View>
-                <Text style={styles.hint}>
-                  El KMZ se abre directo en Google Earth (celu o compu) — "Manchón + Mapa" suma las celdas del mapa de
-                  densidad de fondo, útil para retocar el manchón con más precisión que con el dedo.
-                </Text>
+
+                {sinEstaciones ? (
+                  <Text style={styles.hint}>
+                    Ninguna estación superó el umbral de {umbralActivo} {unidadActiva} — con estos datos no hace
+                    falta una aplicación sectorizada.
+                  </Text>
+                ) : (
+                  <>
+                    <View style={styles.exportRow}>
+                      {/* "Exportar Manchón" con desplegable (GPX / KMZ) — a
+                          pedido del usuario, reemplaza a los dos botones que
+                          había antes (GPX y KML por separado). El menú es una
+                          vista propia (no un picker nativo) posicionada justo
+                          debajo del botón. */}
+                      <View style={styles.exportDropdownWrap}>
+                        <Pressable
+                          style={styles.botonExport}
+                          onPress={() => setMenuManchonAbierto((v) => !v)}
+                          disabled={exportando !== null}
+                        >
+                          {exportando === "gpx" || exportando === "kmz" ? (
+                            <ActivityIndicator color={colors.primaryDark} size="small" />
+                          ) : (
+                            <Upload size={13} color={colors.primaryDark} />
+                          )}
+                          <Text style={styles.botonExportTexto}>Exportar Manchón</Text>
+                          <ChevronDown size={13} color={colors.primaryDark} />
+                        </Pressable>
+                        {menuManchonAbierto && (
+                          <View style={styles.menuDesplegable}>
+                            <Pressable
+                              style={styles.menuItem}
+                              onPress={() => {
+                                setMenuManchonAbierto(false);
+                                setPedidoExport("gpx");
+                              }}
+                            >
+                              <Text style={styles.menuItemTexto}>GPX</Text>
+                            </Pressable>
+                            <View style={styles.menuSeparador} />
+                            <Pressable
+                              style={styles.menuItem}
+                              onPress={() => {
+                                setMenuManchonAbierto(false);
+                                setPedidoExport("kmz");
+                              }}
+                            >
+                              <Text style={styles.menuItemTexto}>KMZ</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                      {/* KMZ con el manchón Y las celdas del mapa de densidad
+                          (como polígonos coloreados, no una imagen) — para
+                          abrir en Google Earth y retocar el manchón con más
+                          precisión que con el dedo en el celular, viendo la
+                          densidad de fondo (mismo flujo que el usuario ya usaba
+                          en ArcGIS). */}
+                      <Pressable
+                        style={styles.botonExport}
+                        onPress={() => setPedidoExport("kmzMapa")}
+                        disabled={exportando !== null}
+                      >
+                        {exportando === "kmzMapa" ? (
+                          <ActivityIndicator color={colors.primaryDark} size="small" />
+                        ) : (
+                          <Upload size={13} color={colors.primaryDark} />
+                        )}
+                        <Text style={styles.botonExportTexto}>Exportar Manchón + Mapa</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={styles.hint}>
+                      El KMZ se abre directo en Google Earth (celu o compu) — "Manchón + Mapa" suma las celdas del
+                      mapa de densidad de fondo, útil para retocar el manchón con más precisión que con el dedo.
+                    </Text>
+                  </>
+                )}
               </>
             )}
           </View>
