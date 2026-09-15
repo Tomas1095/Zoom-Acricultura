@@ -189,10 +189,32 @@ export function calcularCeldasDensidad(
   const maxX = Math.max(...xs);
   const maxY = Math.max(...ys);
 
+  // Jitter (corrimiento) determinístico y mínimo — del orden del
+  // milímetro, imperceptible en cualquier escala real de dibujo — antes
+  // de pasarle los puntos a Delaunay. Encontrado por un usuario con una
+  // grilla PERFECTAMENTE equidistante (como arma la app siempre): cuatro
+  // puntos en las esquinas de un cuadrado caen justo sobre el mismo
+  // círculo ("cocirculares", en la jerga) y ahí no hay una única forma
+  // "correcta" de partir ese cuadrado en dos triángulos — cuál diagonal
+  // elegir queda librado a errores de redondeo de punto flotante. En
+  // CUALQUIER punto interior de una grilla regular (no en uno en
+  // particular, no hay forma de saber cuál de antemano) ese empate mal
+  // resuelto puede dejar una celda con vértices repetidos o
+  // autointersectada — es lo que hacía fallar el recorte más abajo (ver
+  // el catch), mostrando un hueco en el mapa donde en realidad SÍ había
+  // dato cargado. Este corrimiento saca a los puntos de la grilla de ese
+  // empate exacto sin cambiar la posición real que ve la persona (1mm es
+  // muchísimo menos que el error del GPS del celular), así el caso ya ni
+  // llega a pasar. El catch de más abajo queda como red de seguridad para
+  // cualquier otro motivo de falla, no como la solución principal.
+  function jitterDeterministico(semilla: number): number {
+    const s = Math.sin(semilla * 12.9898) * 43758.5453;
+    return (s - Math.floor(s) - 0.5) * 0.002; // ±1mm
+  }
   const delaunay = Delaunay.from(
     puntos,
-    (p) => p.x,
-    (p) => p.y
+    (p, i) => p.x + jitterDeterministico(i),
+    (p, i) => p.y + jitterDeterministico(i + 10000)
   );
   const pad = 200; // margen generoso en metros — evita celdas mal recortadas en el borde del bounds
   const voronoi = delaunay.voronoi([minX - pad, minY - pad, maxX + pad, maxY + pad]);
