@@ -244,10 +244,22 @@ export function calcularCeldasDensidad(
 
     // Cada celda se recorta por separado, con su propio try/catch: si
     // `polygon-clipping` tropieza con la geometría puntual de ESTE punto
-    // (dos puntos casi pegados, una celda casi degenerada), se salta solo
-    // esa celda en vez de perder el mapa entero — antes un solo punto
-    // problemático (de 130, en un caso real) podía dejar la pantalla
-    // completamente vacía.
+    // (dos puntos casi pegados, una celda casi degenerada — o, caso real
+    // de un usuario, un punto justo en el CENTRO de una grilla simétrica,
+    // donde varios vecinos quedan a la misma distancia exacta y el
+    // recorte pisa un caso límite de precisión de la librería), no se
+    // pierde el mapa entero — antes un solo punto problemático (de 130,
+    // en un caso real) podía dejar la pantalla completamente vacía.
+    //
+    // Antes acá directamente se salteaba la celda — mejor que vaciar TODO
+    // el mapa, pero dejaba un hueco real donde se veía la foto satelital
+    // de fondo, que a simple vista es indistinguible de "no hay dato acá"
+    // (con 63/63 puntos cargados, no era el caso). Ahora, si falla el
+    // recorte de verdad, se dibuja una celda de emergencia: un cuadrado
+    // simple centrado en el punto (sin pasar por polygon-clipping, así no
+    // puede fallar por la misma razón) — no queda perfectamente prolijo
+    // contra el perímetro o las celdas vecinas, pero siempre se ve el
+    // color que corresponde al dato real, nunca un hueco.
     try {
       const celdaPoly: Tupla[][] = [celda as Tupla[]];
       const interseccion = Number.isFinite(dVecino)
@@ -265,7 +277,20 @@ export function calcularCeldasDensidad(
         });
       });
     } catch (e) {
-      console.warn(`calcularCeldasDensidad: se salteó la celda del punto ${p.id}`, e);
+      console.warn(`calcularCeldasDensidad: recorte de la celda del punto ${p.id} falló, uso un cuadrado de emergencia`, e);
+      const mitad = (Number.isFinite(dVecino) ? dVecino * 0.9 : 10) / 2;
+      celdas.push({
+        id: p.id,
+        poligono: [
+          { x: p.x - mitad, y: p.y - mitad },
+          { x: p.x + mitad, y: p.y - mitad },
+          { x: p.x + mitad, y: p.y + mitad },
+          { x: p.x - mitad, y: p.y + mitad },
+        ],
+        valorM2: p.valor,
+        nivel: clasificarNivel(p.valor, rangos),
+        cargado: p.cargado ?? true,
+      });
     }
   });
   return celdas;
