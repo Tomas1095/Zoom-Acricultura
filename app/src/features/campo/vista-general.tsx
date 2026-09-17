@@ -204,7 +204,8 @@ export function VistaGeneral({
     try {
       await new Promise((resolve) => setTimeout(resolve, ESPERA_CIERRE_MODAL_MS));
       await exportarPlantillaExcel(
-        puntos.map((p) => ({ linea: p.linea, puntoNum: p.puntoNum })),
+        puntos.map((p) => ({ id: p.id, linea: p.linea, puntoNum: p.puntoNum })),
+        cargas,
         nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)
       );
     } catch (e: any) {

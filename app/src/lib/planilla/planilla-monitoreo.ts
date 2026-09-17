@@ -18,6 +18,7 @@ import { File } from "expo-file-system";
 import * as XLSX from "xlsx";
 
 import { guardarYCompartirBinario, sanitizarNombreArchivo } from "@/lib/exportar/archivo";
+import type { Carga } from "@/types/domain";
 
 // La librería xlsx usa `type: "array"`/`"buffer"` para leer y escribir en
 // Node/browser, pero eso depende de cosas que no existen en React
@@ -92,14 +93,32 @@ export interface ResultadoPlanilla {
   puntosSinDato: string[];
 }
 
-/** Arma la planilla en blanco para un lote — una fila por punto, en el
- * mismo orden en que se recorre la grilla (línea y, dentro de cada línea,
- * número de punto), lista para bajar, completar en la compu y volver a
- * subir. */
-function construirPlantilla(puntos: Array<{ linea: number; puntoNum: number }>): Uint8Array {
+/** Arma la planilla para un lote — una fila por punto, en el mismo orden en
+ * que se recorre la grilla (línea y, dentro de cada línea, número de
+ * punto), lista para bajar, completar en la compu y volver a subir.
+ *
+ * A pedido del usuario: si parte del lote se monitoreó con la app (celular)
+ * y otra parte a mano en papel, la planilla que se baja ya viene con los
+ * puntos que la app tiene confirmados PRE-completados — así en la planilla
+ * solo quedan en blanco los puntos que faltan (los que se están tomando a
+ * mano), sin tener que volver a tipear lo que ya está cargado. Al volver a
+ * subir la planilla, esos puntos ya completos no cambian de valor (se
+ * "recargan" con el mismo dato), y los que se completaron a mano se
+ * cargan por primera vez — mismo mecanismo que ya existía.
+ * `cargas`: mapa puntoId → Carga, mismo que devuelve `useDatosCampo`. */
+function construirPlantilla(
+  puntos: Array<{ id: string; linea: number; puntoNum: number }>,
+  cargas: Map<string, Carga>
+): Uint8Array {
   const ordenados = [...puntos].sort((a, b) => a.linea - b.linea || a.puntoNum - b.puntoNum);
   const encabezado = [COLUMNA_PUNTO, ...COLUMNAS_DATO.map((c) => c.header)];
-  const filas = ordenados.map((p) => [`${p.linea}.${p.puntoNum}`, ...COLUMNAS_DATO.map(() => null)]);
+  const filas = ordenados.map((p) => {
+    const carga = cargas.get(p.id);
+    const datos =
+      carga?.confirmado &&
+      COLUMNAS_DATO.map((c) => (c.tipo === "numero" ? carga[c.campo] : carga[c.campo] ? "SI" : "NO"));
+    return [`${p.linea}.${p.puntoNum}`, ...(datos || COLUMNAS_DATO.map(() => null))];
+  });
   const hoja = XLSX.utils.aoa_to_sheet([encabezado, ...filas]);
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, "Planilla");
@@ -107,9 +126,13 @@ function construirPlantilla(puntos: Array<{ linea: number; puntoNum: number }>):
   return base64ADecoded(base64);
 }
 
-export async function exportarPlantillaExcel(puntos: Array<{ linea: number; puntoNum: number }>, nombreLote: string): Promise<void> {
+export async function exportarPlantillaExcel(
+  puntos: Array<{ id: string; linea: number; puntoNum: number }>,
+  cargas: Map<string, Carga>,
+  nombreLote: string
+): Promise<void> {
   const nombre = sanitizarNombreArchivo(`Planilla ${nombreLote}`);
-  const bytes = construirPlantilla(puntos);
+  const bytes = construirPlantilla(puntos, cargas);
   await guardarYCompartirBinario(
     `${nombre}.xlsx`,
     bytes,
