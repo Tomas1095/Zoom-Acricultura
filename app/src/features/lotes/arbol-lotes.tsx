@@ -20,15 +20,11 @@ import { AccesoModal } from "./acceso-modal";
 
 interface InfoLote {
   puntosTotal: number;
-  /** Puntos cargados en total, cuente quien cuente (incluye lo que haya
-   * cargado un Socio/Encargado aunque no salga en `desglose`) — así el "X/Y
-   * puntos" del encabezado no queda por debajo de lo real solo porque
-   * `desglose` no los muestra. */
-  totalCompletados: number;
-  /** Solo Monitoreadores, con cuántos puntos cargó cada uno — portado de
-   * "Quién hizo qué" del prototipo (ArbolLotesView). Socio Fundador/Gerente
-   * y Encargado tienen acceso al lote pero no salen acá (a pedido del
-   * usuario): no son parte del equipo que sale a campo. */
+  /** Todos los que tienen acceso a este lote, con cuántos puntos cargó cada
+   * uno — sin importar el rol: si un Socio Gerente salió a campo ese día,
+   * también tiene que aparecer acá con lo que cargó (a pedido del
+   * usuario, confirmado explícitamente). Portado de "Quién hizo qué" del
+   * prototipo (ArbolLotesView). */
   desglose: Array<{ usuarioId: string; cantidad: number }>;
 }
 
@@ -174,16 +170,10 @@ export function ArbolLotes() {
           if (!carga.cargado || !carga.cargadoPorId) continue;
           conteos.set(carga.cargadoPorId, (conteos.get(carga.cargadoPorId) ?? 0) + 1);
         }
-        const totalCompletados = Array.from(conteos.values()).reduce((s, n) => s + n, 0);
-        // Solo Monitoreador — a pedido del usuario: Socio Fundador/Gerente y
-        // Encargado tienen acceso al lote (por eso están en `accesos`) pero
-        // no son parte del equipo que sale a campo a cargar puntos, así que
-        // no tiene sentido que aparezcan acá con "0 puntos".
         const desglose = accesos
-          .filter((usuarioId) => usuarios.find((u) => u.id === usuarioId)?.rol === "monitoreador")
           .map((usuarioId) => ({ usuarioId, cantidad: conteos.get(usuarioId) ?? 0 }))
           .sort((a, b) => b.cantidad - a.cantidad);
-        setInfoPorLote((prev) => ({ ...prev, [lote.id]: { puntosTotal: puntos.length, totalCompletados, desglose } }));
+        setInfoPorLote((prev) => ({ ...prev, [lote.id]: { puntosTotal: puntos.length, desglose } }));
       } catch (e: any) {
         Alert.alert("No se pudo cargar la info", e.message ?? String(e));
       }
@@ -408,7 +398,9 @@ export function ArbolLotes() {
                                       {infoValor !== "cargando" && infoValor !== undefined && (
                                         <View style={styles.desgloseBox}>
                                           <Text style={styles.desgloseTitulo}>
-                                            Quién hizo qué — {infoValor.totalCompletados}/{infoValor.puntosTotal} puntos
+                                            Quién hizo qué —{" "}
+                                            {infoValor.desglose.reduce((s, d) => s + d.cantidad, 0)}/
+                                            {infoValor.puntosTotal} puntos
                                           </Text>
                                           {infoValor.desglose.length === 0 ? (
                                             <Text style={styles.desgloseVacio}>
