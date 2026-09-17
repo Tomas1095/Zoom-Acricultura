@@ -12,7 +12,7 @@
 // persona (`cargadoPorId`).
 
 import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
-import { listarCambiosPendientes } from "./cola";
+import { listarCambiosPendientes, type CambioPendienteFila } from "./cola";
 import type { Carga, Punto } from "@/types/domain";
 
 /** Superpone los cambios pendientes de tipo "carga" de este lote/campaña
@@ -20,14 +20,26 @@ import type { Carga, Punto } from "@/types/domain";
  * con `sincronizado: false` — así un punto guardado sin señal se ve
  * completo (verde, contado) al toque, sin esperar a que la sincronización
  * real llegue a confirmarlo. Las fotos pendientes no hace falta
- * fusionarlas acá: no cambian si un punto cuenta como completado. */
+ * fusionarlas acá: no cambian si un punto cuenta como completado.
+ *
+ * `pendientesFoto`: quien llama puede pasar una foto de la cola YA leída
+ * (por ejemplo, tomada antes de lanzar el fetch remoto) en vez de dejar
+ * que se relea acá — evita una carrera con `sincronizarPendientes` (ver
+ * sync-context.tsx): si el fetch a `cargas` tarda (señal intermitente) y
+ * en el medio un punto recién sincronizado se saca de la cola, releer la
+ * cola DESPUÉS del fetch podía no encontrarlo en ninguna de las dos
+ * fuentes (ni en el fetch, tomado antes de que existiera en el server; ni
+ * en la cola, ya vaciada) y el punto se veía blanco hasta el próximo
+ * refresco. Sin este parámetro, se comporta como antes (relee la cola en
+ * el momento). */
 export function fusionarPendientesEnCargas(
   cargas: Map<string, Carga>,
   puntos: Punto[],
-  campana: string
+  campana: string,
+  pendientesFoto?: CambioPendienteFila[]
 ): Map<string, Carga> {
   const idsDelLote = new Set(puntos.map((p) => p.id));
-  const pendientes = listarCambiosPendientes();
+  const pendientes = pendientesFoto ?? listarCambiosPendientes();
   const resultado = new Map(cargas);
   for (const item of pendientes) {
     const p = item.payload;

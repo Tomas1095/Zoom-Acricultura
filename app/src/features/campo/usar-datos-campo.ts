@@ -4,6 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { fetchLote } from "@/lib/db/lotes";
 import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import { inferirOrigenDesdePuntos } from "@/lib/geo/geometria";
+import { listarCambiosPendientes } from "@/lib/offline/cola";
 import { guardarCacheLote, leerCacheLote } from "@/lib/offline/cache-lote";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
@@ -51,6 +52,16 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
   const [usandoCache, setUsandoCache] = useState(false);
 
   const refrescar = useCallback(async () => {
+    // Se toma ACÁ, antes de arrancar el fetch remoto (que con señal
+    // intermitente puede tardar varios segundos) — evita una carrera con
+    // sincronizarPendientes (ver sync-context.tsx): si un punto termina de
+    // subirse y se saca de la cola justo mientras este fetch está en
+    // vuelo, fusionarPendientesEnCargas ya no lo encontraba ni en la cola
+    // (vaciada) ni en el fetch (tomado antes de que existiera en el
+    // server) y el punto se veía blanco hasta el próximo refresco. Con
+    // esta foto fija, ese punto sigue contando como completado pase lo que
+    // pase con la cola durante el fetch.
+    const pendientesAlEmpezar = listarCambiosPendientes();
     try {
       // Chequeo rápido antes de intentar nada — si no hay señal, ni tiene
       // sentido esperar a que el fetch se dé por vencido solo (eso puede
@@ -70,7 +81,7 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
         // la sincronización real llegue a confirmarlo — ver
         // lib/offline/resumen.ts.
         setPuntos(ps);
-        setCargas(fusionarPendientesEnCargas(cs, ps, campanaEfectiva));
+        setCargas(fusionarPendientesEnCargas(cs, ps, campanaEfectiva, pendientesAlEmpezar));
         setUsandoCache(false);
         setError(null);
       }
@@ -85,7 +96,7 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
       if (cache) {
         setLote(cache.lote);
         setPuntos(cache.puntos);
-        setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual));
+        setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual, pendientesAlEmpezar));
         setUsandoCache(true);
         setError(null);
       } else {
