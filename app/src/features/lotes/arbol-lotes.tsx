@@ -63,60 +63,77 @@ export function ArbolLotes() {
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
   const [usandoCache, setUsandoCache] = useState(false);
 
-  const refrescar = useCallback(async () => {
-    if (!usuario) return;
-    let arbol: db.Arbol;
-    try {
-      if (!(await hayConexion())) throw new Error("Sin conexión");
-      const [arbolLive, todosLosUsuarios] = await conTimeout(
-        Promise.all([db.fetchArbol(), fetchUsuarios(usuario.comunidadId)])
-      );
-      arbol = arbolLive;
-      setClientes(arbol.clientes);
-      setEstablecimientos(arbol.establecimientos);
-      setLotes(arbol.lotes);
-      setUsuarios(todosLosUsuarios);
-      setUsandoCache(false);
-      guardarCacheArbol(usuario.id, arbol);
-      // Con solo entrar a esta pantalla (que pasa siempre, apenas hay
-      // sesión) ya queda todo listo para trabajar offline en cualquier
-      // lote — no hace falta abrir cada uno a mano. Ver
-      // lib/offline/cache-lote.ts.
-      precargarLotes(arbol.lotes);
-    } catch (e: any) {
-      // Sin señal: esta es la PRIMERA pantalla que ve un Socio/Encargado
-      // al entrar — sin este respaldo, no había forma de siquiera ver el
-      // árbol para poder entrar a un lote y seguir trabajando offline (eso
-      // sí ya andaba, ver lib/offline/cache-lote.ts). "Quién hizo qué" y
-      // los avatares de usuarios sí se pierden sin señal (no son
-      // necesarios para navegar ni cargar puntos) — ver
-      // lib/offline/cache-arbol.ts.
-      const cache = await leerCacheArbol(usuario.id);
-      if (cache) {
-        arbol = cache;
-        setClientes(cache.clientes);
-        setEstablecimientos(cache.establecimientos);
-        setLotes(cache.lotes);
-        setUsandoCache(true);
-      } else {
-        Alert.alert("No se pudo cargar", e.message ?? String(e));
-        setCargando(false);
-        return;
+  // `liviano`: true cuando se llama después de crear/editar/borrar algo en
+  // el árbol (ver conManejoDeError) — ahí solo hace falta refrescar la
+  // lista (para que aparezca/desaparezca el ítem tocado), no repetir la
+  // precarga offline de TODOS los lotes ni volver a pedir el resumen de
+  // avance de cada uno: eso no cambió, y repetirlo en cada alta/baja/
+  // edición (con decenas de lotes reales) es lo que hacía sentir lenta
+  // cualquier acción del árbol — cada toque disparaba de nuevo un
+  // fetch por cada lote con grilla, de a dos por lote. La precarga
+  // completa se sigue haciendo, pero solo al entrar de verdad a esta
+  // pantalla (ver useFocusEffect más abajo).
+  const refrescar = useCallback(
+    async (liviano = false) => {
+      if (!usuario) return;
+      let arbol: db.Arbol;
+      try {
+        if (!(await hayConexion())) throw new Error("Sin conexión");
+        const [arbolLive, todosLosUsuarios] = await conTimeout(
+          Promise.all([db.fetchArbol(), fetchUsuarios(usuario.comunidadId)])
+        );
+        arbol = arbolLive;
+        setClientes(arbol.clientes);
+        setEstablecimientos(arbol.establecimientos);
+        setLotes(arbol.lotes);
+        setUsuarios(todosLosUsuarios);
+        setUsandoCache(false);
+        guardarCacheArbol(usuario.id, arbol);
+        if (!liviano) {
+          // Con solo entrar a esta pantalla (que pasa siempre, apenas hay
+          // sesión) ya queda todo listo para trabajar offline en cualquier
+          // lote — no hace falta abrir cada uno a mano. Ver
+          // lib/offline/cache-lote.ts.
+          precargarLotes(arbol.lotes);
+        }
+      } catch (e: any) {
+        // Sin señal: esta es la PRIMERA pantalla que ve un Socio/Encargado
+        // al entrar — sin este respaldo, no había forma de siquiera ver el
+        // árbol para poder entrar a un lote y seguir trabajando offline (eso
+        // sí ya andaba, ver lib/offline/cache-lote.ts). "Quién hizo qué" y
+        // los avatares de usuarios sí se pierden sin señal (no son
+        // necesarios para navegar ni cargar puntos) — ver
+        // lib/offline/cache-arbol.ts.
+        const cache = await leerCacheArbol(usuario.id);
+        if (cache) {
+          arbol = cache;
+          setClientes(cache.clientes);
+          setEstablecimientos(cache.establecimientos);
+          setLotes(cache.lotes);
+          setUsandoCache(true);
+        } else {
+          Alert.alert("No se pudo cargar", e.message ?? String(e));
+          setCargando(false);
+          return;
+        }
       }
-    }
 
-    // Aparte y sin bloquear el árbol — cada pill de resumen aparece
-    // apenas se calcula, sin esperar a todos los lotes. Sin señal esto
-    // también va a fallar solo (fetchResumenLote pega contra el server) —
-    // cada fila se queda sin el resumen, no rompe el resto.
-    const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
-    conGrilla.forEach((l) => {
-      fetchResumenLote(l.id, l.campanaActual)
-        .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
-        .catch(() => {});
-    });
-    setCargando(false);
-  }, [usuario]);
+      if (!liviano) {
+        // Aparte y sin bloquear el árbol — cada pill de resumen aparece
+        // apenas se calcula, sin esperar a todos los lotes. Sin señal esto
+        // también va a fallar solo (fetchResumenLote pega contra el server) —
+        // cada fila se queda sin el resumen, no rompe el resto.
+        const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
+        conGrilla.forEach((l) => {
+          fetchResumenLote(l.id, l.campanaActual)
+            .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
+            .catch(() => {});
+        });
+      }
+      setCargando(false);
+    },
+    [usuario]
+  );
 
   // useFocusEffect (no useEffect a secas) para que, al volver de entrar a
   // un lote (donde se cargan/sincronizan puntos), el resumen de esa fila
@@ -137,7 +154,7 @@ export function ArbolLotes() {
   async function conManejoDeError(accion: () => Promise<void>) {
     try {
       await accion();
-      await refrescar();
+      await refrescar(true);
     } catch (e: any) {
       Alert.alert("Ocurrió un error", e.message ?? String(e));
     }
