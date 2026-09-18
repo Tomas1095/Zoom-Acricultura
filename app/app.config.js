@@ -12,17 +12,17 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.4 (no solo el buildNumber, que ya se incrementa solo
-    // vía EAS) para esta quinta entrega — Apple cierra el "tren" de una
+    // Subida a 1.0.5 (no solo el buildNumber, que ya se incrementa solo
+    // vía EAS) para esta sexta entrega — Apple cierra el "tren" de una
     // versión ya aprobada para nuevos builds: hace falta subir esto a
     // mano cada vez que se manda una actualización real a revisión (no
-    // en los builds de preview, que nunca llegan a Apple). La 1.0.3
-    // traía el Voronoi con jitter/bbox y la barra "Listo" con toque
-    // sostenido; esta suma el arreglo de la sincronización con señal
-    // intermitente, "quién hizo qué" mostrando a todos (no solo
-    // Monitoreadores) y la planilla Excel pre-completada con lo ya
-    // cargado desde la app.
-    version: "1.0.4",
+    // en los builds de preview, que nunca llegan a Apple). La 1.0.4 (ya
+    // aprobada y activa) traía el fix de sincronización con señal
+    // intermitente, "quién hizo qué" y la planilla Excel
+    // pre-completada; esta suma el arreglo de lentitud al crear/editar/
+    // borrar clientes, establecimientos o lotes en el árbol (disparaba
+    // de nuevo toda la precarga offline en cada acción).
+    version: "1.0.5",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",
