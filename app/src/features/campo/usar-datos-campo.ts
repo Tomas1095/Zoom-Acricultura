@@ -75,7 +75,17 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
         const [ps, cs] = await conTimeout(
           Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)])
         );
-        guardarCacheLote(loteId, campanaEfectiva, l, ps, cs);
+        // `l.tieneGrilla` en true implica que este lote SÍ tiene puntos
+        // generados (se ponen en true juntos, nunca uno sin el otro — ver
+        // el pipeline de KMZ) — si igual `ps` vino vacío, es casi seguro
+        // un problema pasajero de conexión al traerlos, no un lote real
+        // sin puntos. No lo guardamos en la cache offline para no dejar
+        // "quemado" ese estado vacío como respaldo futuro (ver el cartel
+        // de "Reintentar" en vista-general.tsx, que usa este mismo
+        // chequeo para ofrecer reintentar en vez de quedar pegado).
+        if (!l.tieneGrilla || ps.length > 0) {
+          guardarCacheLote(loteId, campanaEfectiva, l, ps, cs);
+        }
         // Fusiona lo que esta persona ya guardó sin señal (todavía en la
         // cola local) para que se vea completo al toque, sin esperar a que
         // la sincronización real llegue a confirmarlo — ver

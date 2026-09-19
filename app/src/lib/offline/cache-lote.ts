@@ -71,7 +71,17 @@ export function precargarLotes(lotes: Lote[]): void {
     .filter((l) => l.tieneGrilla)
     .forEach((l) => {
       Promise.all([fetchPuntosDeLote(l.id), fetchCargasDeLote(l.id, l.campanaActual)])
-        .then(([puntos, cargas]) => guardarCacheLote(l.id, l.campanaActual, l, puntos, cargas))
+        .then(([puntos, cargas]) => {
+          // `l.tieneGrilla` en true implica que este lote tiene puntos de
+          // verdad (ver el mismo chequeo en usar-datos-campo.ts) — si esta
+          // precarga en segundo plano trajo 0 puntos, es un problema
+          // pasajero de conexión, no el estado real del lote. No lo
+          // guardamos: dejar esto en la cache "quemaría" un lote entero
+          // en blanco para cuando la persona lo abra sin señal más
+          // adelante, aunque tenga toda su grilla real cargada en el
+          // servidor.
+          if (puntos.length > 0) guardarCacheLote(l.id, l.campanaActual, l, puntos, cargas);
+        })
         .catch(() => {});
     });
 }

@@ -440,10 +440,30 @@ export function VistaGeneral({
         onInteraccion={setVistaModificada}
       />
 
-      {!puedeTocarPuntos && viendoActual && (
+      {!puedeTocarPuntos && viendoActual && puntos.length > 0 && (
         <Text style={styles.aviso}>
           Esta vista es solo para ubicarte. Para cargar datos, entrá a "Modo trabajo".
         </Text>
+      )}
+
+      {/* `lote.tieneGrilla` viene en true (por eso se llegó a ver esta
+       * pantalla en vez del cartel de "sin grilla todavía") pero `puntos`
+       * llegó vacío — eso nunca es un lote real sin puntos (la grilla se
+       * genera junto con `tieneGrilla`, nunca queda una sin la otra), así
+       * que es casi seguro un problema pasajero de conexión al traerlos.
+       * Reportado por el usuario: a varios del equipo (iOS y Android) se
+       * les quedaba la grilla pegada así, sin ningún botón para reintentar
+       * más que cerrar la app entera y volver a abrirla — esto da una
+       * salida directa. */}
+      {!cargando && lote.tieneGrilla && puntos.length === 0 && viendoActual && (
+        <View style={styles.avisoSinPuntos}>
+          <Text style={styles.avisoSinPuntosTexto}>
+            No se pudieron cargar los puntos de este lote — probablemente un problema de conexión.
+          </Text>
+          <Pressable style={styles.botonReintentar} onPress={() => refrescar()}>
+            <Text style={styles.botonReintentarTexto}>Reintentar</Text>
+          </Pressable>
+        </View>
       )}
 
       {puedeVerObservaciones && <ObservacionesPanel puntos={puntos} cargas={cargas} />}
@@ -502,6 +522,22 @@ const styles = StyleSheet.create({
   },
   botonModoTrabajoTexto: { color: colors.surface, fontWeight: "700", fontSize: 12 },
   aviso: { color: colors.textMuted, fontSize: 12, textAlign: "center" },
+  avisoSinPuntos: {
+    width: "100%",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.warningBg,
+    borderRadius: 10,
+    padding: 12,
+  },
+  avisoSinPuntosTexto: { color: colors.warning, fontSize: 12.5, fontWeight: "600", textAlign: "center" },
+  botonReintentar: {
+    backgroundColor: colors.warning,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  botonReintentarTexto: { color: colors.surface, fontWeight: "700", fontSize: 12.5 },
   botonExportarGrilla: {
     flexDirection: "row",
     alignItems: "center",
