@@ -58,30 +58,54 @@ export function leerCacheLote(loteId: string, campana?: string): CacheLote | nul
   };
 }
 
+// Cuántos lotes se precargan en simultáneo — confirmado con logs reales de
+// Supabase (código 57014 "canceling statement due to statement timeout",
+// muchas veces seguidas): lanzar TODOS los lotes de una (antes, sin este
+// límite) satura la base con decenas de consultas al mismo tiempo, y
+// algunas quedan atrapadas atrás de otras hasta que Postgres las cancela
+// por timeout — no es un problema de señal ni de permisos, es puro
+// embotellamiento. El caso real que lo disparó: una cuenta con acceso a
+// muchos lotes (un Socio/Encargado) entra al árbol, dispara su propia
+// precarga masiva, y esa saturación de la base hace que OTRA persona
+// (un Monitoreador con un solo lote) que está usando la app *al mismo
+// tiempo* también se quede sin respuesta — aunque su propio pedido sea
+// chiquito, compite por los mismos recursos del servidor. Procesar de a
+// tandas chicas evita esa ráfaga sin perder la idea de precargar todo.
+const LOTES_EN_PARALELO = 3;
+
 /** Precarga la grilla + cargas de TODOS los lotes con grilla que la
  * persona ve en su árbol — pedido explícito del usuario: con solo
  * loguearse y entrar a la app (sin tener que abrir cada lote a mano) ya
  * tiene que quedar todo listo para trabajar cualquiera de ellos sin
- * señal. Se dispara en paralelo y sin bloquear la pantalla — quien llama
- * esto (MisLotes/ArbolLotes) no espera a que termine; si un lote puntual
- * falla no frena a los demás, y si la persona ya entró a algún lote a
- * mano antes, esto simplemente lo vuelve a guardar más fresco. */
+ * señal. Se dispara sin bloquear la pantalla — quien llama esto
+ * (MisLotes/ArbolLotes) no espera a que termine; si un lote puntual falla
+ * no frena a los demás, y si la persona ya entró a algún lote a mano
+ * antes, esto simplemente lo vuelve a guardar más fresco. Ver
+ * LOTES_EN_PARALELO arriba para por qué esto ya no dispara todo junto. */
 export function precargarLotes(lotes: Lote[]): void {
-  lotes
-    .filter((l) => l.tieneGrilla)
-    .forEach((l) => {
-      Promise.all([fetchPuntosDeLote(l.id), fetchCargasDeLote(l.id, l.campanaActual)])
-        .then(([puntos, cargas]) => {
-          // `l.tieneGrilla` en true implica que este lote tiene puntos de
-          // verdad (ver el mismo chequeo en usar-datos-campo.ts) — si esta
-          // precarga en segundo plano trajo 0 puntos, es un problema
-          // pasajero de conexión, no el estado real del lote. No lo
-          // guardamos: dejar esto en la cache "quemaría" un lote entero
-          // en blanco para cuando la persona lo abra sin señal más
-          // adelante, aunque tenga toda su grilla real cargada en el
-          // servidor.
-          if (puntos.length > 0) guardarCacheLote(l.id, l.campanaActual, l, puntos, cargas);
-        })
-        .catch(() => {});
-    });
+  const conGrilla = lotes.filter((l) => l.tieneGrilla);
+
+  async function precargarUno(l: Lote) {
+    try {
+      const [puntos, cargas] = await Promise.all([fetchPuntosDeLote(l.id), fetchCargasDeLote(l.id, l.campanaActual)]);
+      // `l.tieneGrilla` en true implica que este lote tiene puntos de
+      // verdad (ver el mismo chequeo en usar-datos-campo.ts) — si esta
+      // precarga en segundo plano trajo 0 puntos, es un problema pasajero,
+      // no el estado real del lote. No lo guardamos: dejar esto en la
+      // cache "quemaría" un lote entero en blanco para cuando la persona
+      // lo abra sin señal más adelante, aunque tenga toda su grilla real
+      // cargada en el servidor.
+      if (puntos.length > 0) guardarCacheLote(l.id, l.campanaActual, l, puntos, cargas);
+    } catch {
+      // Un lote puntual que falla (o queda afuera del cupo de tiempo) no
+      // frena a los demás — se vuelve a intentar solo la próxima vez que
+      // se entre al árbol/mis lotes.
+    }
+  }
+
+  (async () => {
+    for (let i = 0; i < conGrilla.length; i += LOTES_EN_PARALELO) {
+      await Promise.all(conGrilla.slice(i, i + LOTES_EN_PARALELO).map(precargarUno));
+    }
+  })();
 }
