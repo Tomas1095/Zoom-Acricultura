@@ -14,6 +14,7 @@ import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
+import { procesarEnTandas } from "@/lib/offline/concurrencia";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesoModal } from "./acceso-modal";
@@ -122,12 +123,15 @@ export function ArbolLotes() {
         // Aparte y sin bloquear el árbol — cada pill de resumen aparece
         // apenas se calcula, sin esperar a todos los lotes. Sin señal esto
         // también va a fallar solo (fetchResumenLote pega contra el server) —
-        // cada fila se queda sin el resumen, no rompe el resto.
+        // cada fila se queda sin el resumen, no rompe el resto. De a tandas
+        // chicas (ver concurrencia.ts) — lanzar TODOS los lotes de una es
+        // lo que saturaba Postgres con timeouts reales (57014, confirmado
+        // con logs de Supabase), afectando a cualquiera usando la app en
+        // ese momento, no solo a esta pantalla.
         const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
-        conGrilla.forEach((l) => {
-          fetchResumenLote(l.id, l.campanaActual)
-            .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
-            .catch(() => {});
+        procesarEnTandas(conGrilla, async (l) => {
+          const r = await fetchResumenLote(l.id, l.campanaActual);
+          setResumenes((prev) => ({ ...prev, [l.id]: r }));
         });
       }
       setCargando(false);

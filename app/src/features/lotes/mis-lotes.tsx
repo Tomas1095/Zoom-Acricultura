@@ -8,6 +8,7 @@ import * as db from "@/lib/db/lotes";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
+import { procesarEnTandas } from "@/lib/offline/concurrencia";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Establecimiento, Lote } from "@/types/domain";
@@ -69,12 +70,14 @@ export function MisLotes() {
     // esta pantalla es solo la de Monitoreador, nunca la ve un Socio. Si
     // no hay señal esto también va a fallar solo (fetchResumenLote pega
     // contra el server) — cada card se queda sin el resumen, no rompe el
-    // resto.
+    // resto. De a tandas chicas (ver concurrencia.ts) — lanzar TODOS los
+    // lotes de una es lo que saturaba Postgres con timeouts reales (57014,
+    // confirmado con logs de Supabase), afectando a cualquiera usando la
+    // app en ese momento, no solo a esta pantalla.
     const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
-    conGrilla.forEach((l) => {
-      fetchResumenLote(l.id, l.campanaActual, usuario.id)
-        .then((r) => setResumenes((prev) => ({ ...prev, [l.id]: r })))
-        .catch(() => {});
+    procesarEnTandas(conGrilla, async (l) => {
+      const r = await fetchResumenLote(l.id, l.campanaActual, usuario.id);
+      setResumenes((prev) => ({ ...prev, [l.id]: r }));
     });
   }, [usuario]);
 
