@@ -84,7 +84,9 @@ export function VistaGeneral({
   const { cargando, usandoCache, puntos, cargas, resumen, gps, puntoCercano, enRango, origen, refrescar } = useDatosCampo(
     lote.id,
     campanaEfectiva,
-    esMonitoreador ? usuario?.id : undefined
+    esMonitoreador ? usuario?.id : undefined,
+    true,
+    lote
   );
   const { width } = useWindowDimensions();
   const mapaRef = useRef<MapaCampoHandle>(null);

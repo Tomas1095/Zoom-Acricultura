@@ -57,7 +57,7 @@ export function ResultadosView({
   const [exportandoPng, setExportandoPng] = useState(false);
   const mapaRef = useRef<View>(null);
 
-  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true);
+  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true, lote);
 
   const rangos = rangosDe(plaga);
   const etiqueta = plaga === "bicho" ? "Nº BB/m²" : "Nº Babosas/m²";

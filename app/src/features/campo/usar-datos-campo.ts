@@ -38,13 +38,31 @@ const TOLERANCE_M = 20;
  * mostrando datos viejos después de cargar un punto en Grilla y volver.
  * Por default `true` (siempre activo) para no romper ningún llamador que
  * no le importa esta distinción (Grilla/modo trabajo, que si se desmontan
- * de verdad al salir). */
-export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuarioId?: string, activo: boolean = true) {
+ * de verdad al salir).
+ *
+ * `loteInicial`: cuando quien llama (VistaGeneral/ResultadosView/
+ * SalidasView) ya recibió el lote como prop —lo acaba de traer la pantalla
+ * de arriba, ver lote/[id]/index.tsx—, se lo pasa acá para que el primer
+ * refresco no vuelva a pedirlo de nuevo al servidor: antes esto agregaba un
+ * viaje entero (idéntico al que ya se acababa de hacer un instante antes)
+ * antes incluso de arrancar el pedido de puntos+cargas, sumando de más a
+ * una demora que con señal débil ya alcanzaba para mostrar el cartel de
+ * "sin señal" sin estarlo en verdad. Refrescos posteriores (volver de
+ * cargar un punto, reintentar, etc.) sí vuelven a pedir el lote real, para
+ * no quedarse con datos viejos si cambió `tieneGrilla`/`campanaActual`. */
+export function useDatosCampo(
+  loteId: string,
+  campana?: string,
+  resumenDeUsuarioId?: string,
+  activo: boolean = true,
+  loteInicial?: Lote
+) {
   const [cargando, setCargando] = useState(true);
-  const [lote, setLote] = useState<Lote | null>(null);
+  const [lote, setLote] = useState<Lote | null>(loteInicial ?? null);
   const [puntos, setPuntos] = useState<Punto[]>([]);
   const [cargas, setCargas] = useState<Map<string, Carga>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  const loteInicialSinUsarRef = useRef(!!loteInicial);
   // true cuando lo que se está mostrando es la última foto guardada en el
   // celular (ver lib/offline/cache-lote.ts), no lo que hay de verdad en el
   // server ahora mismo — porque el fetch en vivo falló, típicamente por
@@ -68,7 +86,16 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
       // tardar bastante) para recién ahí caer al respaldo local. Ver
       // lib/offline/net.ts.
       if (!(await hayConexion())) throw new Error("Sin conexión");
-      const l = await conTimeout(fetchLote(loteId));
+      // Ver el comentario de `loteInicial` más arriba: solo la primera vez,
+      // y solo si de verdad es este mismo lote (por las dudas, si loteId
+      // cambiara sin desmontar el hook).
+      const usarLoteInicial = loteInicialSinUsarRef.current && loteInicial?.id === loteId;
+      loteInicialSinUsarRef.current = false;
+      // 15s, no los 10s por default de conTimeout — confirmado con el
+      // usuario que con wifi andando bien igual pasaba de los 10s alguna
+      // vez (probado en el campo: 12s), suficiente para caer al respaldo
+      // de cache sin estar realmente sin señal.
+      const l = usarLoteInicial ? loteInicial! : await conTimeout(fetchLote(loteId), 15000);
       setLote(l);
       if (l) {
         const campanaEfectiva = campana ?? l.campanaActual;

@@ -141,7 +141,7 @@ function zonaInicial(lote: Lote): ZonaCebo {
  * previa, con su propio "Exportar PDF" en A4 apaisada (ver
  * lib/exportar/datos.ts). */
 export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo }: SalidasViewProps) {
-  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true);
+  const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true, lote);
   const [subTab, setSubTab] = useState<SubTab>("informe");
   // Elige qué diseño de PDF usa "Exportar PDF" — el mismo formulario
   // (mapas, situación, recomendación) sirve para las dos, solo cambia el
