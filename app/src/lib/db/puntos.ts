@@ -72,12 +72,16 @@ export async function fetchCargasDeLote(puntoIds: string[], campana: string): Pr
  * se sacan directo de qué valores distintos de `campana` tienen las cargas
  * ya guardadas. Puede no incluir la campaña actual si todavía no se cargó
  * ningún punto — quien llame esto debería sumarla igual, para que el
- * selector siempre muestre la vigente. */
-export async function fetchCampanasDeLote(loteId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from("cargas")
-    .select("campana, puntos!inner(lote_id)")
-    .eq("puntos.lote_id", loteId);
+ * selector siempre muestre la vigente.
+ *
+ * Recibe los IDs de los puntos, mismo motivo que fetchCargasDeLote más
+ * arriba: evita el join contra `puntos` (acá encima sin filtrar por
+ * campaña, así que barre TODA la historia de cargas del lote — más caro
+ * todavía) a favor de un filtro directo por punto_id, que sí usa el
+ * índice existente. */
+export async function fetchCampanasDeLote(puntoIds: string[]): Promise<string[]> {
+  if (puntoIds.length === 0) return [];
+  const { data, error } = await supabase.from("cargas").select("campana").in("punto_id", puntoIds);
   if (error) throw error;
   const set = new Set<string>((data ?? []).map((f: any) => f.campana as string));
   return Array.from(set).sort().reverse(); // más reciente primero (formato "25/26" ordena bien como texto)

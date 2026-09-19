@@ -3,7 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { puedeCerrarCampana } from "@/lib/roles";
-import { fetchCampanasDeLote } from "@/lib/db/puntos";
+import { fetchCampanasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import { cerrarCampanaDeLote } from "@/lib/db/lotes";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -69,7 +69,8 @@ export function LoteTabs({ lote, establecimientoNombre, onLoteActualizado }: Lot
   // historial, que también cambió.
   useEffect(() => {
     setCampanaViendo(lote.campanaActual);
-    fetchCampanasDeLote(lote.id)
+    fetchPuntosDeLote(lote.id)
+      .then((puntos) => fetchCampanasDeLote(puntos.map((p) => p.id)))
       .then((historicas) => {
         setCampanas(Array.from(new Set([lote.campanaActual, ...historicas])).sort().reverse());
       })
