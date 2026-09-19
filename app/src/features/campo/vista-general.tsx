@@ -465,6 +465,10 @@ export function VistaGeneral({
         <View style={styles.avisoSinPuntos}>
           <Text style={styles.avisoSinPuntosTexto}>
             No se pudieron cargar los puntos de este lote — probablemente un problema de conexión.
+            {/* Motivo real — mismo diagnóstico temporal que el cartel de cache
+                de más arriba (ver ese comentario): acá también se mostraba
+                siempre el mismo texto genérico sin importar la causa real. */}
+            {errorCache ? ` (${errorCache})` : ""}
           </Text>
           <Pressable style={styles.botonReintentar} onPress={() => refrescar()}>
             <Text style={styles.botonReintentarTexto}>Reintentar</Text>
