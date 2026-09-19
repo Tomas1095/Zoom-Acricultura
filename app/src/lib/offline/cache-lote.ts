@@ -88,7 +88,14 @@ export function precargarLotes(
 ): void {
   const conGrilla = lotes.filter((l) => l.tieneGrilla);
   procesarEnTandas(conGrilla, async (l) => {
-    const [puntos, cargas] = await Promise.all([fetchPuntosDeLote(l.id), fetchCargasDeLote(l.id, l.campanaActual)]);
+    // Puntos primero y cargas después (no en paralelo) — fetchCargasDeLote
+    // necesita los IDs de los puntos para no depender de un join más caro
+    // para Postgres (ver el comentario en su definición, db/puntos.ts).
+    const puntos = await fetchPuntosDeLote(l.id);
+    const cargas = await fetchCargasDeLote(
+      puntos.map((p) => p.id),
+      l.campanaActual
+    );
     // `l.tieneGrilla` en true implica que este lote tiene puntos de
     // verdad (ver el mismo chequeo en usar-datos-campo.ts) — si esta
     // precarga en segundo plano trajo 0 puntos, es un problema pasajero,

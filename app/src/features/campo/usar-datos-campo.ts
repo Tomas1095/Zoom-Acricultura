@@ -117,8 +117,22 @@ export function useDatosCampo(
         // reintentar (ver el aviso en vista-general.tsx), quedaba pegado
         // en blanco para siempre. Es más pedido que traer el lote solo
         // (dos consultas juntas), así que necesita más margen.
-        const [ps, cs] = await conTimeout(
-          Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)]),
+        //
+        // Puntos primero y cargas DESPUÉS (no Promise.all) — a propósito:
+        // fetchCargasDeLote ahora necesita los IDs de los puntos (ver el
+        // comentario ahí), así que ya no se pueden pedir en paralelo. Cuesta
+        // un poco más de tiempo total (dos viajes seguidos en vez de dos en
+        // simultáneo), pero la consulta de cargas en sí queda mucho más
+        // liviana para Postgres — confirmado en el campo que varias
+        // personas entrando al MISMO lote a la vez (normal en el trabajo
+        // real) seguía saturando la base con la versión vieja, con join,
+        // incluso en un plan de Supabase más grande.
+        const ps = await conTimeout(fetchPuntosDeLote(loteId), 25000);
+        const cs = await conTimeout(
+          fetchCargasDeLote(
+            ps.map((p) => p.id),
+            campanaEfectiva
+          ),
           25000
         );
         // `l.tieneGrilla` en true implica que este lote SÍ tiene puntos

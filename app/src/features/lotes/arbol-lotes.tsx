@@ -178,11 +178,14 @@ export function ArbolLotes() {
     if (!abierta && infoPorLote[lote.id] === undefined) {
       setInfoPorLote((prev) => ({ ...prev, [lote.id]: "cargando" }));
       try {
-        const [puntos, cargas, accesos] = await Promise.all([
-          fetchPuntosDeLote(lote.id),
-          fetchCargasDeLote(lote.id, lote.campanaActual),
-          db.fetchAccesos(lote.id),
-        ]);
+        // Puntos y accesos sí van en paralelo (no dependen entre sí);
+        // cargas necesita los IDs de los puntos, ver el comentario en
+        // fetchCargasDeLote (db/puntos.ts).
+        const [puntos, accesos] = await Promise.all([fetchPuntosDeLote(lote.id), db.fetchAccesos(lote.id)]);
+        const cargas = await fetchCargasDeLote(
+          puntos.map((p) => p.id),
+          lote.campanaActual
+        );
         const conteos = new Map<string, number>();
         for (const carga of cargas.values()) {
           if (!carga.cargado || !carga.cargadoPorId) continue;

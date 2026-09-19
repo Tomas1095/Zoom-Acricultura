@@ -44,15 +44,25 @@ export async function fetchCentroDeLote(loteId: string): Promise<LatLon | null> 
 }
 
 /** Trae las cargas de la campaña vigente del lote, como mapa punto_id ->
- * Carga, para pintar el estado de cada estación en el mapa. */
-export async function fetchCargasDeLote(loteId: string, campana: string): Promise<Map<string, Carga>> {
-  const { data, error } = await supabase
-    .from("cargas")
-    .select("*, puntos!inner(lote_id)")
-    .eq("campana", campana)
-    .eq("puntos.lote_id", loteId);
-  if (error) throw error;
+ * Carga, para pintar el estado de cada estación en el mapa.
+ *
+ * Recibe los IDs de los puntos (no el loteId) a propósito — antes hacía
+ * `cargas` join `puntos` filtrando por `puntos.lote_id`, y esa combinación
+ * (join + política de seguridad evaluada por fila sobre la tabla unida) es
+ * bastante más cara para Postgres que un simple `punto_id = any(...)`, que
+ * además usa de lleno el índice que ya existe en `cargas (punto_id,
+ * campana)`. Confirmado en el campo: con varias personas entrando al MISMO
+ * lote a la vez (algo normal en el trabajo real, no un caso raro — todo un
+ * equipo mira o carga sobre el mismo lote junto), esta consulta seguía
+ * cayendo en 57014 (timeout de Postgres) incluso después de subir el plan
+ * de Supabase. Quien llama ya tiene los puntos del lote (los pidió aparte,
+ * ver fetchPuntosDeLote) así que no hace falta volver a pedirlos ni
+ * cruzar tablas para esto. */
+export async function fetchCargasDeLote(puntoIds: string[], campana: string): Promise<Map<string, Carga>> {
   const mapa = new Map<string, Carga>();
+  if (puntoIds.length === 0) return mapa;
+  const { data, error } = await supabase.from("cargas").select("*").eq("campana", campana).in("punto_id", puntoIds);
+  if (error) throw error;
   (data ?? []).forEach((f: any) => mapa.set(f.punto_id, filaACarga(f)));
   return mapa;
 }
