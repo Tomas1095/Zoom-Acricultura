@@ -81,7 +81,7 @@ export function VistaGeneral({
   // Fundador/Encargado ven el total del lote — pedido explícito del
   // usuario, ver lib/offline/resumen.ts.
   const esMonitoreador = usuario?.rol === "monitoreador";
-  const { cargando, usandoCache, puntos, cargas, resumen, gps, puntoCercano, enRango, origen, refrescar } = useDatosCampo(
+  const { cargando, usandoCache, errorCache, puntos, cargas, resumen, gps, puntoCercano, enRango, origen, refrescar } = useDatosCampo(
     lote.id,
     campanaEfectiva,
     esMonitoreador ? usuario?.id : undefined,
@@ -291,6 +291,10 @@ export function VistaGeneral({
       {usandoCache && (
         <Text style={styles.avisoCache}>
           📡 Sin señal — mostrando la última versión guardada en este celular, puede no estar al día.
+          {/* Motivo real del fetch fallido — temporal, para diagnosticar por qué
+              salta este cartel con señal buena (ver conversación del 19/09). Sacar
+              una vez confirmado el motivo real y resuelto de fondo. */}
+          {errorCache ? ` (${errorCache})` : ""}
         </Text>
       )}
 

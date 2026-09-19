@@ -62,6 +62,14 @@ export function useDatosCampo(
   const [puntos, setPuntos] = useState<Punto[]>([]);
   const [cargas, setCargas] = useState<Map<string, Carga>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  // El motivo real de por qué se cayó al cache (antes se descartaba con
+  // `setError(null)` en ese caso, mostrando siempre el mismo cartel
+  // genérico de "sin señal" sin importar la causa real — así no había
+  // forma de distinguir, por ejemplo, sin señal de verdad de un error de
+  // permisos o del servidor). Se guarda aparte de `error` (que sigue
+  // siendo "no hay NADA para mostrar, ni cache") para no romper a quien ya
+  // lo usa con ese sentido.
+  const [errorCache, setErrorCache] = useState<string | null>(null);
   const loteInicialSinUsarRef = useRef(!!loteInicial);
   // true cuando lo que se está mostrando es la última foto guardada en el
   // celular (ver lib/offline/cache-lote.ts), no lo que hay de verdad en el
@@ -132,6 +140,7 @@ export function useDatosCampo(
         setCargas(fusionarPendientesEnCargas(cs, ps, campanaEfectiva, pendientesAlEmpezar));
         setUsandoCache(false);
         setError(null);
+        setErrorCache(null);
       }
     } catch (e: any) {
       // Sin señal (o el server no respondió): en vez de dejar la pantalla
@@ -147,8 +156,10 @@ export function useDatosCampo(
         setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual, pendientesAlEmpezar));
         setUsandoCache(true);
         setError(null);
+        setErrorCache(e.message ?? String(e));
       } else {
         setError(e.message ?? String(e));
+        setErrorCache(e.message ?? String(e));
       }
     } finally {
       setCargando(false);
@@ -199,5 +210,5 @@ export function useDatosCampo(
     [puntos, cargas, resumenDeUsuarioId]
   );
 
-  return { cargando, error, usandoCache, lote, puntos, cargas, resumen, refrescar, gps, puntoCercano, enRango, origen };
+  return { cargando, error, errorCache, usandoCache, lote, puntos, cargas, resumen, refrescar, gps, puntoCercano, enRango, origen };
 }
