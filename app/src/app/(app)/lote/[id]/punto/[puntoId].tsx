@@ -25,6 +25,7 @@ import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
 import { agregarCambioPendiente } from "@/lib/offline/cola";
 import { leerCacheLote } from "@/lib/offline/cache-lote";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
+import { fusionarPendientesEnCargas } from "@/lib/offline/resumen";
 import { useSync } from "@/lib/sync-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import type { Carga, Lote, Punto, Usuario } from "@/types/domain";
@@ -232,6 +233,19 @@ export default function PuntoScreen() {
     }
   }
 
+  // Superpone, para ESTE punto puntual, lo que todavía está esperando en
+  // la cola local sin sincronizar (ver fusionarPendientesEnCargas en
+  // offline/resumen.ts, que ya hace esto para la grilla) — sin esto, si
+  // alguien guarda un punto sin señal real y vuelve a abrirlo todavía sin
+  // señal, no ve lo que acaba de cargar: ni en vivo (no hay señal) ni en
+  // la cache (es de antes de cargar este punto). Reportado por el
+  // usuario: el dato SÍ estaba a salvo (local y, más tarde, en el
+  // server), pero el campo se veía vacío hasta sincronizar.
+  function fusionarPendienteDeEstePunto(c: Carga | null, p: Punto, campana: string): Carga | null {
+    const cargas = c ? new Map([[p.id, c]]) : new Map<string, Carga>();
+    return fusionarPendientesEnCargas(cargas, [p], campana).get(p.id) ?? null;
+  }
+
   function aplicarPuntoYCarga(p: Punto | null, c: Carga | null, usuarios: Usuario[]) {
     setPunto(p);
     setCarga(c);
@@ -268,7 +282,7 @@ export default function PuntoScreen() {
       const p = puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
       if (l && p) {
         const c = await conTimeout(fetchCarga(p.id, l.campanaActual));
-        aplicarPuntoYCarga(p, c, usuarios);
+        aplicarPuntoYCarga(p, fusionarPendienteDeEstePunto(c, p, l.campanaActual), usuarios);
       } else {
         aplicarPuntoYCarga(p, null, usuarios);
       }
@@ -286,7 +300,8 @@ export default function PuntoScreen() {
         const [linea, puntoNum] = etiqueta.split(".").map(Number);
         const p = cache.puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
         setLote(cache.lote);
-        aplicarPuntoYCarga(p, p ? (cache.cargas.get(p.id) ?? null) : null, []);
+        const c = p ? (cache.cargas.get(p.id) ?? null) : null;
+        aplicarPuntoYCarga(p, p ? fusionarPendienteDeEstePunto(c, p, cache.lote.campanaActual) : null, []);
         setUsandoCache(true);
       } else {
         Alert.alert("No se pudo cargar el punto", e.message ?? String(e));
