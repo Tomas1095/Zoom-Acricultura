@@ -72,8 +72,19 @@ export function useDatosCampo(loteId: string, campana?: string, resumenDeUsuario
       setLote(l);
       if (l) {
         const campanaEfectiva = campana ?? l.campanaActual;
+        // 25s acá, no los 10s por default de conTimeout — confirmado con
+        // el usuario que esto se veía en el campo con señal débil: el
+        // permiso y los datos estaban perfectos (probado a mano en
+        // Supabase simulando la sesión real de un Monitoreador afectado,
+        // devolvía los puntos bien), lo que fallaba era que el pedido
+        // combinado de puntos+cargas no llegaba a tiempo con señal mala
+        // antes de que la app se rindiera — y como no había forma de
+        // reintentar (ver el aviso en vista-general.tsx), quedaba pegado
+        // en blanco para siempre. Es más pedido que traer el lote solo
+        // (dos consultas juntas), así que necesita más margen.
         const [ps, cs] = await conTimeout(
-          Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)])
+          Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campanaEfectiva)]),
+          25000
         );
         // `l.tieneGrilla` en true implica que este lote SÍ tiene puntos
         // generados (se ponen en true juntos, nunca uno sin el otro — ver
