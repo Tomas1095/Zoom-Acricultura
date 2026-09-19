@@ -67,11 +67,25 @@ export function leerCacheLote(loteId: string, campana?: string): CacheLote | nul
  * (MisLotes/ArbolLotes) no espera a que termine; si un lote puntual falla
  * no frena a los demás, y si la persona ya entró a algún lote a mano
  * antes, esto simplemente lo vuelve a guardar más fresco. Procesa de a
- * tandas chicas (ver procesarEnTandas en concurrencia.ts) — lanzar TODOS
- * los lotes de una satura Postgres con timeouts reales (código 57014,
- * confirmado con logs de Supabase), y esa saturación afecta a CUALQUIERA
- * que esté usando la app en ese momento, no solo a esta cuenta. */
-export function precargarLotes(lotes: Lote[]): void {
+ * tandas chicas con pausa entre una y otra (ver procesarEnTandas en
+ * concurrencia.ts) — lanzar TODOS los lotes de una satura Postgres con
+ * timeouts reales (código 57014, confirmado con logs de Supabase), y esa
+ * saturación afecta a CUALQUIERA que esté usando la app en ese momento,
+ * no solo a esta cuenta.
+ *
+ * `onDatos`: MisLotes/ArbolLotes necesitan estos mismos puntos+cargas de
+ * nuevo para calcular el resumen de avance de cada card ("N completados
+ * · M sincronizados") — antes lo pedían POR SEPARADO (ver
+ * fetchResumenLote en offline/resumen.ts), duplicando exactamente estos
+ * dos mismos pedidos por cada lote. Con comunidades de 50+ lotes eso eran
+ * ~200 pedidos en vez de 100 saliendo juntos apenas se entra a la
+ * pantalla — la mitad, ya de por sí, del problema de saturación de
+ * arriba. Ahora quien llama recibe los datos ya traídos acá y calcula el
+ * resumen sin pedir nada de nuevo. */
+export function precargarLotes(
+  lotes: Lote[],
+  onDatos?: (lote: Lote, puntos: Punto[], cargas: Map<string, Carga>) => void
+): void {
   const conGrilla = lotes.filter((l) => l.tieneGrilla);
   procesarEnTandas(conGrilla, async (l) => {
     const [puntos, cargas] = await Promise.all([fetchPuntosDeLote(l.id), fetchCargasDeLote(l.id, l.campanaActual)]);
@@ -83,5 +97,6 @@ export function precargarLotes(lotes: Lote[]): void {
     // abra sin señal más adelante, aunque tenga toda su grilla real
     // cargada en el servidor.
     if (puntos.length > 0) guardarCacheLote(l.id, l.campanaActual, l, puntos, cargas);
+    onDatos?.(l, puntos, cargas);
   });
 }

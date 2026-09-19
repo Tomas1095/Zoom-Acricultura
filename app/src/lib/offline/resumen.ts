@@ -11,7 +11,6 @@
 // opcional: sin él, cuenta todo el lote; con él, solo lo cargado por esa
 // persona (`cargadoPorId`).
 
-import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import { listarCambiosPendientes, type CambioPendienteFila } from "./cola";
 import type { Carga, Punto } from "@/types/domain";
 
@@ -96,13 +95,4 @@ export function calcularResumenAvance(totalPuntos: number, cargas: Map<string, C
     if (c.sincronizado) sincronizados++;
   });
   return { totalPuntos, completados, sincronizados };
-}
-
-/** Trae y calcula el resumen de un lote de una sola vez — para listas que
- * muestran varios lotes juntos (ver MisLotes) y no pueden reusar
- * `useDatosCampo`, que solo maneja un lote abierto a la vez. */
-export async function fetchResumenLote(loteId: string, campana: string, usuarioId?: string): Promise<ResumenAvanceLote> {
-  const [puntos, cargas] = await Promise.all([fetchPuntosDeLote(loteId), fetchCargasDeLote(loteId, campana)]);
-  const fusionadas = fusionarPendientesEnCargas(cargas, puntos, campana);
-  return calcularResumenAvance(puntos.length, fusionadas, usuarioId);
 }

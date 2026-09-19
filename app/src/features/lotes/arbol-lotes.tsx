@@ -13,8 +13,7 @@ import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
-import { fetchResumenLote, type ResumenAvanceLote } from "@/lib/offline/resumen";
-import { procesarEnTandas } from "@/lib/offline/concurrencia";
+import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesoModal } from "./acceso-modal";
@@ -90,13 +89,6 @@ export function ArbolLotes() {
         setUsuarios(todosLosUsuarios);
         setUsandoCache(false);
         guardarCacheArbol(usuario.id, arbol);
-        if (!liviano) {
-          // Con solo entrar a esta pantalla (que pasa siempre, apenas hay
-          // sesión) ya queda todo listo para trabajar offline en cualquier
-          // lote — no hace falta abrir cada uno a mano. Ver
-          // lib/offline/cache-lote.ts.
-          precargarLotes(arbol.lotes);
-        }
       } catch (e: any) {
         // Sin señal: esta es la PRIMERA pantalla que ve un Socio/Encargado
         // al entrar — sin este respaldo, no había forma de siquiera ver el
@@ -120,17 +112,22 @@ export function ArbolLotes() {
       }
 
       if (!liviano) {
-        // Aparte y sin bloquear el árbol — cada pill de resumen aparece
-        // apenas se calcula, sin esperar a todos los lotes. Sin señal esto
-        // también va a fallar solo (fetchResumenLote pega contra el server) —
-        // cada fila se queda sin el resumen, no rompe el resto. De a tandas
-        // chicas (ver concurrencia.ts) — lanzar TODOS los lotes de una es
-        // lo que saturaba Postgres con timeouts reales (57014, confirmado
-        // con logs de Supabase), afectando a cualquiera usando la app en
-        // ese momento, no solo a esta pantalla.
-        const conGrilla = arbol.lotes.filter((l) => l.tieneGrilla);
-        procesarEnTandas(conGrilla, async (l) => {
-          const r = await fetchResumenLote(l.id, l.campanaActual);
+        // Con solo entrar a esta pantalla (que pasa siempre, apenas hay
+        // sesión) ya queda todo listo para trabajar offline en cualquier
+        // lote — no hace falta abrir cada uno a mano. Ver
+        // lib/offline/cache-lote.ts. De paso, un solo pedido por lote
+        // (precarga + resumen juntos, ver el comentario de `onDatos` en
+        // precargarLotes) en vez de dos por separado — cada pill de
+        // resumen aparece apenas se calcula, sin esperar a todos los
+        // lotes; sin señal esto también va a fallar solo, cada fila se
+        // queda sin el resumen, no rompe el resto. Con esto Y la pausa
+        // entre tandas (ver concurrencia.ts) resuelto, comunidades grandes
+        // (50+ lotes) dejan de saturar Postgres con timeouts reales
+        // (57014, confirmado con logs de Supabase), afectando a cualquiera
+        // usando la app en ese momento, no solo a esta pantalla.
+        precargarLotes(arbol.lotes, (l, puntos, cargas) => {
+          const fusionadas = fusionarPendientesEnCargas(cargas, puntos, l.campanaActual);
+          const r = calcularResumenAvance(puntos.length, fusionadas);
           setResumenes((prev) => ({ ...prev, [l.id]: r }));
         });
       }
