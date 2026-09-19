@@ -12,17 +12,14 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.5 (no solo el buildNumber, que ya se incrementa solo
-    // vía EAS) para esta sexta entrega — Apple cierra el "tren" de una
-    // versión ya aprobada para nuevos builds: hace falta subir esto a
-    // mano cada vez que se manda una actualización real a revisión (no
-    // en los builds de preview, que nunca llegan a Apple). La 1.0.4 (ya
-    // aprobada y activa) traía el fix de sincronización con señal
-    // intermitente, "quién hizo qué" y la planilla Excel
-    // pre-completada; esta suma el arreglo de lentitud al crear/editar/
-    // borrar clientes, establecimientos o lotes en el árbol (disparaba
-    // de nuevo toda la precarga offline en cada acción).
-    version: "1.0.5",
+    // Subida a 1.0.6 para esta séptima entrega — la 1.0.5 salió rechazada
+    // del submit ("The train version '1.0.5' is closed for new build
+    // submissions", error 90186 de Apple): ya estaba aprobada de una
+    // entrega anterior, así que no acepta más builds bajo ese mismo
+    // número. Trae todos los arreglos de saturación de Postgres con
+    // equipos grandes trabajando en simultáneo (consultas más livianas,
+    // menos pedidos de fondo, cache/sincronización de puntos sin señal).
+    version: "1.0.6",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",
