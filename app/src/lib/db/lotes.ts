@@ -34,6 +34,29 @@ export async function fetchLote(id: string): Promise<Lote | null> {
   return data ? filaALote(data) : null;
 }
 
+/** Igual que `fetchLote`, pero de paso trae el nombre de su
+ * establecimiento en el mismo viaje (recurso embebido de PostgREST) — para
+ * la pantalla de un lote puntual (ver lote/[id]/index.tsx), que antes
+ * pedía el ÁRBOL ENTERO (fetchArbol: todos los clientes, establecimientos
+ * y lotes de la comunidad) solo para buscar ahí adentro este único lote.
+ * Con comunidades grandes eso era la parte más lenta de entrar a un lote,
+ * y encima competía por recursos del servidor con cualquier otra pantalla
+ * pegándole a la base al mismo tiempo (ver lib/offline/concurrencia.ts) —
+ * innecesario cuando alcanza con pedir directo este lote y su
+ * establecimiento. */
+export async function fetchLoteConEstablecimiento(
+  id: string
+): Promise<{ lote: Lote; establecimientoNombre?: string } | null> {
+  const { data, error } = await supabase
+    .from("lotes")
+    .select("*, establecimientos(nombre)")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { lote: filaALote(data), establecimientoNombre: (data as any).establecimientos?.nombre };
+}
+
 export async function crearCliente(nombre: string): Promise<Cliente> {
   const { data, error } = await supabase.from("clientes").insert({ nombre }).select().single();
   if (error) throw error;

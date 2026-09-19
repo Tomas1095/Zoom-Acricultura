@@ -31,14 +31,17 @@ export default function LoteScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const refrescar = useCallback(async () => {
-    if (!usuario) return;
+    if (!usuario || !id) return;
     try {
       // Chequeo rápido antes de intentar nada — ver lib/offline/net.ts.
       if (!(await hayConexion())) throw new Error("Sin conexión");
-      const arbol = await conTimeout(db.fetchArbol());
-      const l = arbol.lotes.find((l) => l.id === id) ?? null;
-      setLote(l);
-      setEstablecimientoNombre(arbol.establecimientos.find((e) => e.id === l?.establecimientoId)?.nombre);
+      // Este lote puntual + su establecimiento en un solo viaje — antes
+      // acá se pedía el ÁRBOL ENTERO (fetchArbol) solo para buscar este
+      // único lote adentro, la parte más lenta de entrar a cualquier lote
+      // (ver el comentario de fetchLoteConEstablecimiento en db/lotes.ts).
+      const resultado = await conTimeout(db.fetchLoteConEstablecimiento(id));
+      setLote(resultado?.lote ?? null);
+      setEstablecimientoNombre(resultado?.establecimientoNombre);
       setError(null);
     } catch (e: any) {
       // Sin señal: esta pantalla es el paso obligado para entrar a
