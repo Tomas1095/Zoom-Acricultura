@@ -81,6 +81,14 @@ export function VistaGeneral({
   // Fundador/Encargado ven el total del lote — pedido explícito del
   // usuario, ver lib/offline/resumen.ts.
   const esMonitoreador = usuario?.rol === "monitoreador";
+  // Solo para el botón "Reintentar" de más abajo — el refresco normal (al
+  // volver a foco, etc.) no toca `cargando` de nuevo a propósito, para no
+  // tapar la grilla con el spinner completo cada vez. Sin este estado
+  // aparte, tocar "Reintentar" no daba NINGUNA señal visual mientras el
+  // pedido estaba en vuelo — reportado por el usuario: "toco pero no pasa
+  // nada, es como que no se selecciona", cuando en realidad sí estaba
+  // reintentando, solo que en silencio.
+  const [reintentando, setReintentando] = useState(false);
   const { cargando, usandoCache, errorCache, puntos, cargas, resumen, gps, puntoCercano, enRango, origen, refrescar } = useDatosCampo(
     lote.id,
     campanaEfectiva,
@@ -470,8 +478,23 @@ export function VistaGeneral({
                 siempre el mismo texto genérico sin importar la causa real. */}
             {errorCache ? ` (${errorCache})` : ""}
           </Text>
-          <Pressable style={styles.botonReintentar} onPress={() => refrescar()}>
-            <Text style={styles.botonReintentarTexto}>Reintentar</Text>
+          <Pressable
+            style={[styles.botonReintentar, reintentando && styles.botonReintentarDeshabilitado]}
+            disabled={reintentando}
+            onPress={async () => {
+              setReintentando(true);
+              try {
+                await refrescar();
+              } finally {
+                setReintentando(false);
+              }
+            }}
+          >
+            {reintentando ? (
+              <ActivityIndicator color={colors.surface} size="small" />
+            ) : (
+              <Text style={styles.botonReintentarTexto}>Reintentar</Text>
+            )}
           </Pressable>
         </View>
       )}
@@ -546,7 +569,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    minWidth: 96,
+    alignItems: "center",
   },
+  botonReintentarDeshabilitado: { opacity: 0.6 },
   botonReintentarTexto: { color: colors.surface, fontWeight: "700", fontSize: 12.5 },
   botonExportarGrilla: {
     flexDirection: "row",
