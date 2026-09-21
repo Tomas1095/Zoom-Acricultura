@@ -418,8 +418,7 @@ export default function PuntoScreen() {
       // no hay señal, ni vale la pena intentar).
       if (!(await hayConexion())) throw new Error("Sin conexión");
       const path = await subirFoto(lote.id, punto.id, uri);
-      await conTimeout(agregarFotoACarga(punto.id, lote.campanaActual, path, usuario.id));
-      const c = await conTimeout(fetchCarga(punto.id, lote.campanaActual));
+      const c = await conTimeout(agregarFotoACarga(punto.id, lote.campanaActual, path, usuario.id));
       setCarga(c);
     } catch (e: any) {
       // Mismo criterio que handleGuardar: sin conexión, la foto queda
@@ -475,9 +474,8 @@ export default function PuntoScreen() {
   async function quitarFoto(path: string) {
     if (!lote || !punto) return;
     try {
-      await quitarFotoDeCarga(punto.id, lote.campanaActual, path);
+      const c = await quitarFotoDeCarga(punto.id, lote.campanaActual, path);
       await eliminarFoto(path);
-      const c = await fetchCarga(punto.id, lote.campanaActual);
       setCarga(c);
     } catch (e: any) {
       Alert.alert("No se pudo quitar la foto", e.message ?? String(e));

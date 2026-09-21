@@ -147,21 +147,27 @@ export async function reabrirCarga(puntoId: string, campana: string): Promise<vo
   if (error) throw error;
 }
 
+/** Devuelve la carga ya actualizada (no solo confirma que se guardó) —
+ * antes quien llamaba esto volvía a pedirla con un fetchCarga aparte
+ * después, un tercer viaje al servidor por cada foto (subir + agregar +
+ * releer) cuando ya se tiene todo lo necesario acá mismo para armarla sin
+ * pedir de nuevo. */
 export async function agregarFotoACarga(
   puntoId: string,
   campana: string,
   path: string,
   cargadoPorId: string
-): Promise<void> {
+): Promise<Carga> {
   const existente = await fetchCarga(puntoId, campana);
   const fotos = [...(existente?.fotos ?? []), path];
+  const cargadoPorIdFinal = existente?.cargadoPorId ?? cargadoPorId;
   const { error } = await supabase.from("cargas").upsert(
     {
       punto_id: puntoId,
       campana,
       fotos,
       cargado: true,
-      cargado_por_id: existente?.cargadoPorId ?? cargadoPorId,
+      cargado_por_id: cargadoPorIdFinal,
       // sin esto el upsert pisaría bicho/babosa/etc con los defaults de la
       // tabla si la fila no existía todavía
       ...(existente
@@ -179,14 +185,37 @@ export async function agregarFotoACarga(
     { onConflict: "punto_id,campana" }
   );
   if (error) throw error;
+  return {
+    id: existente?.id ?? "",
+    puntoId,
+    campana,
+    bicho: existente?.bicho ?? 0,
+    babosa: existente?.babosa ?? 0,
+    huevoBabosas: existente?.huevoBabosas ?? false,
+    gusanoArroz: existente?.gusanoArroz ?? false,
+    isocaCortadora: existente?.isocaCortadora ?? false,
+    gusanoBlanco: existente?.gusanoBlanco ?? false,
+    humedad: existente?.humedad ?? null,
+    observaciones: existente?.observaciones ?? "",
+    fotos,
+    cargado: true,
+    confirmado: existente?.confirmado ?? false,
+    cargadoPorId: cargadoPorIdFinal,
+    conflictoConId: existente?.conflictoConId ?? null,
+    sincronizado: true,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
-export async function quitarFotoDeCarga(puntoId: string, campana: string, path: string): Promise<void> {
+/** Mismo motivo que agregarFotoACarga: devuelve la carga ya actualizada en
+ * vez de que quien llama tenga que volver a pedirla aparte. */
+export async function quitarFotoDeCarga(puntoId: string, campana: string, path: string): Promise<Carga | null> {
   const existente = await fetchCarga(puntoId, campana);
-  if (!existente) return;
+  if (!existente) return null;
   const fotos = existente.fotos.filter((f) => f !== path);
   const { error } = await supabase.from("cargas").update({ fotos }).eq("punto_id", puntoId).eq("campana", campana);
   if (error) throw error;
+  return { ...existente, fotos };
 }
 
 /** Un punto que dos personas cargaron sin señal, cuyo cambio más nuevo
