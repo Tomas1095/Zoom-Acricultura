@@ -2,6 +2,24 @@ import { supabase } from "@/lib/supabase";
 import { inferirOrigenDesdePuntos, type LatLon } from "@/lib/geo/geometria";
 import type { Carga, Punto } from "@/types/domain";
 
+// Si dos partes de la pantalla piden lo mismo casi juntas (reportado por el
+// usuario: entrar a un lote como administrador dispara la grilla Y el
+// selector de historial de campañas, cada uno pidiendo los puntos del lote
+// por su cuenta — sin contar que la precarga de fondo puede estar pidiendo
+// lo mismo justo en ese momento), esto hace que el segundo pedido "se suba"
+// al primero en vez de disparar un viaje aparte al servidor. Se limpia
+// solo apenas el pedido en curso termina (con éxito o error) — no es una
+// cache que dure en el tiempo, solo colapsa los pedidos que se superponen.
+const pedidosEnVuelo = new Map<string, Promise<unknown>>();
+
+function conPedidoCompartido<T>(clave: string, hacerPedido: () => Promise<T>): Promise<T> {
+  const existente = pedidosEnVuelo.get(clave);
+  if (existente) return existente as Promise<T>;
+  const promesa = hacerPedido().finally(() => pedidosEnVuelo.delete(clave));
+  pedidosEnVuelo.set(clave, promesa);
+  return promesa;
+}
+
 function filaAPunto(f: any): Punto {
   return { id: f.id, loteId: f.lote_id, linea: f.linea, puntoNum: f.punto_num, lat: f.lat, lon: f.lon, x: f.x, y: f.y };
 }
@@ -29,10 +47,12 @@ function filaACarga(f: any): Carga {
   };
 }
 
-export async function fetchPuntosDeLote(loteId: string): Promise<Punto[]> {
-  const { data, error } = await supabase.from("puntos").select("*").eq("lote_id", loteId).order("linea").order("punto_num");
-  if (error) throw error;
-  return (data ?? []).map(filaAPunto);
+export function fetchPuntosDeLote(loteId: string): Promise<Punto[]> {
+  return conPedidoCompartido(`puntos:${loteId}`, async () => {
+    const { data, error } = await supabase.from("puntos").select("*").eq("lote_id", loteId).order("linea").order("punto_num");
+    if (error) throw error;
+    return (data ?? []).map(filaAPunto);
+  });
 }
 
 /** Un solo punto puntual, por línea+número dentro del lote — para la
@@ -77,13 +97,15 @@ export async function fetchCentroDeLote(loteId: string): Promise<LatLon | null> 
  * de Supabase. Quien llama ya tiene los puntos del lote (los pidió aparte,
  * ver fetchPuntosDeLote) así que no hace falta volver a pedirlos ni
  * cruzar tablas para esto. */
-export async function fetchCargasDeLote(puntoIds: string[], campana: string): Promise<Map<string, Carga>> {
-  const mapa = new Map<string, Carga>();
-  if (puntoIds.length === 0) return mapa;
-  const { data, error } = await supabase.from("cargas").select("*").eq("campana", campana).in("punto_id", puntoIds);
-  if (error) throw error;
-  (data ?? []).forEach((f: any) => mapa.set(f.punto_id, filaACarga(f)));
-  return mapa;
+export function fetchCargasDeLote(puntoIds: string[], campana: string): Promise<Map<string, Carga>> {
+  if (puntoIds.length === 0) return Promise.resolve(new Map());
+  return conPedidoCompartido(`cargas:${campana}:${puntoIds.join(",")}`, async () => {
+    const mapa = new Map<string, Carga>();
+    const { data, error } = await supabase.from("cargas").select("*").eq("campana", campana).in("punto_id", puntoIds);
+    if (error) throw error;
+    (data ?? []).forEach((f: any) => mapa.set(f.punto_id, filaACarga(f)));
+    return mapa;
+  });
 }
 
 /** Campañas con datos cargados de este lote (para el selector de historial
