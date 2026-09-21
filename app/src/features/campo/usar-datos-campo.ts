@@ -16,6 +16,44 @@ import { useGps } from "./usar-gps";
 // parado sobre el punto de muestreo (GPS real, no siempre preciso al metro).
 const TOLERANCE_M = 20;
 
+// Foto reciente en memoria (se pierde al cerrar la app — no es la cache
+// persistente en SQLite de cache-lote.ts, que es para SIN señal) de
+// lote+puntos+cargas ya traídos. Reportado por el usuario: Monitoreadores
+// notaban lento entrar a "Modo trabajo" en Android — la causa real es que
+// esa pantalla es una navegación NUEVA (no una pestaña que ya estaba
+// montada) y volvía a pedir TODO desde cero, aunque Vista General (la
+// pantalla de la que se viene, un toque antes) acaba de traer exactamente
+// lo mismo — React Navigation no desmonta esa pantalla de atrás, los datos
+// siguen en memoria, solo que nada los reusaba. Con esto, cualquier
+// pantalla que llame a este hook para el mismo lote+campaña dentro de la
+// ventana de vigencia se ahorra los tres pedidos enteros.
+//
+// Clave aparte "vigente" (sin campaña en la clave) porque Modo trabajo no
+// sabe de antemano cuál es `campanaActual` del lote sin pedirlo — así
+// busca directo por lote sin necesitar ese dato primero. Vista
+// General/Resultados/Salidas, que sí conocen la campaña que están
+// mirando, usan la clave con campaña incluida (más precisa, evita mezclar
+// una foto de la campaña vigente con una consulta de historial).
+interface FotoRecienteLote {
+  lote: Lote;
+  puntos: Punto[];
+  cargas: Map<string, Carga>;
+  ts: number;
+}
+const VIGENCIA_FOTO_RECIENTE_MS = 15000;
+const fotosRecientes = new Map<string, FotoRecienteLote>();
+
+function guardarFotoReciente(loteId: string, campanaEfectiva: string, esVigente: boolean, foto: FotoRecienteLote) {
+  fotosRecientes.set(`${loteId}:${campanaEfectiva}`, foto);
+  if (esVigente) fotosRecientes.set(`vigente:${loteId}`, foto);
+}
+
+function leerFotoReciente(clave: string): FotoRecienteLote | null {
+  const foto = fotosRecientes.get(clave);
+  if (!foto || Date.now() - foto.ts > VIGENCIA_FOTO_RECIENTE_MS) return null;
+  return foto;
+}
+
 /** Junta todo lo que necesitan tanto la vista general como el modo trabajo:
  * el lote, sus puntos, el estado de carga de cada uno (campaña vigente, o
  * `campana` si se pasa — ver el selector de historial en ResultadosView), y
@@ -70,7 +108,12 @@ export function useDatosCampo(
   // siendo "no hay NADA para mostrar, ni cache") para no romper a quien ya
   // lo usa con ese sentido.
   const [errorCache, setErrorCache] = useState<string | null>(null);
-  const loteInicialSinUsarRef = useRef(!!loteInicial);
+  // Gatea TANTO reusar `loteInicial` como buscar una foto reciente en
+  // memoria (ver más arriba) — las dos cosas solo tienen sentido en el
+  // primerísimo refresco de ESTA pantalla, nunca en refrescos posteriores
+  // (volver de cargar un punto, reintentar, etc.), que sí tienen que traer
+  // el dato real para no quedarse con algo viejo.
+  const primerRefrescoRef = useRef(true);
   // true cuando lo que se está mostrando es la última foto guardada en el
   // celular (ver lib/offline/cache-lote.ts), no lo que hay de verdad en el
   // server ahora mismo — porque el fetch en vivo falló, típicamente por
@@ -88,7 +131,27 @@ export function useDatosCampo(
     // esta foto fija, ese punto sigue contando como completado pase lo que
     // pase con la cola durante el fetch.
     const pendientesAlEmpezar = listarCambiosPendientes();
+    const esPrimerRefresco = primerRefrescoRef.current;
+    primerRefrescoRef.current = false;
     try {
+      // Antes de cualquier pedido de red (ni falta chequear señal): si es
+      // el primer refresco de esta pantalla y hay una foto reciente en
+      // memoria para este mismo lote+campaña (ver fotosRecientes más
+      // arriba), se usa directo — cubre pasar de Vista General a Modo
+      // trabajo (o entre pestañas) sin volver a pedir lo mismo que se
+      // acaba de traer un instante antes.
+      if (esPrimerRefresco) {
+        const foto = leerFotoReciente(campana ? `${loteId}:${campana}` : `vigente:${loteId}`);
+        if (foto) {
+          setLote(foto.lote);
+          setPuntos(foto.puntos);
+          setCargas(fusionarPendientesEnCargas(foto.cargas, foto.puntos, campana ?? foto.lote.campanaActual, pendientesAlEmpezar));
+          setUsandoCache(false);
+          setError(null);
+          setErrorCache(null);
+          return;
+        }
+      }
       // Chequeo rápido antes de intentar nada — si no hay señal, ni tiene
       // sentido esperar a que el fetch se dé por vencido solo (eso puede
       // tardar bastante) para recién ahí caer al respaldo local. Ver
@@ -97,8 +160,7 @@ export function useDatosCampo(
       // Ver el comentario de `loteInicial` más arriba: solo la primera vez,
       // y solo si de verdad es este mismo lote (por las dudas, si loteId
       // cambiara sin desmontar el hook).
-      const usarLoteInicial = loteInicialSinUsarRef.current && loteInicial?.id === loteId;
-      loteInicialSinUsarRef.current = false;
+      const usarLoteInicial = esPrimerRefresco && loteInicial?.id === loteId;
       // 15s, no los 10s por default de conTimeout — confirmado con el
       // usuario que con wifi andando bien igual pasaba de los 10s alguna
       // vez (probado en el campo: 12s), suficiente para caer al respaldo
@@ -145,6 +207,12 @@ export function useDatosCampo(
         // chequeo para ofrecer reintentar en vez de quedar pegado).
         if (!l.tieneGrilla || ps.length > 0) {
           guardarCacheLote(loteId, campanaEfectiva, l, ps, cs);
+          guardarFotoReciente(loteId, campanaEfectiva, campanaEfectiva === l.campanaActual, {
+            lote: l,
+            puntos: ps,
+            cargas: cs,
+            ts: Date.now(),
+          });
         }
         // Fusiona lo que esta persona ya guardó sin señal (todavía en la
         // cola local) para que se vea completo al toque, sin esperar a que
