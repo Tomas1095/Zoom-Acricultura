@@ -18,9 +18,9 @@ import { Camera, Check, Lock, MapPin, Pencil, X } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { fetchLote } from "@/lib/db/lotes";
-import { fetchPuntosDeLote } from "@/lib/db/puntos";
+import { fetchPunto } from "@/lib/db/puntos";
 import { fetchCarga, guardarYConfirmarCarga, reabrirCarga, agregarFotoACarga, quitarFotoDeCarga } from "@/lib/db/cargas";
-import { fetchUsuarios } from "@/lib/db/equipo";
+import { fetchUsuarioPorId } from "@/lib/db/equipo";
 import { subirFoto, getFotoUrl, eliminarFoto } from "@/lib/storage/fotos";
 import { agregarCambioPendiente } from "@/lib/offline/cola";
 import { leerCacheLote } from "@/lib/offline/cache-lote";
@@ -246,7 +246,7 @@ export default function PuntoScreen() {
     return fusionarPendientesEnCargas(cargas, [p], campana).get(p.id) ?? null;
   }
 
-  function aplicarPuntoYCarga(p: Punto | null, c: Carga | null, usuarios: Usuario[]) {
+  function aplicarPuntoYCarga(p: Punto | null, c: Carga | null, usuarioQueCargo: Usuario | null) {
     setPunto(p);
     setCarga(c);
     setForm(
@@ -263,7 +263,7 @@ export default function PuntoScreen() {
         : FORM_VACIO
     );
     setMostrarObservaciones(!!c?.observaciones);
-    setUsuarioQueCargo(c?.cargadoPorId ? usuarios.find((u) => u.id === c.cargadoPorId) ?? null : null);
+    setUsuarioQueCargo(usuarioQueCargo);
   }
 
   const refrescar = useCallback(async () => {
@@ -274,17 +274,25 @@ export default function PuntoScreen() {
       // tardar bastante) para recién ahí caer al respaldo local. Ver
       // lib/offline/net.ts.
       if (!(await hayConexion())) throw new Error("Sin conexión");
-      const [l, puntos, usuarios] = await conTimeout(
-        Promise.all([fetchLote(loteId), fetchPuntosDeLote(loteId), fetchUsuarios(usuario.comunidadId)])
-      );
-      setLote(l);
       const [linea, puntoNum] = etiqueta.split(".").map(Number);
-      const p = puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
+      // Punto puntual (no TODOS los del lote) y, más abajo, solo el usuario
+      // que cargó este punto (no TODO el equipo) — antes se pedían enteros
+      // para buscar ahí adentro un único elemento. Reportado por el
+      // usuario: con lotes grandes y equipos grandes, eso se sentía lento
+      // en cada punto que se abría — mismo desperdicio que ya se había
+      // arreglado hoy para entrar a un lote (ver fetchLoteConEstablecimiento
+      // en db/lotes.ts).
+      const [l, p] = await conTimeout(Promise.all([fetchLote(loteId), fetchPunto(loteId, linea, puntoNum)]));
+      setLote(l);
       if (l && p) {
         const c = await conTimeout(fetchCarga(p.id, l.campanaActual));
-        aplicarPuntoYCarga(p, fusionarPendienteDeEstePunto(c, p, l.campanaActual), usuarios);
+        const cFusionada = fusionarPendienteDeEstePunto(c, p, l.campanaActual);
+        const usuarioQueCargo = cFusionada?.cargadoPorId
+          ? await conTimeout(fetchUsuarioPorId(cFusionada.cargadoPorId))
+          : null;
+        aplicarPuntoYCarga(p, cFusionada, usuarioQueCargo);
       } else {
-        aplicarPuntoYCarga(p, null, usuarios);
+        aplicarPuntoYCarga(p, null, null);
       }
       setUsandoCache(false);
     } catch (e: any) {
@@ -301,7 +309,7 @@ export default function PuntoScreen() {
         const p = cache.puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
         setLote(cache.lote);
         const c = p ? (cache.cargas.get(p.id) ?? null) : null;
-        aplicarPuntoYCarga(p, p ? fusionarPendienteDeEstePunto(c, p, cache.lote.campanaActual) : null, []);
+        aplicarPuntoYCarga(p, p ? fusionarPendienteDeEstePunto(c, p, cache.lote.campanaActual) : null, null);
         setUsandoCache(true);
       } else {
         Alert.alert("No se pudo cargar el punto", e.message ?? String(e));
@@ -368,7 +376,11 @@ export default function PuntoScreen() {
       // esperar a que el intento real se dé por vencido solo antes de
       // encolar (ver lib/offline/net.ts).
       if (!(await hayConexion())) throw new Error("Sin conexión");
-      await conTimeout(guardarYConfirmarCarga(punto.id, lote.campanaActual, form, usuario.id));
+      // 15s, no los 10s por default de conTimeout — mismo margen que se le
+      // dio a las lecturas de esta misma pantalla (ver refrescar más
+      // arriba), para no encolar de pedo un guardado que solo iba un poco
+      // lento, no realmente sin señal.
+      await conTimeout(guardarYConfirmarCarga(punto.id, lote.campanaActual, form, usuario.id), 15000);
       router.back();
     } catch (e: any) {
       // Sin conexión (o el server no respondió a tiempo) — en vez de perder

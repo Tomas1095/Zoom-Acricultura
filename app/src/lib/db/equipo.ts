@@ -15,6 +15,17 @@ export async function fetchUsuarios(comunidadId: string): Promise<Usuario[]> {
   return (data ?? []).map(filaAUsuario);
 }
 
+/** Un solo usuario por ID — para mostrar "quién cargó este punto" (ver
+ * punto/[puntoId].tsx), que antes pedía TODO el equipo (fetchUsuarios
+ * entero) solo para buscar ahí adentro a esa única persona. Con equipos
+ * grandes, eso era un viaje de más en CADA punto que se abre — mismo
+ * desperdicio que ya se venía arreglando hoy en otros lugares. */
+export async function fetchUsuarioPorId(id: string): Promise<Usuario | null> {
+  const { data, error } = await supabase.from("usuarios").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? filaAUsuario(data) : null;
+}
+
 export async function fetchInvitaciones(): Promise<Invitacion[]> {
   const { data, error } = await supabase
     .from("invitaciones")
