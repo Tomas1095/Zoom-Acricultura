@@ -8,6 +8,7 @@ import * as db from "@/lib/db/lotes";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
+import { PrecargaPill } from "./precarga-pill";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Establecimiento, Lote } from "@/types/domain";
@@ -24,6 +25,8 @@ export function MisLotes() {
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
   const [usandoCache, setUsandoCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [precargando, setPrecargando] = useState(false);
+  const [precargaLista, setPrecargaLista] = useState(false);
 
   const refrescar = useCallback(async () => {
     if (!usuario) return;
@@ -77,10 +80,14 @@ export function MisLotes() {
     // saturar Postgres con timeouts reales (57014, confirmado con logs de
     // Supabase), afectando a cualquiera usando la app en ese momento, no
     // solo a esta pantalla.
+    setPrecargando(true);
     precargarLotes(arbol.lotes, (l, puntos, cargas) => {
       const fusionadas = fusionarPendientesEnCargas(cargas, puntos, l.campanaActual);
       const r = calcularResumenAvance(puntos.length, fusionadas, usuario.id);
       setResumenes((prev) => ({ ...prev, [l.id]: r }));
+    }).then(() => {
+      setPrecargando(false);
+      setPrecargaLista(true);
     });
   }, [usuario]);
 
@@ -117,6 +124,7 @@ export function MisLotes() {
           📡 Sin señal — mostrando la última lista guardada en este celular, puede no estar al día.
         </Text>
       )}
+      <PrecargaPill precargando={precargando} lista={precargaLista} onPress={refrescar} />
       <Text style={styles.label}>Lotes asignados — tocá uno para empezar</Text>
       {lotes.length === 0 ? (
         <Text style={styles.vacio}>No tenés lotes asignados por ahora.</Text>

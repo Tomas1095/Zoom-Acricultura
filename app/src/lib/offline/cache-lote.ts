@@ -82,13 +82,20 @@ export function leerCacheLote(loteId: string, campana?: string): CacheLote | nul
  * ~200 pedidos en vez de 100 saliendo juntos apenas se entra a la
  * pantalla — la mitad, ya de por sí, del problema de saturación de
  * arriba. Ahora quien llama recibe los datos ya traídos acá y calcula el
- * resumen sin pedir nada de nuevo. */
+ * resumen sin pedir nada de nuevo.
+ *
+ * Devuelve una promesa que se resuelve cuando terminó de intentarlo con
+ * TODOS los lotes (haya salido bien o mal cada uno) — quien llama la usa
+ * para mostrar un estado "Descargando… → Listo para ir al campo" (ver
+ * PrecargaPill), en vez de dejar esto pasando en silencio de fondo sin
+ * ninguna forma de saber si ya terminó antes de salir a un lugar sin
+ * cobertura. */
 export function precargarLotes(
   lotes: Lote[],
   onDatos?: (lote: Lote, puntos: Punto[], cargas: Map<string, Carga>) => void
-): void {
+): Promise<void> {
   const conGrilla = lotes.filter((l) => l.tieneGrilla);
-  procesarEnTandas(conGrilla, async (l) => {
+  return procesarEnTandas(conGrilla, async (l) => {
     // Puntos primero y cargas después (no en paralelo) — fetchCargasDeLote
     // necesita los IDs de los puntos para no depender de un join más caro
     // para Postgres (ver el comentario en su definición, db/puntos.ts).

@@ -12,6 +12,7 @@ import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
+import { PrecargaPill } from "./precarga-pill";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
@@ -62,6 +63,8 @@ export function ArbolLotes() {
   // MisLotes que lo filtra por el Monitoreador — ver lib/offline/resumen.ts.
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
   const [usandoCache, setUsandoCache] = useState(false);
+  const [precargando, setPrecargando] = useState(false);
+  const [precargaLista, setPrecargaLista] = useState(false);
 
   // `liviano`: true cuando se llama después de crear/editar/borrar algo en
   // el árbol (ver conManejoDeError) — ahí solo hace falta refrescar la
@@ -125,10 +128,14 @@ export function ArbolLotes() {
         // (50+ lotes) dejan de saturar Postgres con timeouts reales
         // (57014, confirmado con logs de Supabase), afectando a cualquiera
         // usando la app en ese momento, no solo a esta pantalla.
+        setPrecargando(true);
         precargarLotes(arbol.lotes, (l, puntos, cargas) => {
           const fusionadas = fusionarPendientesEnCargas(cargas, puntos, l.campanaActual);
           const r = calcularResumenAvance(puntos.length, fusionadas);
           setResumenes((prev) => ({ ...prev, [l.id]: r }));
+        }).then(() => {
+          setPrecargando(false);
+          setPrecargaLista(true);
         });
       }
       setCargando(false);
@@ -233,6 +240,7 @@ export function ArbolLotes() {
             📡 Sin señal — mostrando el último árbol guardado en este celular, puede no estar al día.
           </Text>
         )}
+        <PrecargaPill precargando={precargando} lista={precargaLista} onPress={() => refrescar()} />
         {clientes.length === 0 && (
           <Text style={styles.vacio}>Todavía no hay clientes cargados. Empezá agregando uno.</Text>
         )}

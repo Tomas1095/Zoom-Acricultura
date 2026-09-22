@@ -12,14 +12,16 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.6 para esta séptima entrega — la 1.0.5 salió rechazada
-    // del submit ("The train version '1.0.5' is closed for new build
-    // submissions", error 90186 de Apple): ya estaba aprobada de una
-    // entrega anterior, así que no acepta más builds bajo ese mismo
-    // número. Trae todos los arreglos de saturación de Postgres con
-    // equipos grandes trabajando en simultáneo (consultas más livianas,
-    // menos pedidos de fondo, cache/sincronización de puntos sin señal).
-    version: "1.0.6",
+    // Subida a 1.0.7 para esta octava entrega — trae el botón de
+    // sincronizar siempre visible (antes solo aparecía con cola
+    // pendiente), el arreglo de la caché del lote (no miraba su propia
+    // foto puntual al quedarse sin señal, solo la del árbol entero), el
+    // límite de tiempo por lote en la precarga de fondo (antes uno solo
+    // colgado con señal floja trababa la cola completa) y la pastilla de
+    // "Descargando… → Listo para ir al campo" en Mis lotes/el árbol.
+    // Reportado en el campo el mismo día de esta entrega: gente sin poder
+    // ver lotes ya vistos con señal, al toque de perder cobertura.
+    version: "1.0.7",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",
