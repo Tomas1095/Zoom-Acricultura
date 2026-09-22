@@ -30,15 +30,30 @@ export function MisLotes() {
 
   const refrescar = useCallback(async () => {
     if (!usuario) return;
-    let arbol: db.Arbol;
-    try {
-      if (!(await hayConexion())) throw new Error("Sin conexión");
-      arbol = await conTimeout(db.fetchArbol());
+
+    // Mostrar lo guardado ya mismo, sin esperar nada de red — mismo
+    // cambio que en el resto de las pantallas de campo (ver el comentario
+    // en useDatosCampo, offline/cache-lote.ts): esta es la PRIMERA
+    // pantalla que ve un Monitoreador al entrar, así que hacerla esperar
+    // acá se sentía en TODOS lados.
+    let arbol: db.Arbol | null = await leerCacheArbol(usuario.id);
+    if (arbol) {
       setLotes(arbol.lotes);
       setEstablecimientos(arbol.establecimientos);
+      setUsandoCache(true);
+      setError(null);
+      setCargando(false);
+    }
+
+    try {
+      if (!(await hayConexion())) throw new Error("Sin conexión");
+      const arbolLive = await conTimeout(db.fetchArbol(), 15000);
+      arbol = arbolLive;
+      setLotes(arbolLive.lotes);
+      setEstablecimientos(arbolLive.establecimientos);
       setUsandoCache(false);
       setError(null);
-      guardarCacheArbol(usuario.id, arbol);
+      guardarCacheArbol(usuario.id, arbolLive);
       // Con solo entrar a esta pantalla (que pasa siempre, apenas hay
       // sesión) ya queda todo listo para trabajar offline en cualquier
       // lote asignado — no hace falta abrir cada uno a mano. Ver
@@ -47,19 +62,10 @@ export function MisLotes() {
       // (antes se pedía de nuevo aparte, duplicando el pedido — ver el
       // comentario de `onDatos` en precargarLotes).
     } catch (e: any) {
-      // Sin señal: esta es la PRIMERA pantalla que ve un Monitoreador al
-      // entrar — sin este respaldo, no había forma de siquiera ver la
-      // lista de lotes para poder entrar a uno y seguir trabajando offline
-      // (eso sí ya andaba, ver lib/offline/cache-lote.ts). Ver
-      // lib/offline/cache-arbol.ts.
-      const cache = await leerCacheArbol(usuario.id);
-      if (cache) {
-        arbol = cache;
-        setLotes(cache.lotes);
-        setEstablecimientos(cache.establecimientos);
-        setUsandoCache(true);
-        setError(null);
-      } else {
+      // El pedido en vivo falló. Si ya se estaba mostrando la lista (de
+      // la foto guardada, arriba), se deja como está — sin nada guardado
+      // todavía es cuando corresponde el cartel de error.
+      if (!arbol) {
         setError(e.message ?? String(e));
         setCargando(false);
         return;

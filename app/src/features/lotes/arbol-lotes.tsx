@@ -79,33 +79,51 @@ export function ArbolLotes() {
   const refrescar = useCallback(
     async (liviano = false) => {
       if (!usuario) return;
-      let arbol: db.Arbol;
+
+      let arbol: db.Arbol | null = null;
+      if (!liviano) {
+        // Mostrar lo guardado ya mismo, sin esperar nada de red — mismo
+        // cambio que en el resto de la app (ver el comentario en
+        // useDatosCampo, offline/cache-lote.ts). No aplica a un refresco
+        // "liviano" (después de crear/editar/borrar algo, ver conManejoDeError
+        // más abajo): ahí interesa confirmar que el cambio se guardó de
+        // verdad, no volver a mostrar una foto de antes de ese cambio.
+        arbol = await leerCacheArbol(usuario.id);
+        if (arbol) {
+          setClientes(arbol.clientes);
+          setEstablecimientos(arbol.establecimientos);
+          setLotes(arbol.lotes);
+          setUsandoCache(true);
+          setCargando(false);
+        }
+      }
+
       try {
         if (!(await hayConexion())) throw new Error("Sin conexión");
         const [arbolLive, todosLosUsuarios] = await conTimeout(
-          Promise.all([db.fetchArbol(), fetchUsuarios(usuario.comunidadId)])
+          Promise.all([db.fetchArbol(), fetchUsuarios(usuario.comunidadId)]),
+          15000
         );
         arbol = arbolLive;
-        setClientes(arbol.clientes);
-        setEstablecimientos(arbol.establecimientos);
-        setLotes(arbol.lotes);
+        setClientes(arbolLive.clientes);
+        setEstablecimientos(arbolLive.establecimientos);
+        setLotes(arbolLive.lotes);
         setUsuarios(todosLosUsuarios);
         setUsandoCache(false);
-        guardarCacheArbol(usuario.id, arbol);
+        guardarCacheArbol(usuario.id, arbolLive);
       } catch (e: any) {
-        // Sin señal: esta es la PRIMERA pantalla que ve un Socio/Encargado
-        // al entrar — sin este respaldo, no había forma de siquiera ver el
-        // árbol para poder entrar a un lote y seguir trabajando offline (eso
-        // sí ya andaba, ver lib/offline/cache-lote.ts). "Quién hizo qué" y
-        // los avatares de usuarios sí se pierden sin señal (no son
-        // necesarios para navegar ni cargar puntos) — ver
-        // lib/offline/cache-arbol.ts.
-        const cache = await leerCacheArbol(usuario.id);
-        if (cache) {
-          arbol = cache;
-          setClientes(cache.clientes);
-          setEstablecimientos(cache.establecimientos);
-          setLotes(cache.lotes);
+        // El pedido en vivo falló. Si ya se estaba mostrando el árbol (de
+        // la foto guardada, arriba), se deja como está. Si no (por
+        // ejemplo un refresco "liviano", que no la mira de entrada — ver
+        // más arriba), se prueba igual con la foto guardada antes de
+        // darse por vencido, como último respaldo. "Quién hizo qué" y los
+        // avatares de usuarios sí se pierden sin señal (no son necesarios
+        // para navegar ni cargar puntos) — ver lib/offline/cache-arbol.ts.
+        if (!arbol) arbol = await leerCacheArbol(usuario.id);
+        if (arbol) {
+          setClientes(arbol.clientes);
+          setEstablecimientos(arbol.establecimientos);
+          setLotes(arbol.lotes);
           setUsandoCache(true);
         } else {
           Alert.alert("No se pudo cargar", e.message ?? String(e));

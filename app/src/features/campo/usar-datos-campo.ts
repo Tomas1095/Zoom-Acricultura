@@ -133,25 +133,52 @@ export function useDatosCampo(
     const pendientesAlEmpezar = listarCambiosPendientes();
     const esPrimerRefresco = primerRefrescoRef.current;
     primerRefrescoRef.current = false;
-    try {
-      // Antes de cualquier pedido de red (ni falta chequear señal): si es
-      // el primer refresco de esta pantalla y hay una foto reciente en
-      // memoria para este mismo lote+campaña (ver fotosRecientes más
-      // arriba), se usa directo — cubre pasar de Vista General a Modo
-      // trabajo (o entre pestañas) sin volver a pedir lo mismo que se
+
+    // CACHÉ PRIMERO, sin esperar nada de red — antes esta pantalla siempre
+    // intentaba el pedido en vivo primero y recién mostraba lo guardado
+    // localmente si eso FALLABA (esperando el timeout entero para
+    // enterarse). Con señal floja de verdad (no sin señal, floja: el
+    // pedido a veces sale y a veces no), eso significaba pagar el costo de
+    // esperar-y-fallar en CADA pantalla que se abría, aunque la app ya
+    // tuviera exactamente lo mismo guardado hace rato. Reportado en el
+    // campo: "andaba bien, de golpe se traba" — coincidía siempre con
+    // señal débil, nunca con estar realmente sin señal (ahí al menos
+    // fallaba rápido). Ahora se muestra lo que ya hay guardado al toque
+    // (si hay algo) y el pedido en vivo sigue de fondo para actualizar
+    // solo si trae algo más nuevo — nadie espera nunca a que ese pedido
+    // termine (bien o mal) para ver el lote.
+    let teniaAlgoLocal = false;
+    if (esPrimerRefresco) {
+      // Foto reciente en MEMORIA primero (más fresca, sin tocar SQLite):
+      // cubre pasar de Vista General a Modo trabajo (o entre pestañas) sin
+      // ni siquiera un parpadeo, ya que es literalmente lo mismo que se
       // acaba de traer un instante antes.
-      if (esPrimerRefresco) {
-        const foto = leerFotoReciente(campana ? `${loteId}:${campana}` : `vigente:${loteId}`);
-        if (foto) {
-          setLote(foto.lote);
-          setPuntos(foto.puntos);
-          setCargas(fusionarPendientesEnCargas(foto.cargas, foto.puntos, campana ?? foto.lote.campanaActual, pendientesAlEmpezar));
-          setUsandoCache(false);
+      const foto = leerFotoReciente(campana ? `${loteId}:${campana}` : `vigente:${loteId}`);
+      if (foto) {
+        setLote(foto.lote);
+        setPuntos(foto.puntos);
+        setCargas(fusionarPendientesEnCargas(foto.cargas, foto.puntos, campana ?? foto.lote.campanaActual, pendientesAlEmpezar));
+        setUsandoCache(false);
+        setError(null);
+        setErrorCache(null);
+        setCargando(false);
+        teniaAlgoLocal = true;
+      } else {
+        const cache = leerCacheLote(loteId, campana);
+        if (cache) {
+          setLote(cache.lote);
+          setPuntos(cache.puntos);
+          setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual, pendientesAlEmpezar));
+          setUsandoCache(true);
           setError(null);
           setErrorCache(null);
-          return;
+          setCargando(false);
+          teniaAlgoLocal = true;
         }
       }
+    }
+
+    try {
       // Chequeo rápido antes de intentar nada — si no hay señal, ni tiene
       // sentido esperar a que el fetch se dé por vencido solo (eso puede
       // tardar bastante) para recién ahí caer al respaldo local. Ver
@@ -163,8 +190,9 @@ export function useDatosCampo(
       const usarLoteInicial = esPrimerRefresco && loteInicial?.id === loteId;
       // 15s, no los 10s por default de conTimeout — confirmado con el
       // usuario que con wifi andando bien igual pasaba de los 10s alguna
-      // vez (probado en el campo: 12s), suficiente para caer al respaldo
-      // de cache sin estar realmente sin señal.
+      // vez (probado en el campo: 12s). Ya no hace falta que sea corto "por
+      // las dudas" — con lo de arriba, quien mira la pantalla nunca espera
+      // a que esto se resuelva para ver algo si ya había algo guardado.
       const l = usarLoteInicial ? loteInicial! : await conTimeout(fetchLote(loteId), 15000);
       setLote(l);
       if (l) {
@@ -225,23 +253,31 @@ export function useDatosCampo(
         setErrorCache(null);
       }
     } catch (e: any) {
-      // Sin señal (o el server no respondió): en vez de dejar la pantalla
-      // en blanco o con un error, mostramos la última foto que se guardó
-      // de este lote — puede estar desactualizada, pero alguien que llega
-      // al campo sin cobertura necesita poder ver la grilla igual para
-      // poder trabajar (lo que cargue queda en la cola local, ver
-      // lib/offline/cola.ts, y se sube solo cuando vuelva la señal).
-      const cache = leerCacheLote(loteId, campana);
-      if (cache) {
-        setLote(cache.lote);
-        setPuntos(cache.puntos);
-        setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual, pendientesAlEmpezar));
+      // El pedido en vivo falló (sin señal, o el server no respondió a
+      // tiempo). Si ya se estaba mostrando algo local (de arriba, o de un
+      // refresco anterior que sí salió bien), lo dejamos como está — no
+      // tiene sentido tapar un lote que la persona YA está viendo con un
+      // cartel de error solo porque el intento de refrescarlo de fondo no
+      // llegó a nada; sigue siendo el mismo dato de antes, con el motivo
+      // real guardado aparte para diagnóstico (errorCache).
+      if (teniaAlgoLocal) {
         setUsandoCache(true);
-        setError(null);
         setErrorCache(e.message ?? String(e));
       } else {
-        setError(e.message ?? String(e));
-        setErrorCache(e.message ?? String(e));
+        // Nunca hubo nada guardado de este lote — recién acá, sin nada
+        // que mostrar, corresponde el cartel de error.
+        const cache = leerCacheLote(loteId, campana);
+        if (cache) {
+          setLote(cache.lote);
+          setPuntos(cache.puntos);
+          setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual, pendientesAlEmpezar));
+          setUsandoCache(true);
+          setError(null);
+          setErrorCache(e.message ?? String(e));
+        } else {
+          setError(e.message ?? String(e));
+          setErrorCache(e.message ?? String(e));
+        }
       }
     } finally {
       setCargando(false);

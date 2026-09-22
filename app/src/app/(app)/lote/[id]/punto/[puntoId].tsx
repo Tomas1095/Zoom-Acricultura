@@ -268,13 +268,34 @@ export default function PuntoScreen() {
 
   const refrescar = useCallback(async () => {
     if (!usuario) return;
+    const [linea, puntoNum] = etiqueta.split(".").map(Number);
+
+    // Mostrar lo guardado ya mismo, sin esperar nada de red — mismo cambio
+    // que en useDatosCampo (ver ese comentario, offline/cache-lote.ts):
+    // antes esta pantalla siempre esperaba a que el pedido en vivo fallara
+    // (hasta 15s) antes de mostrar lo que ya tenía guardado, pagando ese
+    // costo en CADA punto que se abría con señal floja — de ahí el "se
+    // traba" reportado hoy. Si el lote nunca se vio con señal, o este
+    // punto puntual no está en esa foto, sigue de largo sin mostrar nada
+    // todavía (el pedido en vivo de abajo es la única fuente posible).
+    let teniaAlgoLocal = false;
+    const cacheInicial = leerCacheLote(loteId);
+    const puntoEnCache = cacheInicial?.puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
+    if (cacheInicial && puntoEnCache) {
+      const c = cacheInicial.cargas.get(puntoEnCache.id) ?? null;
+      setLote(cacheInicial.lote);
+      aplicarPuntoYCarga(puntoEnCache, fusionarPendienteDeEstePunto(c, puntoEnCache, cacheInicial.lote.campanaActual), null);
+      setUsandoCache(true);
+      setCargando(false);
+      teniaAlgoLocal = true;
+    }
+
     try {
       // Chequeo rápido antes de intentar nada — si no hay señal, ni tiene
       // sentido esperar a que el fetch se dé por vencido solo (eso puede
       // tardar bastante) para recién ahí caer al respaldo local. Ver
       // lib/offline/net.ts.
       if (!(await hayConexion())) throw new Error("Sin conexión");
-      const [linea, puntoNum] = etiqueta.split(".").map(Number);
       // Punto puntual (no TODOS los del lote) y, más abajo, solo el usuario
       // que cargó este punto (no TODO el equipo) — antes se pedían enteros
       // para buscar ahí adentro un único elemento. Reportado por el
@@ -311,20 +332,15 @@ export default function PuntoScreen() {
       }
       setUsandoCache(false);
     } catch (e: any) {
-      // Sin señal: en vez de dejar la pantalla trabada con un error (el
-      // caso más común de esto es justo el que más importa — alguien que
-      // llega al punto ya sin cobertura), usamos la última foto guardada
-      // de este lote si existe (ver lib/offline/cache-lote.ts, la escribe
-      // Vista General/Modo trabajo en cada visita con señal). Si nunca se
-      // visitó este lote con señal, no hay nada que mostrar y ahí sí no
-      // queda otra que avisar que falló.
-      const cache = leerCacheLote(loteId);
-      if (cache) {
-        const [linea, puntoNum] = etiqueta.split(".").map(Number);
-        const p = cache.puntos.find((x) => x.linea === linea && x.puntoNum === puntoNum) ?? null;
-        setLote(cache.lote);
-        const c = p ? (cache.cargas.get(p.id) ?? null) : null;
-        aplicarPuntoYCarga(p, p ? fusionarPendienteDeEstePunto(c, p, cache.lote.campanaActual) : null, null);
+      // El pedido en vivo falló (sin señal, o el server no respondió a
+      // tiempo). Si ya se estaba mostrando el punto (de la foto guardada,
+      // arriba), se deja como está — el intento de refrescarlo de fondo no
+      // llegó a nada, pero sigue siendo el mismo dato correcto de antes.
+      // Sin nada mostrado todavía es cuando corresponde avisar que falló
+      // (el caso más común de esto es justo el que más importa — alguien
+      // que llega al punto ya sin cobertura Y sin ninguna foto guardada de
+      // este lote, ver lib/offline/cache-lote.ts).
+      if (teniaAlgoLocal) {
         setUsandoCache(true);
       } else {
         Alert.alert("No se pudo cargar el punto", e.message ?? String(e));

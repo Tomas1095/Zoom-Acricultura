@@ -31,8 +31,56 @@ export default function LoteScreen() {
   const [establecimientoNombre, setEstablecimientoNombre] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
+  // Busca este lote en las dos fotos guardadas que hay disponibles — la
+  // del árbol entero (cache-arbol.ts, la escriben Mis Lotes/el árbol) y la
+  // de este lote puntual (cache-lote.ts, la escriben Vista general/Modo
+  // trabajo) — devuelve la primera que lo tenga, o null si ninguna. Se usa
+  // dos veces: para mostrar algo YA sin esperar nada de red (ver
+  // `refrescar` abajo) y como respaldo si el pedido en vivo falla y nunca
+  // se había mostrado nada.
+  const buscarEnCaches = useCallback(
+    async (): Promise<{ lote: Lote; establecimientoNombre?: string } | null> => {
+      if (!usuario) return null;
+      const cache = await leerCacheArbol(usuario.id);
+      const l = cache?.lotes.find((x) => x.id === id) ?? null;
+      if (l) return { lote: l, establecimientoNombre: cache?.establecimientos.find((e) => e.id === l.establecimientoId)?.nombre };
+      // La foto del árbol puede no tener este lote (nunca se entró a "Mis
+      // lotes"/el árbol con señal después de que se asignó, o esa foto
+      // quedó vieja) — pero si alguien ya vio este lote puntual con señal
+      // en algún momento (Vista general/Modo trabajo), esa foto MÁS
+      // específica sí existe y alcanza para reconstruirlo sin tener que
+      // adivinar la campaña vigente (leerCacheLote sin campaña trae la
+      // más reciente que haya).
+      const cacheLote = leerCacheLote(id);
+      if (cacheLote) {
+        return {
+          lote: cacheLote.lote,
+          establecimientoNombre: cache?.establecimientos.find((est) => est.id === cacheLote.lote.establecimientoId)?.nombre,
+        };
+      }
+      return null;
+    },
+    [id, usuario]
+  );
+
   const refrescar = useCallback(async () => {
     if (!usuario || !id) return;
+
+    // Mostrar lo guardado ya mismo, sin esperar nada de red — mismo
+    // cambio que en useDatosCampo/la pantalla del punto (ver esos
+    // comentarios): antes esta pantalla, el paso obligado para entrar a
+    // CUALQUIER lote, siempre esperaba a que el pedido en vivo fallara
+    // antes de mostrar lo que ya tenía guardado.
+    let teniaAlgoLocal = false;
+    const encontrado = await buscarEnCaches();
+    if (encontrado) {
+      setLote(encontrado.lote);
+      setEstablecimientoNombre(encontrado.establecimientoNombre);
+      setError(null);
+      setCargando(false);
+      teniaAlgoLocal = true;
+    }
+
     try {
       // Chequeo rápido antes de intentar nada — ver lib/offline/net.ts.
       if (!(await hayConexion())) throw new Error("Sin conexión");
@@ -40,49 +88,24 @@ export default function LoteScreen() {
       // acá se pedía el ÁRBOL ENTERO (fetchArbol) solo para buscar este
       // único lote adentro, la parte más lenta de entrar a cualquier lote
       // (ver el comentario de fetchLoteConEstablecimiento en db/lotes.ts).
-      const resultado = await conTimeout(db.fetchLoteConEstablecimiento(id));
+      const resultado = await conTimeout(db.fetchLoteConEstablecimiento(id), 15000);
       setLote(resultado?.lote ?? null);
       setEstablecimientoNombre(resultado?.establecimientoNombre);
       setError(null);
     } catch (e: any) {
-      // Sin señal: esta pantalla es el paso obligado para entrar a
-      // CUALQUIER lote, desde Mis Lotes o el árbol — sin este respaldo,
-      // esas dos pantallas ya podían verse offline pero tocar un lote
-      // puntual se rompía justo acá. Reusa la misma foto que ya guardan
-      // esas dos (lib/offline/cache-arbol.ts).
-      const cache = await leerCacheArbol(usuario.id);
-      const l = cache?.lotes.find((x) => x.id === id) ?? null;
-      if (l) {
-        setLote(l);
-        setEstablecimientoNombre(cache?.establecimientos.find((e) => e.id === l.establecimientoId)?.nombre);
-        setError(null);
-      } else {
-        // La foto del árbol puede no tener este lote (nunca se entró a
-        // "Mis lotes"/el árbol con señal después de que se asignó, o esa
-        // foto quedó vieja) — pero si alguien ya vio este lote puntual con
-        // señal en algún momento (Vista general/Modo trabajo), esa foto
-        // MÁS específica sí existe (ver lib/offline/cache-lote.ts) y
-        // alcanza para reconstruir el lote sin tener que adivinar la
-        // campaña vigente (leerCacheLote sin campaña trae la más
-        // reciente que haya). Reportado en el campo: alguien entraba,
-        // veía la grilla perfecta con señal, y al toque de poner modo
-        // avión (sin volver a "Mis lotes" en el medio) le aparecía "no se
-        // pudo cargar el lote" — la foto de ESTE lote sí estaba guardada,
-        // solo que nadie la miraba acá.
-        const cacheLote = leerCacheLote(id);
-        if (cacheLote) {
-          setLote(cacheLote.lote);
-          setEstablecimientoNombre(cache?.establecimientos.find((est) => est.id === cacheLote.lote.establecimientoId)?.nombre);
-          setError(null);
-        } else {
-          setLote(null);
-          setError(e.message ?? String(e));
-        }
+      // El pedido en vivo falló. Si ya se estaba mostrando el lote (de la
+      // foto guardada, arriba), se deja como está — sin esto no tenía
+      // sentido tapar un lote que la persona YA está viendo con un cartel
+      // de error solo porque el intento de refrescarlo de fondo no llegó
+      // a nada.
+      if (!teniaAlgoLocal) {
+        setLote(null);
+        setError(e.message ?? String(e));
       }
     } finally {
       setCargando(false);
     }
-  }, [id, usuario]);
+  }, [id, usuario, buscarEnCaches]);
 
   // useFocusEffect (no useEffect a secas) para que, al volver de cargar
   // puntos, el estado del lote (tieneGrilla, campanaActual, etc.) se
