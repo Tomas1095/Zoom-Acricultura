@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes, puedeResolverConflictos } from "@/lib/roles";
 import * as db from "@/lib/db/lotes";
 import { leerCacheArbol } from "@/lib/offline/cache-arbol";
+import { leerCacheLote } from "@/lib/offline/cache-lote";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
@@ -48,9 +49,7 @@ export default function LoteScreen() {
       // CUALQUIER lote, desde Mis Lotes o el árbol — sin este respaldo,
       // esas dos pantallas ya podían verse offline pero tocar un lote
       // puntual se rompía justo acá. Reusa la misma foto que ya guardan
-      // esas dos (lib/offline/cache-arbol.ts) — lo que se ve más abajo
-      // (grilla, puntos, cargas) tiene su propio respaldo aparte, ver
-      // lib/offline/cache-lote.ts / useDatosCampo.
+      // esas dos (lib/offline/cache-arbol.ts).
       const cache = await leerCacheArbol(usuario.id);
       const l = cache?.lotes.find((x) => x.id === id) ?? null;
       if (l) {
@@ -58,8 +57,27 @@ export default function LoteScreen() {
         setEstablecimientoNombre(cache?.establecimientos.find((e) => e.id === l.establecimientoId)?.nombre);
         setError(null);
       } else {
-        setLote(null);
-        setError(e.message ?? String(e));
+        // La foto del árbol puede no tener este lote (nunca se entró a
+        // "Mis lotes"/el árbol con señal después de que se asignó, o esa
+        // foto quedó vieja) — pero si alguien ya vio este lote puntual con
+        // señal en algún momento (Vista general/Modo trabajo), esa foto
+        // MÁS específica sí existe (ver lib/offline/cache-lote.ts) y
+        // alcanza para reconstruir el lote sin tener que adivinar la
+        // campaña vigente (leerCacheLote sin campaña trae la más
+        // reciente que haya). Reportado en el campo: alguien entraba,
+        // veía la grilla perfecta con señal, y al toque de poner modo
+        // avión (sin volver a "Mis lotes" en el medio) le aparecía "no se
+        // pudo cargar el lote" — la foto de ESTE lote sí estaba guardada,
+        // solo que nadie la miraba acá.
+        const cacheLote = leerCacheLote(id);
+        if (cacheLote) {
+          setLote(cacheLote.lote);
+          setEstablecimientoNombre(cache?.establecimientos.find((est) => est.id === cacheLote.lote.establecimientoId)?.nombre);
+          setError(null);
+        } else {
+          setLote(null);
+          setError(e.message ?? String(e));
+        }
       }
     } finally {
       setCargando(false);
