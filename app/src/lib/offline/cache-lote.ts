@@ -11,6 +11,7 @@
 
 import { getDb } from "./db";
 import { procesarEnTandas } from "./concurrencia";
+import { conTimeout } from "./net";
 import { fetchCargasDeLote, fetchPuntosDeLote } from "@/lib/db/puntos";
 import type { Carga, Lote, Punto } from "@/types/domain";
 
@@ -91,10 +92,24 @@ export function precargarLotes(
     // Puntos primero y cargas después (no en paralelo) — fetchCargasDeLote
     // necesita los IDs de los puntos para no depender de un join más caro
     // para Postgres (ver el comentario en su definición, db/puntos.ts).
-    const puntos = await fetchPuntosDeLote(l.id);
-    const cargas = await fetchCargasDeLote(
-      puntos.map((p) => p.id),
-      l.campanaActual
+    //
+    // Con conTimeout (antes sin límite): procesarEnTandas espera a que
+    // termine TODA la tanda antes de arrancar la siguiente (Promise.all)
+    // — con señal floja de verdad (el caso que esto existe para cubrir,
+    // no "sin señal" que ya se filtra con hayConexion en las pantallas
+    // que llaman a esto), un solo lote colgado sin límite de tiempo podía
+    // trabar la precarga de TODOS los lotes que venían después en la
+    // cola, dejando la mayoría sin foto guardada aunque hubiera habido
+    // tiempo de sobra para cachear los demás. Reportado en el campo:
+    // alguien se quedó parado con señal intermitente esperando que
+    // precargue, y varios lotes igual quedaron sin nada guardado.
+    const puntos = await conTimeout(fetchPuntosDeLote(l.id), 20000);
+    const cargas = await conTimeout(
+      fetchCargasDeLote(
+        puntos.map((p) => p.id),
+        l.campanaActual
+      ),
+      20000
     );
     // `l.tieneGrilla` en true implica que este lote tiene puntos de
     // verdad (ver el mismo chequeo en usar-datos-campo.ts) — si esta
