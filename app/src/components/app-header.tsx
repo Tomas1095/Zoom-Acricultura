@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RefreshCw } from "lucide-react-native";
+import { Check, RefreshCw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { useSync } from "@/lib/sync-context";
@@ -38,20 +38,32 @@ export function AppHeader({ loteNombre }: AppHeaderProps) {
         <Text style={styles.titulo}>{comunidad?.nombre ?? "Zoom Agricultura"}</Text>
         <View style={styles.rule} />
         {loteNombre && <Text style={styles.loteNombre}>{loteNombre}</Text>}
-        {pendientes > 0 && (
-          <Pressable style={styles.pendientesPill} onPress={sincronizarAhora} disabled={sincronizando}>
-            {sincronizando ? (
-              <ActivityIndicator color="#F2A93B" size="small" />
-            ) : (
-              <RefreshCw size={12} color="#F2A93B" />
-            )}
-            <Text style={styles.pendientesTexto}>
-              {sincronizando
-                ? "Sincronizando…"
-                : `${pendientes} ${pendientes === 1 ? "cambio" : "cambios"} sin subir — tocar para reintentar`}
-            </Text>
-          </Pressable>
-        )}
+        {/* Antes solo aparecía habiendo cola pendiente — a pedido del
+         * usuario (testers reportando que a veces la sincronización
+         * automática tarda en dispararse, ver sync-context.tsx) ahora
+         * siempre está visible, para que en cualquier momento — apenas
+         * recuperan señal — puedan forzar el intento a mano en vez de
+         * esperar a que lo dispare solo NetInfo/AppState. */}
+        <Pressable
+          style={[styles.pendientesPill, pendientes === 0 && !sincronizando && styles.sincronizadoPill]}
+          onPress={sincronizarAhora}
+          disabled={sincronizando}
+        >
+          {sincronizando ? (
+            <ActivityIndicator color="#F2A93B" size="small" />
+          ) : pendientes > 0 ? (
+            <RefreshCw size={12} color="#F2A93B" />
+          ) : (
+            <Check size={12} color="#7FD99A" />
+          )}
+          <Text style={[styles.pendientesTexto, pendientes === 0 && !sincronizando && styles.sincronizadoTexto]}>
+            {sincronizando
+              ? "Sincronizando…"
+              : pendientes > 0
+                ? `${pendientes} ${pendientes === 1 ? "cambio" : "cambios"} sin subir — tocar para reintentar`
+                : "Todo sincronizado — tocar para revisar"}
+          </Text>
+        </Pressable>
       </View>
       <ZoomLogo variant="light" iconSize={32} wordSize={21} />
     </View>
@@ -108,4 +120,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(242,169,59,0.12)",
   },
   pendientesTexto: { fontSize: 10.5, fontWeight: "700", color: "#F2A93B", flexShrink: 1 },
+  sincronizadoPill: {
+    borderColor: "rgba(127,217,154,0.4)",
+    backgroundColor: "rgba(127,217,154,0.12)",
+  },
+  sincronizadoTexto: { color: "#7FD99A" },
 });
