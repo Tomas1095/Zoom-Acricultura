@@ -282,13 +282,28 @@ export default function PuntoScreen() {
       // en cada punto que se abría — mismo desperdicio que ya se había
       // arreglado hoy para entrar a un lote (ver fetchLoteConEstablecimiento
       // en db/lotes.ts).
-      const [l, p] = await conTimeout(Promise.all([fetchLote(loteId), fetchPunto(loteId, linea, puntoNum)]));
+      //
+      // 15s, no los 10s por default — mismo motivo que en useDatosCampo
+      // (ver el comentario ahí): con señal real pero floja, confirmado en
+      // el campo que 10s se quedaba corto y esto se caía al cartel de "sin
+      // señal" (o directo se sentía "trabado") de pedo, con la señal
+      // agarrando bien un instante después (ej. apenas llegando a un lugar
+      // con 4G). Reportado hoy: "andaban bien, de golpe no abrían más los
+      // puntos, donde agarran 4G ahí sí les abre" — coincide con esto.
+      const [l, p] = await conTimeout(Promise.all([fetchLote(loteId), fetchPunto(loteId, linea, puntoNum)]), 15000);
       setLote(l);
       if (l && p) {
-        const c = await conTimeout(fetchCarga(p.id, l.campanaActual));
+        const c = await conTimeout(fetchCarga(p.id, l.campanaActual), 15000);
         const cFusionada = fusionarPendienteDeEstePunto(c, p, l.campanaActual);
+        // "Quién cargó esto" es un dato de más, no esencial para poder ver
+        // y editar el punto — antes, si ESTE pedido puntual se colgaba con
+        // señal floja, tiraba abajo TODO lo demás que ya se había traído
+        // bien (punto + carga), cayendo al respaldo de cache de pedo por
+        // un dato secundario. Con `.catch` acá, en el peor caso falta el
+        // cartel de "Cargado por fulano", pero el punto se ve y se puede
+        // trabajar igual.
         const usuarioQueCargo = cFusionada?.cargadoPorId
-          ? await conTimeout(fetchUsuarioPorId(cFusionada.cargadoPorId))
+          ? await conTimeout(fetchUsuarioPorId(cFusionada.cargadoPorId), 15000).catch(() => null)
           : null;
         aplicarPuntoYCarga(p, cFusionada, usuarioQueCargo);
       } else {
