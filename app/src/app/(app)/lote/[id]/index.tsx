@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ChevronLeft } from "lucide-react-native";
 
@@ -26,6 +27,7 @@ import { ConflictosBanner } from "@/features/campo/conflictos-banner";
 export default function LoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { usuario } = useAuth();
+  const insets = useSafeAreaInsets();
   const [cargando, setCargando] = useState(true);
   const [lote, setLote] = useState<Lote | null>(null);
   const [establecimientoNombre, setEstablecimientoNombre] = useState<string | undefined>(undefined);
@@ -153,7 +155,7 @@ export default function LoteScreen() {
             <VistaGeneral lote={lote} establecimientoNombre={establecimientoNombre} />
           )
         ) : (
-          <ScrollView contentContainerStyle={styles.sinGrilla}>
+          <ScrollView contentContainerStyle={[styles.sinGrilla, { paddingBottom: 20 + insets.bottom }]}>
             <Text style={styles.cultivo}>{lote.cultivo}</Text>
 
             {usuario && puedeAdministrarLotes(usuario.rol) ? (

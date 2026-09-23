@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronDown, ChevronRight, Info, Navigation, Pencil, Plus, Trash2, Users } from "lucide-react-native";
 
 import { PromptModal } from "@/components/prompt-modal";
@@ -43,6 +44,7 @@ type ModalState =
  * Supabase en vez de mutar estado en memoria. */
 export function ArbolLotes() {
   const { usuario } = useAuth();
+  const insets = useSafeAreaInsets();
   const puedeEliminar = usuario?.rol === "socio_fundador" || usuario?.rol === "socio_gerente";
 
   const [cargando, setCargando] = useState(true);
@@ -284,7 +286,7 @@ export function ArbolLotes() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 12 + insets.bottom }]}>
         {usandoCache && (
           <Text style={styles.avisoCache}>
             📡 Sin señal — mostrando el último árbol guardado en este celular, puede no estar al día.

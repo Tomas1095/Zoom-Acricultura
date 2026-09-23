@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Building2, UserCircle, Users } from "lucide-react-native";
 
@@ -15,6 +16,7 @@ import { colors } from "@/theme/colors";
 
 export default function MisLotesScreen() {
   const { usuario } = useAuth();
+  const insets = useSafeAreaInsets();
   const commit = commitDelBuild();
   const version = versionDelBuild();
   // Aviso de solicitudes de comunidad esperando aprobación — solo importa
@@ -77,8 +79,13 @@ export default function MisLotesScreen() {
        * figura en App Store Connect/TestFlight — el commit al lado es
        * solo el detalle interno de git, para cuando hace falta algo más
        * fino que la versión. */}
+      {/* Layout fijo (ArbolLotes/MisLotes arriba se encargan de su propio
+       * scroll interno) — este texto es lo último de la columna, pegado
+       * al borde real de la pantalla. Sin el margen del sistema acá,
+       * quedaba tapado por la barra de navegación de Android en algunos
+       * celulares — mismo bug que "Exportar PNG" en Resultados. */}
       {(version || commit) && (
-        <Text style={styles.version}>
+        <Text style={[styles.version, { paddingBottom: 6 + insets.bottom }]}>
           {version ? `v${version}` : ""}
           {version && commit ? " · " : ""}
           {commit ?? ""}

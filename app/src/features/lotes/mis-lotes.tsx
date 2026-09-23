@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CheckCircle2, MapPin } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
@@ -19,6 +20,7 @@ import { colors } from "@/theme/colors";
  * de administradores (ver ArbolLotes). */
 export function MisLotes() {
   const { usuario } = useAuth();
+  const insets = useSafeAreaInsets();
   const [cargando, setCargando] = useState(true);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
@@ -156,7 +158,7 @@ export function MisLotes() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 10 + insets.bottom }]}>
       {usandoCache && (
         <Text style={styles.avisoCache}>
           📡 Sin señal — mostrando la última lista guardada en este celular, puede no estar al día.

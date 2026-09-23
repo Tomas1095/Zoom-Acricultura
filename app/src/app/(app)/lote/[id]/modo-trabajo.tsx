@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -9,6 +10,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
+import * as NavigationBar from "expo-navigation-bar";
 import { ChevronLeft, Compass, Minus, Pencil, Plus } from "lucide-react-native";
 import { useKeepAwake } from "expo-keep-awake";
 
@@ -53,6 +55,24 @@ export default function ModoTrabajoScreen() {
   );
 
   useKeepAwake(); // la pantalla no se apaga mientras estás caminando el lote
+
+  // Modo inmersivo — a pedido del usuario (Android, el socio notó que en
+  // otras apps la barra del sistema se esconde sola y acá no): esta es la
+  // única pantalla de la app pensada para pantalla completa de verdad (el
+  // mapa mientras caminás el lote), así que es la candidata natural —
+  // esconder la barra en pantallas con formularios/botones normales solo
+  // agrega fricción (hay que deslizar para volver atrás) sin ganar nada a
+  // cambio. Se esconde al entrar y se restaura al salir, para no dejar el
+  // resto de la app con la barra escondida de arrastre.
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android") return;
+      NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+      return () => {
+        NavigationBar.setVisibilityAsync("visible").catch(() => {});
+      };
+    }, [])
+  );
 
   const puntosMapa: PuntoMapa[] = useMemo(
     () =>

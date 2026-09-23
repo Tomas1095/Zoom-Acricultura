@@ -1,4 +1,5 @@
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogOut, Trash2 } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
@@ -19,6 +20,7 @@ import { colors } from "@/theme/colors";
 export default function MiCuentaScreen() {
   const { usuario, signOut } = useAuth();
   const { eliminando, pedirEliminarCuenta } = useEliminarCuenta();
+  const insets = useSafeAreaInsets();
 
   if (!usuario) return null;
 
@@ -30,7 +32,7 @@ export default function MiCuentaScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: 16 + insets.bottom }]}>
       <View style={styles.tarjeta}>
         <Text style={styles.nombre}>{usuario.nombre}</Text>
         <Text style={styles.mail}>{usuario.mail}</Text>

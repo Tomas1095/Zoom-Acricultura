@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Camera, Check, Lock, MapPin, Pencil, X } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
@@ -71,6 +72,7 @@ export default function PuntoScreen() {
   const { id: loteId, puntoId: etiqueta } = useLocalSearchParams<{ id: string; puntoId: string }>();
   const { usuario } = useAuth();
   const { avisarCambioEncolado } = useSync();
+  const insets = useSafeAreaInsets();
 
   const [cargando, setCargando] = useState(true);
   const [usandoCache, setUsandoCache] = useState(false);
@@ -519,6 +521,13 @@ export default function PuntoScreen() {
         ref={scrollRef}
         contentContainerStyle={[
           styles.container,
+          // Sin esto, el botón "Confirmar y cerrar punto" (el último
+          // elemento cuando el teclado está cerrado) podía quedar pegado
+          // a la barra de navegación de Android — mismo bug que
+          // "Exportar PNG" en Resultados. Va primero para que la rama de
+          // abajo (con el teclado abierto, que ya tiene margen de sobra
+          // propio) la pise cuando corresponda.
+          { paddingBottom: 20 + insets.bottom },
           // Colchón real (no un número inventado) para que siempre haya
           // lugar de sobra debajo del último campo y enfocarCampo pueda
           // subir el scroll lo que haga falta, sea cual sea el teclado.

@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronDown, Download, FileSpreadsheet, Maximize2, RotateCcw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
@@ -75,6 +76,7 @@ export function VistaGeneral({
   onCampanaCerrada,
 }: VistaGeneralProps) {
   const { usuario } = useAuth();
+  const insets = useSafeAreaInsets();
   const campanaEfectiva = campanaViendo ?? lote.campanaActual;
   const viendoActual = campanaEfectiva === lote.campanaActual;
   // El Monitoreador ve SU propio avance ("lo que hice yo"); Socio Gerente/
@@ -295,7 +297,7 @@ export function VistaGeneral({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 12 + insets.bottom }]}>
       {usandoCache && (
         <Text style={styles.avisoCache}>
           📡 Sin señal — mostrando la última versión guardada en este celular, puede no estar al día.

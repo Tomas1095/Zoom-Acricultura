@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import { ArrowUpCircle, ArrowDownCircle, Copy, Crown, MapPin, Trash2, UserPlus } from "lucide-react-native";
 
@@ -15,6 +16,7 @@ import { AccesosUsuarioModal } from "./accesos-usuario-modal";
  * arma esta pantalla). */
 export function EquipoScreen() {
   const { usuario: yo } = useAuth();
+  const insets = useSafeAreaInsets();
   const [cargando, setCargando] = useState(true);
   const [miembros, setMiembros] = useState<Usuario[]>([]);
   const [codigoRecienGenerado, setCodigoRecienGenerado] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export function EquipoScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 10 + insets.bottom }]}>
       <Pressable style={styles.generarBtn} onPress={generarCodigo} disabled={generando}>
         <UserPlus size={16} color={colors.surface} />
         <Text style={styles.generarTexto}>{generando ? "Generando…" : "Invitar a alguien"}</Text>

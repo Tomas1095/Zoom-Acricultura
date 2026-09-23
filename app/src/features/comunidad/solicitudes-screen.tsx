@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check, X } from "lucide-react-native";
 
 import * as db from "@/lib/db/comunidades";
@@ -13,6 +14,7 @@ import { colors } from "@/theme/colors";
  * las demás; rechazar la deja sin poder entrar (ver
  * app/comunidad-pendiente.tsx, del lado de quien espera). */
 export function SolicitudesComunidadScreen() {
+  const insets = useSafeAreaInsets();
   const [cargando, setCargando] = useState(true);
   const [solicitudes, setSolicitudes] = useState<ComunidadPendiente[]>([]);
   const [procesando, setProcesando] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export function SolicitudesComunidadScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 10 + insets.bottom }]}>
       {solicitudes.length === 0 ? (
         <Text style={styles.vacio}>No hay solicitudes de comunidad pendientes.</Text>
       ) : (

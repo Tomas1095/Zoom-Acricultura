@@ -11,6 +11,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { Check, ChevronDown, Download, Pencil, Plus, RotateCcw, Undo2, Upload, X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   areaManchonesHa,
@@ -141,6 +142,14 @@ function zonaInicial(lote: Lote): ZonaCebo {
  * previa, con su propio "Exportar PDF" en A4 apaisada (ver
  * lib/exportar/datos.ts). */
 export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo }: SalidasViewProps) {
+  const insets = useSafeAreaInsets();
+  // Las 3 pestañas de acá abajo (Informe/Manchoneo/Datos) reusan el mismo
+  // estilo de scroll — armado una sola vez para no repetir el cálculo del
+  // inset en cada una. Sin esto (y sin el botón "Exportar PDF" fuera del
+  // scroll), ese botón quedaba pegado al borde de abajo en Android cuando
+  // el contenido entraba justo en pantalla sin necesitar scrollear —
+  // mismo bug que el de "Exportar PNG" en Resultados.
+  const scrollContenidoConInset = [styles.scrollContenido, { paddingBottom: 12 + insets.bottom }];
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true, lote);
   const [subTab, setSubTab] = useState<SubTab>("informe");
   // Elige qué diseño de PDF usa "Exportar PDF" — el mismo formulario
@@ -695,7 +704,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
 
       {subTab === "informe" ? (
         <ScrollView
-          contentContainerStyle={styles.scrollContenido}
+          contentContainerStyle={scrollContenidoConInset}
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
@@ -843,7 +852,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
           </Pressable>
         </ScrollView>
       ) : subTab === "manchoneo" ? (
-        <ScrollView contentContainerStyle={styles.scrollContenido}>
+        <ScrollView contentContainerStyle={scrollContenidoConInset}>
           <Text style={styles.hint}>
             Polígono de aplicación de cebo, uno por plaga — cada mapa se concentra en las estaciones que superan el
             umbral, dejando afuera la categoría más baja del mapa de densidad correspondiente.
@@ -1031,7 +1040,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
           </View>
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContenido}>
+        <ScrollView contentContainerStyle={scrollContenidoConInset}>
           <View style={styles.card}>
             <Text style={styles.cardTitulo}>Datos</Text>
             <Text style={styles.hint}>Vista previa de todos los puntos cargados — el PDF sale igual, en A4 apaisada.</Text>
