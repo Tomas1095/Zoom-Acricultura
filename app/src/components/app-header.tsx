@@ -11,6 +11,13 @@ interface AppHeaderProps {
    * prototipo: cuando se pasa, aparece debajo de la línea naranja para
    * saber en qué lote estás parado (ver lote/[id]/index.tsx). */
   loteNombre?: string;
+  /** Default `true`. En `false` en la pantalla principal (ver
+   * (app)/index.tsx) — a pedido del usuario, ahí la pastilla de
+   * sincronizar se movió al cuerpo claro, junto a la de precarga (ver
+   * components/sincronizar-pill.tsx), en vez de quedar sola en el header
+   * oscuro separada de la otra. La pantalla de un lote no tiene ese
+   * "cuerpo" equivalente, así que ahí se sigue mostrando acá. */
+  mostrarSincronizar?: boolean;
 }
 
 /** Header de la app — portado de `styles.header` del prototipo (fondo
@@ -22,7 +29,7 @@ interface AppHeaderProps {
  * Stack — este componente reemplaza al header nativo, y por eso maneja el
  * margen del notch/status bar él mismo (con `useSafeAreaInsets`, no un
  * número fijo que se rompería en otro celular). */
-export function AppHeader({ loteNombre }: AppHeaderProps) {
+export function AppHeader({ loteNombre, mostrarSincronizar = true }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
   const { pendientes, sincronizando, sincronizarAhora } = useSync();
   // El nombre de la propia comunidad (ver lib/auth-context.tsx) — antes
@@ -44,26 +51,28 @@ export function AppHeader({ loteNombre }: AppHeaderProps) {
          * siempre está visible, para que en cualquier momento — apenas
          * recuperan señal — puedan forzar el intento a mano en vez de
          * esperar a que lo dispare solo NetInfo/AppState. */}
-        <Pressable
-          style={[styles.pendientesPill, pendientes === 0 && !sincronizando && styles.sincronizadoPill]}
-          onPress={sincronizarAhora}
-          disabled={sincronizando}
-        >
-          {sincronizando ? (
-            <ActivityIndicator color="#F2A93B" size="small" />
-          ) : pendientes > 0 ? (
-            <RefreshCw size={12} color="#F2A93B" />
-          ) : (
-            <Check size={12} color="#7FD99A" />
-          )}
-          <Text style={[styles.pendientesTexto, pendientes === 0 && !sincronizando && styles.sincronizadoTexto]}>
-            {sincronizando
-              ? "Sincronizando…"
-              : pendientes > 0
-                ? `${pendientes} ${pendientes === 1 ? "cambio" : "cambios"} sin subir — tocar para reintentar`
-                : "Todo sincronizado — tocar para revisar"}
-          </Text>
-        </Pressable>
+        {mostrarSincronizar && (
+          <Pressable
+            style={[styles.pendientesPill, pendientes === 0 && !sincronizando && styles.sincronizadoPill]}
+            onPress={sincronizarAhora}
+            disabled={sincronizando}
+          >
+            {sincronizando ? (
+              <ActivityIndicator color="#F2A93B" size="small" />
+            ) : pendientes > 0 ? (
+              <RefreshCw size={12} color="#F2A93B" />
+            ) : (
+              <Check size={12} color="#7FD99A" />
+            )}
+            <Text style={[styles.pendientesTexto, pendientes === 0 && !sincronizando && styles.sincronizadoTexto]}>
+              {sincronizando
+                ? "Sincronizando…"
+                : pendientes > 0
+                  ? `${pendientes} ${pendientes === 1 ? "cambio" : "cambios"} sin subir — tocar para reintentar`
+                  : "Todo sincronizado — tocar para revisar"}
+            </Text>
+          </Pressable>
+        )}
       </View>
       <ZoomLogo variant="light" iconSize={32} wordSize={21} />
     </View>

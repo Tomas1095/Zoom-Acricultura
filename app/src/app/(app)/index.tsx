@@ -11,6 +11,7 @@ import { contarComunidadesPendientes } from "@/lib/db/comunidades";
 import { ArbolLotes } from "@/features/lotes/arbol-lotes";
 import { MisLotes } from "@/features/lotes/mis-lotes";
 import { AppHeader } from "@/components/app-header";
+import { SincronizarPill } from "@/components/sincronizar-pill";
 import { commitDelBuild, versionDelBuild } from "@/lib/version";
 import { colors } from "@/theme/colors";
 
@@ -39,7 +40,11 @@ export default function MisLotesScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <AppHeader />
+      {/* mostrarSincronizar={false}: acá abajo se ve junto a la pastilla
+       * de precarga (dentro de ArbolLotes/MisLotes), no separada en el
+       * header oscuro — a pedido del usuario, que las quería ver juntas
+       * en vez de cortadas por la mitad de la pantalla. */}
+      <AppHeader mostrarSincronizar={false} />
       <View style={styles.cabecera}>
         <View>
           <Text style={styles.saludo}>Hola, {usuario.nombre}</Text>
@@ -66,6 +71,10 @@ export default function MisLotesScreen() {
             <UserCircle size={20} color={colors.primaryDark} />
           </Pressable>
         </View>
+      </View>
+
+      <View style={styles.sincronizarFila}>
+        <SincronizarPill />
       </View>
 
       {esAdministrador ? <ArbolLotes /> : <MisLotes />}
@@ -108,6 +117,7 @@ const styles = StyleSheet.create({
   saludo: { fontSize: 17, fontWeight: "700", color: colors.text },
   rol: { fontSize: 12, color: colors.accentGold, fontWeight: "600" },
   accionesCabecera: { flexDirection: "row", gap: 4 },
+  sincronizarFila: { paddingHorizontal: 16, paddingBottom: 4 },
   iconBtn: { padding: 8 },
   puntoAviso: {
     position: "absolute",
