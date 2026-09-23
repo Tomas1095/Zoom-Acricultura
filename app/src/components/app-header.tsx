@@ -1,9 +1,7 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, RefreshCw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
-import { useSync } from "@/lib/sync-context";
 import { ZoomLogo } from "./zoom-logo";
 
 interface AppHeaderProps {
@@ -11,13 +9,6 @@ interface AppHeaderProps {
    * prototipo: cuando se pasa, aparece debajo de la línea naranja para
    * saber en qué lote estás parado (ver lote/[id]/index.tsx). */
   loteNombre?: string;
-  /** Default `true`. En `false` en la pantalla principal (ver
-   * (app)/index.tsx) — a pedido del usuario, ahí la pastilla de
-   * sincronizar se movió al cuerpo claro, junto a la de precarga (ver
-   * components/sincronizar-pill.tsx), en vez de quedar sola en el header
-   * oscuro separada de la otra. La pantalla de un lote no tiene ese
-   * "cuerpo" equivalente, así que ahí se sigue mostrando acá. */
-  mostrarSincronizar?: boolean;
 }
 
 /** Header de la app — portado de `styles.header` del prototipo (fondo
@@ -29,9 +20,8 @@ interface AppHeaderProps {
  * Stack — este componente reemplaza al header nativo, y por eso maneja el
  * margen del notch/status bar él mismo (con `useSafeAreaInsets`, no un
  * número fijo que se rompería en otro celular). */
-export function AppHeader({ loteNombre, mostrarSincronizar = true }: AppHeaderProps) {
+export function AppHeader({ loteNombre }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
-  const { pendientes, sincronizando, sincronizarAhora } = useSync();
   // El nombre de la propia comunidad (ver lib/auth-context.tsx) — antes
   // decía "Zoom Agricultura" fijo, como el prototipo (NOMBRE_COMUNIDAD);
   // ahora que puede haber más de una comunidad, cada quien ve la suya.
@@ -45,34 +35,6 @@ export function AppHeader({ loteNombre, mostrarSincronizar = true }: AppHeaderPr
         <Text style={styles.titulo}>{comunidad?.nombre ?? "Zoom Agricultura"}</Text>
         <View style={styles.rule} />
         {loteNombre && <Text style={styles.loteNombre}>{loteNombre}</Text>}
-        {/* Antes solo aparecía habiendo cola pendiente — a pedido del
-         * usuario (testers reportando que a veces la sincronización
-         * automática tarda en dispararse, ver sync-context.tsx) ahora
-         * siempre está visible, para que en cualquier momento — apenas
-         * recuperan señal — puedan forzar el intento a mano en vez de
-         * esperar a que lo dispare solo NetInfo/AppState. */}
-        {mostrarSincronizar && (
-          <Pressable
-            style={[styles.pendientesPill, pendientes === 0 && !sincronizando && styles.sincronizadoPill]}
-            onPress={sincronizarAhora}
-            disabled={sincronizando}
-          >
-            {sincronizando ? (
-              <ActivityIndicator color="#F2A93B" size="small" />
-            ) : pendientes > 0 ? (
-              <RefreshCw size={12} color="#F2A93B" />
-            ) : (
-              <Check size={12} color="#7FD99A" />
-            )}
-            <Text style={[styles.pendientesTexto, pendientes === 0 && !sincronizando && styles.sincronizadoTexto]}>
-              {sincronizando
-                ? "Sincronizando…"
-                : pendientes > 0
-                  ? `${pendientes} ${pendientes === 1 ? "cambio" : "cambios"} sin subir — tocar para reintentar`
-                  : "Todo sincronizado — tocar para revisar"}
-            </Text>
-          </Pressable>
-        )}
       </View>
       <ZoomLogo variant="light" iconSize={32} wordSize={21} />
     </View>
@@ -115,23 +77,4 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     marginTop: 8,
   },
-  pendientesPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    marginTop: 10,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(242,169,59,0.4)",
-    backgroundColor: "rgba(242,169,59,0.12)",
-  },
-  pendientesTexto: { fontSize: 10.5, fontWeight: "700", color: "#F2A93B", flexShrink: 1 },
-  sincronizadoPill: {
-    borderColor: "rgba(127,217,154,0.4)",
-    backgroundColor: "rgba(127,217,154,0.12)",
-  },
-  sincronizadoTexto: { color: "#7FD99A" },
 });

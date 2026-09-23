@@ -40,11 +40,12 @@ export default function MisLotesScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      {/* mostrarSincronizar={false}: acá abajo se ve junto a la pastilla
-       * de precarga (dentro de ArbolLotes/MisLotes), no separada en el
-       * header oscuro — a pedido del usuario, que las quería ver juntas
-       * en vez de cortadas por la mitad de la pantalla. */}
-      <AppHeader mostrarSincronizar={false} />
+      {/* AppHeader ya no muestra la pastilla de sincronizar (ver ese
+       * componente) — solo vive acá abajo, junto a la de precarga (dentro
+       * de ArbolLotes/MisLotes), a pedido del usuario: las quería ver
+       * juntas, una debajo de la otra, en vez de una sola separada en el
+       * header oscuro. */}
+      <AppHeader />
       <View style={styles.cabecera}>
         <View>
           <Text style={styles.saludo}>Hola, {usuario.nombre}</Text>
