@@ -11,6 +11,7 @@ import * as db from "@/lib/db/lotes";
 import { leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { leerCacheLote } from "@/lib/offline/cache-lote";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
+import { nombreLoteYEstablecimiento } from "@/lib/exportar/nombres";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AppHeader } from "@/components/app-header";
@@ -121,7 +122,15 @@ export default function LoteScreen() {
   return (
     <View style={styles.pantalla}>
       <StatusBar style="light" />
-      <AppHeader loteNombre={lote?.nombre} />
+      {/* Lote + establecimiento (ej. "Lote 14 - La Alborada"), no solo el
+       * nombre del lote — pedido explícito del usuario: con varios
+       * clientes/establecimientos reales, "Lote 14" a secas no alcanza
+       * para saber de cuál se está hablando de un vistazo. Misma función
+       * que ya arma este mismo nombre para archivos/informes exportados
+       * (ver lib/exportar/nombres.ts), así queda consistente en toda la
+       * app — incluye la excepción de no repetirlo si el lote y el
+       * establecimiento se llaman igual. */}
+      <AppHeader loteNombre={lote ? nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre, " - ") : undefined} />
       <Pressable style={styles.backRow} onPress={() => router.back()}>
         <ChevronLeft size={15} color={colors.textMuted} />
         <Text style={styles.backTexto}>Mis lotes</Text>

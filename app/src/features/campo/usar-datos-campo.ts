@@ -118,7 +118,33 @@ export function useDatosCampo(
   // celular (ver lib/offline/cache-lote.ts), no lo que hay de verdad en el
   // server ahora mismo — porque el fetch en vivo falló, típicamente por
   // estar sin señal en el campo.
-  const [usandoCache, setUsandoCache] = useState(false);
+  const [usandoCache, setUsandoCacheInterno] = useState(false);
+  const avisoCacheTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Encender el cartel de "sin señal, mostrando lo guardado" con un
+  // pequeño retraso (no al toque) — a pedido del usuario, que con señal
+  // buena notaba el cartel prender "por una milésima de segundo" cada vez
+  // que entraba a un lote. La causa: con caché primero (ver más abajo,
+  // "CACHÉ PRIMERO"), el cartel se prende apenas se muestra la foto
+  // guardada, y con señal buena el pedido en vivo llega tan rápido después
+  // que apaga el cartel casi al instante — se ve como un parpadeo, no como
+  // información útil. Con este retraso, si el pedido en vivo llega antes
+  // de que se cumpla (el caso normal con señal buena), el cartel ni
+  // llega a mostrarse. Apagarlo, en cambio, sigue siendo instantáneo —
+  // ahí sí importa que desaparezca apenas hay datos frescos.
+  function setUsandoCache(valor: boolean) {
+    if (avisoCacheTimeoutRef.current) {
+      clearTimeout(avisoCacheTimeoutRef.current);
+      avisoCacheTimeoutRef.current = null;
+    }
+    if (valor) {
+      avisoCacheTimeoutRef.current = setTimeout(() => {
+        avisoCacheTimeoutRef.current = null;
+        setUsandoCacheInterno(true);
+      }, 400);
+    } else {
+      setUsandoCacheInterno(false);
+    }
+  }
 
   const refrescar = useCallback(async () => {
     // Se toma ACÁ, antes de arrancar el fetch remoto (que con señal
@@ -303,6 +329,15 @@ export function useDatosCampo(
     if (activo && !activoAntesRef.current) refrescar();
     activoAntesRef.current = activo;
   }, [activo, refrescar]);
+
+  // Limpia el timer del cartel de caché (ver setUsandoCache más arriba) si
+  // la pantalla se desmonta antes de que se cumpla — sin esto, podía
+  // intentar actualizar el estado de un componente que ya no existe.
+  useEffect(() => {
+    return () => {
+      if (avisoCacheTimeoutRef.current) clearTimeout(avisoCacheTimeoutRef.current);
+    };
+  }, []);
 
   const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
   const gps = useGps(origen);
