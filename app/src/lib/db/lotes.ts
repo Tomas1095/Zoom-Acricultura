@@ -137,6 +137,31 @@ export async function fetchAccesos(loteId: string): Promise<string[]> {
   return (data ?? []).map((r: any) => r.usuario_id as string);
 }
 
+export interface LoteConAcceso {
+  lote: Lote;
+  establecimientoNombre?: string;
+}
+
+/** El sentido inverso de fetchAccesos — todos los lotes a los que tiene
+ * acceso ESTA persona, no quién tiene acceso a ESTE lote. Pedido explícito
+ * del usuario: dar de alta el acceso ya se hacía lote por lote (ver
+ * AccesoModal), pero para sacarlo al terminar la jornada había que
+ * acordarse a mano en qué lotes había entrado a cada uno — esto arma esa
+ * lista desde la persona, para poder sacarle el acceso a lo que haga
+ * falta sin tener que ir lote por lote adivinando. */
+export async function fetchLotesDeUsuario(usuarioId: string): Promise<LoteConAcceso[]> {
+  const { data, error } = await supabase
+    .from("accesos")
+    .select("lotes(*, establecimientos(nombre))")
+    .eq("usuario_id", usuarioId);
+  if (error) throw error;
+  return (data ?? [])
+    .map((r: any) => r.lotes)
+    .filter(Boolean)
+    .map((l: any) => ({ lote: filaALote(l), establecimientoNombre: l.establecimientos?.nombre }))
+    .sort((a, b) => a.lote.nombre.localeCompare(b.lote.nombre));
+}
+
 export async function otorgarAcceso(loteId: string, usuarioId: string): Promise<void> {
   const { error } = await supabase.from("accesos").insert({ lote_id: loteId, usuario_id: usuarioId });
   if (error) throw error;
