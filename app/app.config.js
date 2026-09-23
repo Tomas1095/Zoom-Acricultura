@@ -12,16 +12,19 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.7 para esta octava entrega — trae el botón de
-    // sincronizar siempre visible (antes solo aparecía con cola
-    // pendiente), el arreglo de la caché del lote (no miraba su propia
-    // foto puntual al quedarse sin señal, solo la del árbol entero), el
-    // límite de tiempo por lote en la precarga de fondo (antes uno solo
-    // colgado con señal floja trababa la cola completa) y la pastilla de
-    // "Descargando… → Listo para ir al campo" en Mis lotes/el árbol.
-    // Reportado en el campo el mismo día de esta entrega: gente sin poder
-    // ver lotes ya vistos con señal, al toque de perder cobertura.
-    version: "1.0.7",
+    // Subida a 1.0.8 para esta novena entrega — probando la 1.0.7 en el
+    // campo salieron varios ajustes finos: "Quién hizo qué" ahora es la
+    // unión de "acceso vigente" (aunque esté en 0) y "cargó algo alguna
+    // vez" (aunque ya no tenga acceso); "Exportar PNG" en Resultados ya
+    // no queda tapado por la barra de Android; nueva pantalla para
+    // sacarle el acceso a alguien desde "Mi equipo" sin ir lote por
+    // lote; el numerito de versión ahora muestra el build real, no el
+    // que quedaba pisado en la config; la pastilla de precarga ya no
+    // vuelve a "Descargando…" en cada ida y vuelta a un lote (y ahora
+    // solo repasa el lote puntual, no todos, para gastar menos batería);
+    // y safe-area en toda la app + modo inmersivo en Modo trabajo, para
+    // que nada quede nunca tapado por la barra de navegación de Android.
+    version: "1.0.8",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",
