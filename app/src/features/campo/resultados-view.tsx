@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image as ImageIcon } from "lucide-react-native";
 
 import { calcularCeldasDensidad, coloresDe, rangosDe, type CeldaDensidad, type Plaga } from "@/lib/geo/densidad";
@@ -56,6 +57,7 @@ export function ResultadosView({
   const [cajaSize, setCajaSize] = useState({ ancho: 0, alto: 0 });
   const [exportandoPng, setExportandoPng] = useState(false);
   const mapaRef = useRef<View>(null);
+  const insets = useSafeAreaInsets();
 
   const { cargando, puntos, cargas } = useDatosCampo(lote.id, campanaViendo, undefined, activo ?? true, lote);
 
@@ -190,7 +192,16 @@ export function ResultadosView({
   }
 
   return (
-    <View style={styles.container}>
+    // paddingBottom con el inset del sistema (no solo el padding fijo del
+    // container) — a pedido del usuario (Socio Gerente en Android): esta
+    // pestaña es de layout fijo, sin scroll ("Mapas" no tiene sentido
+    // scrollearlo), así que sin este margen extra el botón "Exportar PNG"
+    // del final quedaba tapado por la barra de navegación del sistema en
+    // celulares donde esa barra ocupa espacio real de pantalla (no
+    // superpuesta/transparente) — el resto de la app no lo sufre porque o
+    // bien tiene scroll de sobra, o el contenido no llega tan justo al
+    // borde de abajo.
+    <View style={[styles.container, { paddingBottom: 16 + insets.bottom }]}>
       <View style={styles.subTabs}>
         <Text
           onPress={() => setSubTab("mapas")}
