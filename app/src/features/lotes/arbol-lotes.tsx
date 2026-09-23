@@ -216,7 +216,18 @@ export function ArbolLotes() {
           if (!carga.cargado || !carga.cargadoPorId) continue;
           conteos.set(carga.cargadoPorId, (conteos.get(carga.cargadoPorId) ?? 0) + 1);
         }
-        const desglose = accesos
+        // Unión de accesos (gente asignada HOY, aunque todavía no haya
+        // cargado nada — se ve en 0) y de quien tenga algo cargado
+        // (aunque ya no tenga acceso). El acceso se toca todo el tiempo
+        // como herramienta operativa del día a día (para que cada
+        // Monitoreador vea solo lo que le toca) — sacárselo a alguien no
+        // tiene que borrar de este historial lo que esa persona ya cargó.
+        // Reportado por el usuario: le sacó el acceso a alguien y notó que
+        // desaparecía de acá, dando la impresión de que se había perdido
+        // el dato (el dato en sí siempre estuvo a salvo en `cargas` — esto
+        // era nada más un problema de qué se mostraba).
+        const idsAMostrar = new Set([...accesos, ...conteos.keys()]);
+        const desglose = Array.from(idsAMostrar)
           .map((usuarioId) => ({ usuarioId, cantidad: conteos.get(usuarioId) ?? 0 }))
           .sort((a, b) => b.cantidad - a.cantidad);
         setInfoPorLote((prev) => ({ ...prev, [lote.id]: { puntosTotal: puntos.length, desglose } }));
@@ -451,7 +462,7 @@ export function ArbolLotes() {
                                           </Text>
                                           {infoValor.desglose.length === 0 ? (
                                             <Text style={styles.desgloseVacio}>
-                                              Todavía no le diste acceso a este lote a nadie.
+                                              Todavía no le diste acceso a este lote a nadie, ni nadie cargó nada acá.
                                             </Text>
                                           ) : (
                                             infoValor.desglose.map(({ usuarioId, cantidad }) => {
