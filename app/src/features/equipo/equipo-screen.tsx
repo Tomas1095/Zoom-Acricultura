@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { ArrowUpCircle, ArrowDownCircle, Copy, Crown, Trash2, UserPlus } from "lucide-react-native";
+import { ArrowUpCircle, ArrowDownCircle, Copy, Crown, MapPin, Trash2, UserPlus } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import * as db from "@/lib/db/equipo";
 import { etiquetaRol } from "@/lib/roles";
 import type { Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
+import { AccesosUsuarioModal } from "./accesos-usuario-modal";
 
 /** "Mi equipo" — portado de EquipoView. Solo entran acá socio_fundador y
  * socio_gerente (ver puedeGestionarEquipo en roles.ts / la navegación que
@@ -18,6 +19,7 @@ export function EquipoScreen() {
   const [miembros, setMiembros] = useState<Usuario[]>([]);
   const [codigoRecienGenerado, setCodigoRecienGenerado] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
+  const [viendoAccesosDe, setViendoAccesosDe] = useState<Usuario | null>(null);
 
   const refrescar = useCallback(async () => {
     if (!yo) return;
@@ -196,6 +198,18 @@ export function EquipoScreen() {
                     </Text>
                   </Pressable>
                 )}
+                {/* Ver/sacar accesos por lote — solo tiene sentido para
+                    Monitoreador: es el único rol que depende de la tabla
+                    `accesos` para ver algo (Socio/Encargado ven todo el
+                    árbol siempre, sin necesitar accesos puntuales). Pedido
+                    explícito del usuario: antes había que acordarse a mano
+                    en qué lotes había entrado a cada uno para poder
+                    sacárselos al final del día. */}
+                {u.rol === "monitoreador" && (
+                  <Pressable style={styles.iconBtn} onPress={() => setViendoAccesosDe(u)}>
+                    <MapPin size={16} color={colors.info} />
+                  </Pressable>
+                )}
                 <Pressable style={styles.iconBtn} onPress={() => confirmarQuitar(u)}>
                   <Trash2 size={16} color={colors.danger} />
                 </Pressable>
@@ -204,6 +218,9 @@ export function EquipoScreen() {
           </View>
         );
       })}
+      {viendoAccesosDe && (
+        <AccesosUsuarioModal usuario={viendoAccesosDe} onCerrar={() => setViendoAccesosDe(null)} />
+      )}
     </ScrollView>
   );
 }
