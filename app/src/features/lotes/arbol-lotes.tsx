@@ -203,10 +203,7 @@ export function ArbolLotes() {
     if (!abierta && infoPorLote[lote.id] === undefined) {
       setInfoPorLote((prev) => ({ ...prev, [lote.id]: "cargando" }));
       try {
-        // Puntos y accesos sí van en paralelo (no dependen entre sí);
-        // cargas necesita los IDs de los puntos, ver el comentario en
-        // fetchCargasDeLote (db/puntos.ts).
-        const [puntos, accesos] = await Promise.all([fetchPuntosDeLote(lote.id), db.fetchAccesos(lote.id)]);
+        const puntos = await fetchPuntosDeLote(lote.id);
         const cargas = await fetchCargasDeLote(
           puntos.map((p) => p.id),
           lote.campanaActual
@@ -216,19 +213,15 @@ export function ArbolLotes() {
           if (!carga.cargado || !carga.cargadoPorId) continue;
           conteos.set(carga.cargadoPorId, (conteos.get(carga.cargadoPorId) ?? 0) + 1);
         }
-        // Unión de accesos (gente asignada HOY, aunque todavía no haya
-        // cargado nada — se ve en 0) y de quien tenga algo cargado
-        // (aunque ya no tenga acceso). El acceso se toca todo el tiempo
-        // como herramienta operativa del día a día (para que cada
-        // Monitoreador vea solo lo que le toca) — sacárselo a alguien no
-        // tiene que borrar de este historial lo que esa persona ya cargó.
-        // Reportado por el usuario: le sacó el acceso a alguien y notó que
-        // desaparecía de acá, dando la impresión de que se había perdido
-        // el dato (el dato en sí siempre estuvo a salvo en `cargas` — esto
-        // era nada más un problema de qué se mostraba).
-        const idsAMostrar = new Set([...accesos, ...conteos.keys()]);
-        const desglose = Array.from(idsAMostrar)
-          .map((usuarioId) => ({ usuarioId, cantidad: conteos.get(usuarioId) ?? 0 }))
+        // Solo quien tenga al menos 1 punto cargado — sin importar si
+        // tiene acceso al lote hoy o no (el acceso se toca todo el tiempo
+        // como herramienta operativa del día a día, para que cada
+        // Monitoreador vea solo lo que le toca; no tiene que ver con el
+        // historial de qué cargó cada uno). Alguien con acceso pero 0
+        // puntos cargados no aporta nada acá — pedido explícito del
+        // usuario, antes se listaba igual en 0.
+        const desglose = Array.from(conteos.entries())
+          .map(([usuarioId, cantidad]) => ({ usuarioId, cantidad }))
           .sort((a, b) => b.cantidad - a.cantidad);
         setInfoPorLote((prev) => ({ ...prev, [lote.id]: { puntosTotal: puntos.length, desglose } }));
       } catch (e: any) {
@@ -461,9 +454,7 @@ export function ArbolLotes() {
                                             {infoValor.puntosTotal} puntos
                                           </Text>
                                           {infoValor.desglose.length === 0 ? (
-                                            <Text style={styles.desgloseVacio}>
-                                              Todavía no le diste acceso a este lote a nadie, ni nadie cargó nada acá.
-                                            </Text>
+                                            <Text style={styles.desgloseVacio}>Todavía nadie cargó nada acá.</Text>
                                           ) : (
                                             infoValor.desglose.map(({ usuarioId, cantidad }) => {
                                               const persona = usuarios.find((u) => u.id === usuarioId);
