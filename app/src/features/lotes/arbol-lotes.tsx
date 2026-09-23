@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ChevronDown, ChevronRight, Info, Navigation, Pencil, Plus, Trash2, Users } from "lucide-react-native";
@@ -65,6 +65,12 @@ export function ArbolLotes() {
   const [usandoCache, setUsandoCache] = useState(false);
   const [precargando, setPrecargando] = useState(false);
   const [precargaLista, setPrecargaLista] = useState(false);
+  // Ver el comentario igual a este en mis-lotes.tsx — evita que la
+  // pastilla vuelva a mostrar "Descargando…" cada vez que se vuelve de un
+  // lote (el useFocusEffect de abajo dispara `refrescar` de nuevo para
+  // actualizar el resumen de cada fila), una vez que ya bajó todo al
+  // menos una vez esta sesión.
+  const yaPrecargoUnaVezRef = useRef(false);
 
   // `liviano`: true cuando se llama después de crear/editar/borrar algo en
   // el árbol (ver conManejoDeError) — ahí solo hace falta refrescar la
@@ -77,7 +83,7 @@ export function ArbolLotes() {
   // completa se sigue haciendo, pero solo al entrar de verdad a esta
   // pantalla (ver useFocusEffect más abajo).
   const refrescar = useCallback(
-    async (liviano = false) => {
+    async (liviano = false, manual = false) => {
       if (!usuario) return;
 
       let arbol: db.Arbol | null = null;
@@ -146,14 +152,16 @@ export function ArbolLotes() {
         // (50+ lotes) dejan de saturar Postgres con timeouts reales
         // (57014, confirmado con logs de Supabase), afectando a cualquiera
         // usando la app en ese momento, no solo a esta pantalla.
-        setPrecargando(true);
+        const mostrarPrecargando = manual || !yaPrecargoUnaVezRef.current;
+        if (mostrarPrecargando) setPrecargando(true);
         precargarLotes(arbol.lotes, (l, puntos, cargas) => {
           const fusionadas = fusionarPendientesEnCargas(cargas, puntos, l.campanaActual);
           const r = calcularResumenAvance(puntos.length, fusionadas);
           setResumenes((prev) => ({ ...prev, [l.id]: r }));
         }).then(() => {
-          setPrecargando(false);
+          if (mostrarPrecargando) setPrecargando(false);
           setPrecargaLista(true);
+          yaPrecargoUnaVezRef.current = true;
         });
       }
       setCargando(false);
@@ -262,7 +270,7 @@ export function ArbolLotes() {
             📡 Sin señal — mostrando el último árbol guardado en este celular, puede no estar al día.
           </Text>
         )}
-        <PrecargaPill precargando={precargando} lista={precargaLista} onPress={() => refrescar()} />
+        <PrecargaPill precargando={precargando} lista={precargaLista} onPress={() => refrescar(false, true)} />
         {clientes.length === 0 && (
           <Text style={styles.vacio}>Todavía no hay clientes cargados. Empezá agregando uno.</Text>
         )}

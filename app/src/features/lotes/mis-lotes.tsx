@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, MapPin } from "lucide-react-native";
@@ -27,8 +27,22 @@ export function MisLotes() {
   const [error, setError] = useState<string | null>(null);
   const [precargando, setPrecargando] = useState(false);
   const [precargaLista, setPrecargaLista] = useState(false);
+  // true apenas termina la primera precarga completa de esta sesión — de
+  // ahí en más, volver de un lote (que vuelve a disparar `refrescar` por
+  // el useFocusEffect de abajo, para que el resumen de esa card se
+  // actualice) NO hace que la pastilla vuelva a mostrar "Descargando…"
+  // como si arrancara de cero. Reportado por el usuario: entrar y salir
+  // de un lote una y otra vez hacía que la pastilla se la pasara
+  // parpadeando entre naranja y verde, aunque ya tenía todo guardado —
+  // molesto y además engañoso (parecía que se estaba perdiendo lo ya
+  // descargado). La precarga real SIGUE corriendo igual en cada vuelta
+  // (necesaria para el resumen actualizado); lo único que cambia es que,
+  // pasada la primera vez, corre calladita de fondo sin tapar la
+  // pastilla en verde — salvo que la toquen a mano para forzar un
+  // reintento (ver PrecargaPill/onPress más abajo).
+  const yaPrecargoUnaVezRef = useRef(false);
 
-  const refrescar = useCallback(async () => {
+  const refrescar = useCallback(async (manual = false) => {
     if (!usuario) return;
 
     // Mostrar lo guardado ya mismo, sin esperar nada de red — mismo
@@ -86,14 +100,16 @@ export function MisLotes() {
     // saturar Postgres con timeouts reales (57014, confirmado con logs de
     // Supabase), afectando a cualquiera usando la app en ese momento, no
     // solo a esta pantalla.
-    setPrecargando(true);
+    const mostrarPrecargando = manual || !yaPrecargoUnaVezRef.current;
+    if (mostrarPrecargando) setPrecargando(true);
     precargarLotes(arbol.lotes, (l, puntos, cargas) => {
       const fusionadas = fusionarPendientesEnCargas(cargas, puntos, l.campanaActual);
       const r = calcularResumenAvance(puntos.length, fusionadas, usuario.id);
       setResumenes((prev) => ({ ...prev, [l.id]: r }));
     }).then(() => {
-      setPrecargando(false);
+      if (mostrarPrecargando) setPrecargando(false);
       setPrecargaLista(true);
+      yaPrecargoUnaVezRef.current = true;
     });
   }, [usuario]);
 
@@ -130,7 +146,7 @@ export function MisLotes() {
           📡 Sin señal — mostrando la última lista guardada en este celular, puede no estar al día.
         </Text>
       )}
-      <PrecargaPill precargando={precargando} lista={precargaLista} onPress={refrescar} />
+      <PrecargaPill precargando={precargando} lista={precargaLista} onPress={() => refrescar(true)} />
       <Text style={styles.label}>Lotes asignados — tocá uno para empezar</Text>
       {lotes.length === 0 ? (
         <Text style={styles.vacio}>No tenés lotes asignados por ahora.</Text>
