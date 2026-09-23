@@ -71,6 +71,10 @@ export function ArbolLotes() {
   // actualizar el resumen de cada fila), una vez que ya bajó todo al
   // menos una vez esta sesión.
   const yaPrecargoUnaVezRef = useRef(false);
+  // Ver el comentario igual a este en mis-lotes.tsx — qué lote se tocó
+  // para entrar, así al volver la precarga automática solo repasa ESE
+  // lote puntual en vez de los N lotes del árbol entero.
+  const ultimoLoteAbiertoIdRef = useRef<string | null>(null);
 
   // `liviano`: true cuando se llama después de crear/editar/borrar algo en
   // el árbol (ver conManejoDeError) — ahí solo hace falta refrescar la
@@ -152,9 +156,18 @@ export function ArbolLotes() {
         // (50+ lotes) dejan de saturar Postgres con timeouts reales
         // (57014, confirmado con logs de Supabase), afectando a cualquiera
         // usando la app en ese momento, no solo a esta pantalla.
-        const mostrarPrecargando = manual || !yaPrecargoUnaVezRef.current;
+        const primeraVez = !yaPrecargoUnaVezRef.current;
+        const mostrarPrecargando = manual || primeraVez;
         if (mostrarPrecargando) setPrecargando(true);
-        precargarLotes(arbol.lotes, (l, puntos, cargas) => {
+        // La primera vez de la sesión (o un reintento a mano) repasa
+        // TODOS los lotes. Cualquier otra vuelta automática (volver de
+        // haber entrado a un lote puntual) alcanza con repasar ESE lote
+        // nomás — pedido explícito del usuario: pedir los N lotes enteros
+        // de nuevo en cada ida y vuelta gastaba señal y batería de más
+        // sin necesidad real.
+        const lotesAPrecargar =
+          primeraVez || manual ? arbol.lotes : arbol.lotes.filter((l) => l.id === ultimoLoteAbiertoIdRef.current);
+        precargarLotes(lotesAPrecargar, (l, puntos, cargas) => {
           const fusionadas = fusionarPendientesEnCargas(cargas, puntos, l.campanaActual);
           const r = calcularResumenAvance(puntos.length, fusionadas);
           setResumenes((prev) => ({ ...prev, [l.id]: r }));
@@ -375,7 +388,13 @@ export function ArbolLotes() {
                               return (
                                 <View key={l.id} style={styles.loteRow}>
                                   <View style={styles.loteFilaSuperior}>
-                                    <Pressable style={styles.loteInfo} onPress={() => router.push(`/(app)/lote/${l.id}`)}>
+                                    <Pressable
+                                      style={styles.loteInfo}
+                                      onPress={() => {
+                                        ultimoLoteAbiertoIdRef.current = l.id;
+                                        router.push(`/(app)/lote/${l.id}`);
+                                      }}
+                                    >
                                       <Text style={styles.loteNombre}>{l.nombre}</Text>
                                       <Text style={styles.loteDetalle}>
                                         {l.cultivo}

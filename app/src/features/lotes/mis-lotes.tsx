@@ -41,6 +41,13 @@ export function MisLotes() {
   // pastilla en verde — salvo que la toquen a mano para forzar un
   // reintento (ver PrecargaPill/onPress más abajo).
   const yaPrecargoUnaVezRef = useRef(false);
+  // Qué lote se tocó para entrar — así, al volver (useFocusEffect abajo),
+  // la precarga automática solo repasa ESE lote puntual (el único que
+  // pudo haber cambiado) en vez de los N lotes asignados enteros. Pedido
+  // explícito del usuario: repetir el pedido de red a TODOS los lotes en
+  // cada ida y vuelta gastaba señal y batería de más sin necesidad, para
+  // terminar actualizando como mucho un solo número.
+  const ultimoLoteAbiertoIdRef = useRef<string | null>(null);
 
   const refrescar = useCallback(async (manual = false) => {
     if (!usuario) return;
@@ -100,9 +107,18 @@ export function MisLotes() {
     // saturar Postgres con timeouts reales (57014, confirmado con logs de
     // Supabase), afectando a cualquiera usando la app en ese momento, no
     // solo a esta pantalla.
-    const mostrarPrecargando = manual || !yaPrecargoUnaVezRef.current;
+    const primeraVez = !yaPrecargoUnaVezRef.current;
+    const mostrarPrecargando = manual || primeraVez;
     if (mostrarPrecargando) setPrecargando(true);
-    precargarLotes(arbol.lotes, (l, puntos, cargas) => {
+    // La primera vez de la sesión (o un reintento a mano) repasa TODOS
+    // los lotes — para eso existe la pastilla. Cualquier otra vuelta
+    // automática (volver de haber entrado a un lote puntual) alcanza con
+    // repasar ESE lote nomás: es el único que pudo haber cambiado, y
+    // pedir los N lotes enteros de nuevo en cada ida y vuelta gastaba
+    // señal y batería de más sin necesidad real.
+    const lotesAPrecargar =
+      primeraVez || manual ? arbol.lotes : arbol.lotes.filter((l) => l.id === ultimoLoteAbiertoIdRef.current);
+    precargarLotes(lotesAPrecargar, (l, puntos, cargas) => {
       const fusionadas = fusionarPendientesEnCargas(cargas, puntos, l.campanaActual);
       const r = calcularResumenAvance(puntos.length, fusionadas, usuario.id);
       setResumenes((prev) => ({ ...prev, [l.id]: r }));
@@ -155,7 +171,14 @@ export function MisLotes() {
           const establecimiento = establecimientos.find((e) => e.id === l.establecimientoId);
           const resumen = resumenes[l.id];
           return (
-            <Pressable key={l.id} style={styles.card} onPress={() => router.push(`/(app)/lote/${l.id}`)}>
+            <Pressable
+              key={l.id}
+              style={styles.card}
+              onPress={() => {
+                ultimoLoteAbiertoIdRef.current = l.id;
+                router.push(`/(app)/lote/${l.id}`);
+              }}
+            >
               <Text style={styles.establecimiento}>{establecimiento?.nombre ?? ""}</Text>
               <Text style={styles.nombre}>{l.nombre}</Text>
               <Text style={styles.cultivo}>{l.cultivo}</Text>
