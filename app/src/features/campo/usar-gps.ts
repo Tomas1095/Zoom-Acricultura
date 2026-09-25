@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
+import { AppState } from "react-native";
 import * as Location from "expo-location";
 
 import { latLonAXY } from "@/lib/geo/geometria";
@@ -55,7 +56,18 @@ const VENTANA_RUMBO_GPS_MS = 4000;
  * cuando se toca "Listo". Con `useFocusEffect`, el GPS/brújula se cortan
  * solos apenas la pantalla pierde el foco (se abre el punto encima) y se
  * retoman solos al volver — de paso, ahorra batería de verdad (antes
- * seguían prendidos aunque no se vieran en pantalla). */
+ * seguían prendidos aunque no se vieran en pantalla).
+ *
+ * También se reinician al volver la app a primer plano (ver el `AppState`
+ * más abajo) — reportado por un usuario en iOS: caminando de un punto a
+ * otro con el teléfono bloqueado, al desbloquearlo el GPS quedaba "trabado"
+ * en la última posición de antes de bloquear, aunque ya se había movido.
+ * En iOS (más agresivo que Android ahorrando batería) el sistema puede
+ * PAUSAR las actualizaciones de `watchPositionAsync` mientras la app queda
+ * en segundo plano un rato, y no las retoma solo al volver — la suscripción
+ * sigue "viva" del lado de JS, pero dejó de recibir nada nuevo del sistema.
+ * Cortarla y pedir una nueva de cero al volver a primer plano es lo que
+ * fuerza a iOS a mandar posiciones frescas otra vez. */
 export function useGps(origen: LatLon | null) {
   const [posicion, setPosicion] = useState<XY | null>(null);
   const [estado, setEstado] = useState<EstadoGps>("buscando");
@@ -67,63 +79,104 @@ export function useGps(origen: LatLon | null) {
   // válido y se usó — mientras esté "fresco" (ver VENTANA_RUMBO_GPS_MS),
   // las lecturas de la brújula se ignoran a propósito (ver más abajo).
   const ultimoRumboGpsRef = useRef(0);
+  // Se pisa cada vez que se pide desuscribir — cualquier suscripción en
+  // vuelo que todavía no había terminado de resolver (los `await` de
+  // abajo) se da cuenta al volver y no llega a guardar nada ni a tocar
+  // estado, en vez del `cancelado` de una sola variable capturada que
+  // había antes (acá hace falta poder invalidar un intento en curso desde
+  // DOS lugares distintos — perder el foco Y el AppState — no solo uno).
+  const generacionRef = useRef(0);
+  // Si la pantalla está en foco ahora mismo — el listener de AppState de
+  // más abajo corre siempre (para toda la vida del hook), pero solo tiene
+  // que reiniciar el GPS si además esta pantalla es la que está activa.
+  const enFocoRef = useRef(false);
+
+  const suscribir = useCallback(async () => {
+    if (!origen || subPosicionRef.current) return;
+    const miGeneracion = ++generacionRef.current;
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (miGeneracion !== generacionRef.current) return;
+    if (status !== "granted") {
+      setEstado("no-disponible");
+      return;
+    }
+
+    const subPos = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 1 },
+      (pos) => {
+        if (miGeneracion !== generacionRef.current) return;
+        setPosicion(latLonAXY(origen, { lat: pos.coords.latitude, lon: pos.coords.longitude }));
+        setEstado("activo");
+
+        // `coords.heading` es el CURSO sobre el terreno (-1 si no hay
+        // dato) — se prioriza por sobre la brújula mientras estés
+        // caminando a un paso real (ver el comentario grande arriba).
+        const curso = pos.coords.heading;
+        const velocidad = pos.coords.speed ?? 0;
+        if (curso != null && curso >= 0 && velocidad >= VELOCIDAD_MIN_RUMBO_GPS) {
+          setHeading(curso);
+          setHeadingDisponible(true);
+          ultimoRumboGpsRef.current = Date.now();
+        }
+      }
+    );
+    if (miGeneracion !== generacionRef.current) {
+      subPos.remove();
+      return;
+    }
+    subPosicionRef.current = subPos;
+
+    try {
+      const subHeading = await Location.watchHeadingAsync((h) => {
+        if (miGeneracion !== generacionRef.current) return;
+        // El rumbo del GPS todavía está fresco (caminando de verdad) —
+        // no se pisa con la lectura de la brújula, que es la fuente de
+        // respaldo, no la principal mientras hay una mejor disponible.
+        if (Date.now() - ultimoRumboGpsRef.current < VENTANA_RUMBO_GPS_MS) return;
+        setHeading(h.trueHeading >= 0 ? h.trueHeading : h.magHeading);
+        setHeadingDisponible(true);
+      });
+      if (miGeneracion !== generacionRef.current) {
+        subHeading.remove();
+        return;
+      }
+      subHeadingRef.current = subHeading;
+    } catch {
+      // Algunos dispositivos/emuladores no traen brújula — no es fatal,
+      // el mapa queda orientado al norte fijo y se puede rotar a mano.
+      setHeadingDisponible(false);
+    }
+  }, [origen]);
+
+  const desuscribir = useCallback(() => {
+    generacionRef.current++; // invalida cualquier suscripción en curso (ver `suscribir`)
+    subPosicionRef.current?.remove();
+    subPosicionRef.current = null;
+    subHeadingRef.current?.remove();
+    subHeadingRef.current = null;
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      if (!origen) return;
-      let cancelado = false;
-
-      (async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          if (!cancelado) setEstado("no-disponible");
-          return;
-        }
-
-        subPosicionRef.current = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 1 },
-          (pos) => {
-            if (cancelado) return;
-            setPosicion(latLonAXY(origen, { lat: pos.coords.latitude, lon: pos.coords.longitude }));
-            setEstado("activo");
-
-            // `coords.heading` es el CURSO sobre el terreno (-1 si no hay
-            // dato) — se prioriza por sobre la brújula mientras estés
-            // caminando a un paso real (ver el comentario grande arriba).
-            const curso = pos.coords.heading;
-            const velocidad = pos.coords.speed ?? 0;
-            if (curso != null && curso >= 0 && velocidad >= VELOCIDAD_MIN_RUMBO_GPS) {
-              setHeading(curso);
-              setHeadingDisponible(true);
-              ultimoRumboGpsRef.current = Date.now();
-            }
-          }
-        );
-
-        try {
-          subHeadingRef.current = await Location.watchHeadingAsync((h) => {
-            if (cancelado) return;
-            // El rumbo del GPS todavía está fresco (caminando de verdad) —
-            // no se pisa con la lectura de la brújula, que es la fuente de
-            // respaldo, no la principal mientras hay una mejor disponible.
-            if (Date.now() - ultimoRumboGpsRef.current < VENTANA_RUMBO_GPS_MS) return;
-            setHeading(h.trueHeading >= 0 ? h.trueHeading : h.magHeading);
-            setHeadingDisponible(true);
-          });
-        } catch {
-          // Algunos dispositivos/emuladores no traen brújula — no es fatal,
-          // el mapa queda orientado al norte fijo y se puede rotar a mano.
-          setHeadingDisponible(false);
-        }
-      })();
-
+      enFocoRef.current = true;
+      suscribir();
       return () => {
-        cancelado = true;
-        subPosicionRef.current?.remove();
-        subHeadingRef.current?.remove();
+        enFocoRef.current = false;
+        desuscribir();
       };
-    }, [origen])
+    }, [suscribir, desuscribir])
   );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (estadoApp) => {
+      if (estadoApp === "active" && enFocoRef.current) {
+        desuscribir();
+        suscribir();
+      }
+    });
+    return () => sub.remove();
+  }, [suscribir, desuscribir]);
 
   return { posicion, estado, heading, headingDisponible };
 }

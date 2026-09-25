@@ -23,9 +23,13 @@ module.exports = {
     // también decía "sin señal" de pedo con señal real pero un pedido lento
     // o fallido por otra causa); "Mi equipo" reordenada (accesos primero,
     // un solo botón de "cambiar rol" con confirmación en vez del botón de
-    // texto largo "→ Encargado"); y un subgrupo personal dentro de "Mi
+    // texto largo "→ Encargado"); un subgrupo personal dentro de "Mi
     // equipo" (estrellita por persona + filtro "Todos"/"Los míos", para no
-    // tener que scrollear entre el personal del socio).
+    // tener que scrollear entre el personal del socio); y en iOS, el GPS ya
+    // no queda "trabado" después de caminar con el teléfono bloqueado entre
+    // un punto y otro (el sistema pausaba las actualizaciones de ubicación
+    // en segundo plano y no las retomaba solo — ahora se piden de cero al
+    // volver a primer plano).
     version: "1.0.9",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
