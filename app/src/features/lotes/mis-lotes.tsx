@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,23 +9,39 @@ import * as db from "@/lib/db/lotes";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
-import { PrecargaPill } from "./precarga-pill";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Establecimiento, Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 
+export interface MisLotesHandle {
+  /** Fuerza un reintento completo (todos los lotes) desde afuera — usado
+   * por la pastilla de precarga, que ahora vive en (app)/index.tsx en vez
+   * de acá adentro (ver el comentario de `onPrecargaCambio` más abajo). */
+  refrescarManual: () => void;
+}
+
+interface MisLotesProps {
+  /** La pastilla de precarga se movió al cuerpo fijo de (app)/index.tsx —
+   * a pedido del usuario, quería verla siempre visible al scrollear la
+   * lista, no perderla de vista adentro del ScrollView. Este componente
+   * sigue siendo dueño del estado real (acá es donde se sabe si terminó o
+   * no), pero en vez de renderizar la pastilla él mismo, avisa hacia
+   * arriba cada vez que cambia para que el padre la dibuje. */
+  onPrecargaCambio?: (precargando: boolean, lista: boolean) => void;
+}
+
 /** Lista plana de lotes con acceso — lo que ve un Monitoreador. Portado de
  * MisLotesView del prototipo. Nada de crear/editar/borrar acá: eso es solo
  * de administradores (ver ArbolLotes). */
-export function MisLotes() {
+export const MisLotes = forwardRef<MisLotesHandle, MisLotesProps>(function MisLotes({ onPrecargaCambio }, ref) {
   const { usuario } = useAuth();
   const insets = useSafeAreaInsets();
   const [cargando, setCargando] = useState(true);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
-  const [usandoCache, setUsandoCache] = useState(false);
+  const [usandoCache, setUsandoCacheInterno] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [precargando, setPrecargando] = useState(false);
   const [precargaLista, setPrecargaLista] = useState(false);
@@ -41,7 +57,7 @@ export function MisLotes() {
   // (necesaria para el resumen actualizado); lo único que cambia es que,
   // pasada la primera vez, corre calladita de fondo sin tapar la
   // pastilla en verde — salvo que la toquen a mano para forzar un
-  // reintento (ver PrecargaPill/onPress más abajo).
+  // reintento.
   const yaPrecargoUnaVezRef = useRef(false);
   // Qué lote se tocó para entrar — así, al volver (useFocusEffect abajo),
   // la precarga automática solo repasa ESE lote puntual (el único que
@@ -50,6 +66,40 @@ export function MisLotes() {
   // cada ida y vuelta gastaba señal y batería de más sin necesidad, para
   // terminar actualizando como mucho un solo número.
   const ultimoLoteAbiertoIdRef = useRef<string | null>(null);
+
+  // Debounce del cartel de "sin señal" — mismo bug y mismo arreglo que en
+  // usar-datos-campo.ts: mostrar la lista guardada y ENSEGUIDA después
+  // (medio segundo, típico) el pedido en vivo llega bien, prendía el
+  // cartel amarillo por una fracción de segundo en cada entrada a la
+  // pantalla aunque la señal fuera excelente. Se muestra recién si sigue
+  // en cache pasados 400ms; ocultarlo (señal recuperada) sigue siendo
+  // instantáneo.
+  const avisoCacheTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function setUsandoCache(valor: boolean) {
+    if (avisoCacheTimeoutRef.current) {
+      clearTimeout(avisoCacheTimeoutRef.current);
+      avisoCacheTimeoutRef.current = null;
+    }
+    if (valor) {
+      avisoCacheTimeoutRef.current = setTimeout(() => {
+        avisoCacheTimeoutRef.current = null;
+        setUsandoCacheInterno(true);
+      }, 400);
+    } else {
+      setUsandoCacheInterno(false);
+    }
+  }
+  useEffect(() => {
+    return () => {
+      if (avisoCacheTimeoutRef.current) clearTimeout(avisoCacheTimeoutRef.current);
+    };
+  }, []);
+
+  const onPrecargaCambioRef = useRef(onPrecargaCambio);
+  onPrecargaCambioRef.current = onPrecargaCambio;
+  useEffect(() => {
+    onPrecargaCambioRef.current?.(precargando, precargaLista);
+  }, [precargando, precargaLista]);
 
   const refrescar = useCallback(async (manual = false) => {
     if (!usuario) return;
@@ -131,6 +181,8 @@ export function MisLotes() {
     });
   }, [usuario]);
 
+  useImperativeHandle(ref, () => ({ refrescarManual: () => refrescar(true) }), [refrescar]);
+
   // useFocusEffect (no useEffect a secas) para que, al volver de cargar
   // puntos en un lote, el resumen de esa card se actualice solo — sin
   // esto quedaba con el conteo viejo hasta salir de la app y volver a
@@ -164,7 +216,6 @@ export function MisLotes() {
           📡 Sin señal — mostrando la última lista guardada en este celular, puede no estar al día.
         </Text>
       )}
-      <PrecargaPill precargando={precargando} lista={precargaLista} onPress={() => refrescar(true)} />
       <Text style={styles.label}>Lotes asignados — tocá uno para empezar</Text>
       {lotes.length === 0 ? (
         <Text style={styles.vacio}>No tenés lotes asignados por ahora.</Text>
@@ -215,7 +266,7 @@ export function MisLotes() {
       )}
     </ScrollView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },

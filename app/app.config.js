@@ -12,19 +12,18 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.8 para esta novena entrega — probando la 1.0.7 en el
-    // campo salieron varios ajustes finos: "Quién hizo qué" ahora es la
-    // unión de "acceso vigente" (aunque esté en 0) y "cargó algo alguna
-    // vez" (aunque ya no tenga acceso); "Exportar PNG" en Resultados ya
-    // no queda tapado por la barra de Android; nueva pantalla para
-    // sacarle el acceso a alguien desde "Mi equipo" sin ir lote por
-    // lote; el numerito de versión ahora muestra el build real, no el
-    // que quedaba pisado en la config; la pastilla de precarga ya no
-    // vuelve a "Descargando…" en cada ida y vuelta a un lote (y ahora
-    // solo repasa el lote puntual, no todos, para gastar menos batería);
-    // y safe-area en toda la app + modo inmersivo en Modo trabajo, para
-    // que nada quede nunca tapado por la barra de navegación de Android.
-    version: "1.0.8",
+    // Subida a 1.0.9 — ajustes finos sobre la 1.0.8 ya en producción: las
+    // pastillas de sincronizar/precarga ahora quedan FIJAS al scrollear
+    // "Mis lotes" (antes solo la de sincronizar); el espacio para la
+    // versión al pie achicado en iPhone (el inset del home indicator
+    // dejaba demasiado aire para un simple renglón de texto); el cartel de
+    // "sin señal" ya no destella al volver al árbol de lotes (mismo tipo
+    // de arreglo que ya tenía el resto de la app); "Mi equipo" reordenada
+    // (accesos primero, un solo botón de "cambiar rol" con confirmación en
+    // vez del botón de texto largo "→ Encargado"); y un subgrupo personal
+    // dentro de "Mi equipo" (estrellita por persona + filtro "Todos"/"Los
+    // míos", para no tener que scrollear entre el personal del socio).
+    version: "1.0.9",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",

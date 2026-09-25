@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
-import { ArrowUpCircle, ArrowDownCircle, Copy, Crown, MapPin, Trash2, UserPlus } from "lucide-react-native";
+import { ArrowUpDown, Copy, Crown, MapPin, Star, Trash2, UserPlus } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import * as db from "@/lib/db/equipo";
 import { etiquetaRol } from "@/lib/roles";
-import type { Usuario } from "@/types/domain";
+import type { Rol, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesosUsuarioModal } from "./accesos-usuario-modal";
 
@@ -22,12 +22,18 @@ export function EquipoScreen() {
   const [codigoRecienGenerado, setCodigoRecienGenerado] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
   const [viendoAccesosDe, setViendoAccesosDe] = useState<Usuario | null>(null);
+  // Subgrupo personal (ver migración 0013 / lib/db/equipo.ts) — quiénes
+  // marcó ESTE usuario como "los suyos". Es una preferencia de quien mira
+  // la pantalla, no algo que cambie lo que ve el resto del equipo.
+  const [favoritos, setFavoritos] = useState<Set<string>>(new Set());
+  const [filtro, setFiltro] = useState<"todos" | "mios">("todos");
 
   const refrescar = useCallback(async () => {
     if (!yo) return;
     try {
-      const usuarios = await db.fetchUsuarios(yo.comunidadId);
+      const [usuarios, favoritosDeYo] = await Promise.all([db.fetchUsuarios(yo.comunidadId), db.fetchFavoritosEquipo()]);
       setMiembros(usuarios.filter((u) => u.activo));
+      setFavoritos(favoritosDeYo);
     } catch (e: any) {
       Alert.alert("No se pudo cargar el equipo", e.message ?? String(e));
     } finally {
@@ -38,6 +44,29 @@ export function EquipoScreen() {
   useEffect(() => {
     refrescar();
   }, [refrescar]);
+
+  async function toggleFavorito(u: Usuario) {
+    if (!yo) return;
+    const yaEsFavorito = favoritos.has(u.id);
+    // Optimista: la pantalla responde al toque ya mismo, sin esperar el
+    // viaje a Supabase — si falla, se revierte y se avisa.
+    setFavoritos((prev) => {
+      const next = new Set(prev);
+      yaEsFavorito ? next.delete(u.id) : next.add(u.id);
+      return next;
+    });
+    try {
+      if (yaEsFavorito) await db.desmarcarFavoritoEquipo(yo.id, u.id);
+      else await db.marcarFavoritoEquipo(yo.id, u.id);
+    } catch (e: any) {
+      setFavoritos((prev) => {
+        const next = new Set(prev);
+        yaEsFavorito ? next.add(u.id) : next.delete(u.id);
+        return next;
+      });
+      Alert.alert("No se pudo guardar", e.message ?? String(e));
+    }
+  }
 
   async function generarCodigo() {
     if (!yo) return;
@@ -81,20 +110,6 @@ export function EquipoScreen() {
     ]);
   }
 
-  function confirmarAscenso(u: Usuario) {
-    Alert.alert("Ascender a Socio Gerente", `¿Ascender a ${u.nombre} a Socio Gerente?`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Ascender", onPress: () => conManejoDeError(() => db.cambiarRolUsuario(u.id, "socio_gerente")) },
-    ]);
-  }
-
-  function confirmarDegradar(u: Usuario) {
-    Alert.alert("Degradar a Encargado", `¿Degradar a ${u.nombre} a Encargado?`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Degradar", onPress: () => conManejoDeError(() => db.cambiarRolUsuario(u.id, "encargado")) },
-    ]);
-  }
-
   function confirmarTransferir(u: Usuario) {
     Alert.alert(
       "Transferir Socio Fundador",
@@ -106,6 +121,57 @@ export function EquipoScreen() {
     );
   }
 
+  function confirmarCambioRol(u: Usuario, nuevoRol: Rol) {
+    Alert.alert("Confirmar cambio de rol", `¿Cambiar a ${u.nombre} a ${etiquetaRol(nuevoRol)}?`, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Confirmar",
+        onPress: () =>
+          conManejoDeError(() => db.cambiarRolUsuario(u.id, nuevoRol as "socio_gerente" | "encargado" | "monitoreador")),
+      },
+    ]);
+  }
+
+  /** Un solo botón de "cambiar rol" en vez de varios sueltos (toggle de
+   * texto + flechas) — a pedido del usuario: ese botón de texto largo
+   * ("→ Encargado") se usaba poco y ocupaba mucho lugar en la fila. Acá
+   * arma las opciones que corresponden según el rol actual de `u` y lo que
+   * puede tocar `yo` (mismos límites que había antes, ver los `if`
+   * comentados que reemplaza) y las muestra en un solo cartel. Subir de
+   * Socio Gerente a Socio Fundador queda AFUERA de acá a propósito — ese es
+   * "Transferir Socio Fundador" (ver confirmarTransferir), una acción
+   * mucho más sensible con su propio botón (Crown), no un escalón más de
+   * este menú. */
+  function mostrarOpcionesRol(u: Usuario) {
+    const opciones: { texto: string; nuevoRol: Rol }[] = [];
+    if (u.rol === "monitoreador") {
+      opciones.push({ texto: `Subir a ${etiquetaRol("encargado")}`, nuevoRol: "encargado" });
+    } else if (u.rol === "encargado") {
+      if (yo?.rol === "socio_fundador") {
+        opciones.push({ texto: `Subir a ${etiquetaRol("socio_gerente")}`, nuevoRol: "socio_gerente" });
+      }
+      opciones.push({ texto: `Bajar a ${etiquetaRol("monitoreador")}`, nuevoRol: "monitoreador" });
+    } else if (u.rol === "socio_gerente" && yo?.rol === "socio_fundador") {
+      opciones.push({ texto: `Bajar a ${etiquetaRol("encargado")}`, nuevoRol: "encargado" });
+    }
+    if (opciones.length === 0) return;
+    Alert.alert(
+      `Cambiar rol de ${u.nombre}`,
+      `Actualmente es ${etiquetaRol(u.rol)}.`,
+      [
+        ...opciones.map((o) => ({ text: o.texto, onPress: () => confirmarCambioRol(u, o.nuevoRol) })),
+        { text: "Cancelar", style: "cancel" as const },
+      ]
+    );
+  }
+
+  function puedeCambiarRol(u: Usuario) {
+    if (!yo) return false;
+    if (u.rol === "monitoreador" || u.rol === "encargado") return true;
+    if (u.rol === "socio_gerente") return yo.rol === "socio_fundador";
+    return false;
+  }
+
   if (cargando) {
     return (
       <View style={styles.centrado}>
@@ -113,6 +179,10 @@ export function EquipoScreen() {
       </View>
     );
   }
+
+  const totalCount = miembros.length;
+  const miosCount = miembros.filter((u) => favoritos.has(u.id)).length;
+  const miembrosAMostrar = filtro === "mios" ? miembros.filter((u) => favoritos.has(u.id)) : miembros;
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 10 + insets.bottom }]}>
@@ -137,8 +207,39 @@ export function EquipoScreen() {
         </View>
       )}
 
+      {/* Subgrupo personal — a pedido del usuario: con mucha gente en el
+       * equipo (parte de otro Socio, no la suya), quería una forma de
+       * filtrar de un vistazo a "los suyos" sin tener que buscar entre
+       * todos cada vez. Marca la estrellita de cada fila más abajo. */}
+      <View style={styles.subgrupoCard}>
+        <View style={styles.subgrupoBotones}>
+          <Pressable
+            style={[styles.filtroBoton, filtro === "todos" && styles.filtroBotonActivo]}
+            onPress={() => setFiltro("todos")}
+          >
+            <Text style={[styles.filtroBotonTexto, filtro === "todos" && styles.filtroBotonTextoActivo]}>
+              Todos · {totalCount}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.filtroBoton, filtro === "mios" && styles.filtroBotonActivo]}
+            onPress={() => setFiltro("mios")}
+          >
+            <Text style={[styles.filtroBotonTexto, filtro === "mios" && styles.filtroBotonTextoActivo]}>
+              Los míos · {miosCount}
+            </Text>
+          </Pressable>
+        </View>
+        <Text style={styles.subgrupoAyuda}>
+          Tocá la estrellita en cada persona para sumarla o sacarla de tu subgrupo — es una marca personal tuya.
+        </Text>
+      </View>
+
       <Text style={styles.seccionLabel}>Miembros del equipo</Text>
-      {miembros.map((u) => {
+      {filtro === "mios" && miembrosAMostrar.length === 0 && (
+        <Text style={styles.vacio}>Todavía no marcaste a nadie como tuyo — tocá la estrellita en "Todos".</Text>
+      )}
+      {miembrosAMostrar.map((u) => {
         const esUnoMismo = u.id === yo?.id;
         return (
           <View key={u.id} style={styles.miembroCard}>
@@ -152,64 +253,36 @@ export function EquipoScreen() {
 
             {!esUnoMismo && u.rol !== "socio_fundador" && (
               <View style={styles.accionesFila}>
-                {yo?.rol === "socio_fundador" && u.rol !== "socio_gerente" && (
-                  <>
-                    {/* Mismo botón toggle Encargado/Monitoreador que ya tenía
-                        Socio Gerente más abajo — al Fundador antes solo le
-                        aparecía "ascender a Socio Gerente", sin forma de
-                        categorizar en Encargado (el backend, cambiar_rol_usuario,
-                        siempre lo permitió; era solo un hueco en esta pantalla). */}
-                    <Pressable
-                      style={styles.iconBtn}
-                      onPress={() =>
-                        conManejoDeError(() =>
-                          db.cambiarRolUsuario(u.id, u.rol === "encargado" ? "monitoreador" : "encargado")
-                        )
-                      }
-                    >
-                      <Text style={styles.cambiarTexto}>
-                        {u.rol === "encargado" ? "→ Monitoreador" : "→ Encargado"}
-                      </Text>
-                    </Pressable>
-                    <Pressable style={styles.iconBtn} onPress={() => confirmarAscenso(u)}>
-                      <ArrowUpCircle size={18} color={colors.primary} />
-                    </Pressable>
-                  </>
-                )}
-                {yo?.rol === "socio_fundador" && u.rol === "socio_gerente" && (
-                  <>
-                    <Pressable style={styles.iconBtn} onPress={() => confirmarDegradar(u)}>
-                      <ArrowDownCircle size={18} color={colors.warning} />
-                    </Pressable>
-                    <Pressable style={styles.iconBtn} onPress={() => confirmarTransferir(u)}>
-                      <Crown size={17} color={colors.accentGold} />
-                    </Pressable>
-                  </>
-                )}
-                {yo?.rol === "socio_gerente" && u.rol !== "socio_gerente" && (
-                  <Pressable
-                    style={styles.iconBtn}
-                    onPress={() =>
-                      conManejoDeError(() =>
-                        db.cambiarRolUsuario(u.id, u.rol === "encargado" ? "monitoreador" : "encargado")
-                      )
-                    }
-                  >
-                    <Text style={styles.cambiarTexto}>
-                      {u.rol === "encargado" ? "→ Monitoreador" : "→ Encargado"}
-                    </Text>
-                  </Pressable>
-                )}
+                <Pressable style={styles.iconBtn} onPress={() => toggleFavorito(u)}>
+                  <Star
+                    size={16}
+                    color={favoritos.has(u.id) ? colors.accentGold : colors.borderStrong}
+                    fill={favoritos.has(u.id) ? colors.accentGold : "none"}
+                  />
+                </Pressable>
+
                 {/* Ver/sacar accesos por lote — solo tiene sentido para
                     Monitoreador: es el único rol que depende de la tabla
                     `accesos` para ver algo (Socio/Encargado ven todo el
-                    árbol siempre, sin necesitar accesos puntuales). Pedido
-                    explícito del usuario: antes había que acordarse a mano
-                    en qué lotes había entrado a cada uno para poder
-                    sacárselos al final del día. */}
+                    árbol siempre, sin necesitar accesos puntuales). Primero
+                    en la fila — a pedido del usuario, es lo que más usa. */}
                 {u.rol === "monitoreador" && (
-                  <Pressable style={styles.iconBtn} onPress={() => setViendoAccesosDe(u)}>
-                    <MapPin size={16} color={colors.info} />
+                  <>
+                    <View style={styles.separador} />
+                    <Pressable style={styles.iconBtn} onPress={() => setViendoAccesosDe(u)}>
+                      <MapPin size={16} color={colors.info} />
+                    </Pressable>
+                  </>
+                )}
+
+                {puedeCambiarRol(u) && (
+                  <Pressable style={styles.iconBtn} onPress={() => mostrarOpcionesRol(u)}>
+                    <ArrowUpDown size={17} color={colors.primary} />
+                  </Pressable>
+                )}
+                {yo?.rol === "socio_fundador" && u.rol === "socio_gerente" && (
+                  <Pressable style={styles.iconBtn} onPress={() => confirmarTransferir(u)}>
+                    <Crown size={17} color={colors.accentGold} />
                   </Pressable>
                 )}
                 <Pressable style={styles.iconBtn} onPress={() => confirmarQuitar(u)}>
@@ -262,7 +335,30 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   codigoBotonTexto: { fontSize: 12, fontWeight: "700", color: colors.text },
+  subgrupoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 8,
+  },
+  subgrupoBotones: { flexDirection: "row", gap: 6 },
+  filtroBoton: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  filtroBotonActivo: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filtroBotonTexto: { fontSize: 12, fontWeight: "700", color: colors.text },
+  filtroBotonTextoActivo: { color: colors.surface },
+  subgrupoAyuda: { fontSize: 11, color: colors.accentGoldMuted, lineHeight: 15 },
   seccionLabel: { fontSize: 12, fontWeight: "700", color: colors.textMuted, marginTop: 8 },
+  vacio: { color: colors.textMuted, fontSize: 13, textAlign: "center", paddingVertical: 12 },
   miembroCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -276,7 +372,7 @@ const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6 },
   miembroNombre: { fontSize: 14, fontWeight: "700", color: colors.text },
   miembroRol: { fontSize: 11, color: colors.accentGold, fontWeight: "600", marginTop: 1 },
-  accionesFila: { flexDirection: "row", alignItems: "center", gap: 4 },
+  accionesFila: { flexDirection: "row", alignItems: "center", gap: 2 },
+  separador: { width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: 4 },
   iconBtn: { padding: 6 },
-  cambiarTexto: { fontSize: 11, fontWeight: "700", color: colors.info },
 });

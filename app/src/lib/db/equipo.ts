@@ -69,3 +69,26 @@ export async function eliminarMiembro(usuarioId: string) {
   const { error } = await supabase.rpc("eliminar_miembro_equipo", { p_usuario_id: usuarioId });
   if (error) throw error;
 }
+
+/** Subgrupo personal de "Mi equipo" (ver migración 0013) — quiénes marcó
+ * ESTE usuario como "los suyos". RLS ya filtra a la fila propia sola, así
+ * que no hace falta pasar el ID de quien pregunta acá. */
+export async function fetchFavoritosEquipo(): Promise<Set<string>> {
+  const { data, error } = await supabase.from("favoritos_equipo").select("miembro_id");
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.miembro_id));
+}
+
+export async function marcarFavoritoEquipo(usuarioId: string, miembroId: string) {
+  const { error } = await supabase.from("favoritos_equipo").insert({ usuario_id: usuarioId, miembro_id: miembroId });
+  if (error) throw error;
+}
+
+export async function desmarcarFavoritoEquipo(usuarioId: string, miembroId: string) {
+  const { error } = await supabase
+    .from("favoritos_equipo")
+    .delete()
+    .eq("usuario_id", usuarioId)
+    .eq("miembro_id", miembroId);
+  if (error) throw error;
+}

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Building2, UserCircle, Users } from "lucide-react-native";
@@ -8,8 +8,9 @@ import { Building2, UserCircle, Users } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import { etiquetaRol, puedeGestionarEquipo } from "@/lib/roles";
 import { contarComunidadesPendientes } from "@/lib/db/comunidades";
-import { ArbolLotes } from "@/features/lotes/arbol-lotes";
-import { MisLotes } from "@/features/lotes/mis-lotes";
+import { ArbolLotes, type ArbolLotesHandle } from "@/features/lotes/arbol-lotes";
+import { MisLotes, type MisLotesHandle } from "@/features/lotes/mis-lotes";
+import { PrecargaPill } from "@/features/lotes/precarga-pill";
 import { AppHeader } from "@/components/app-header";
 import { SincronizarPill } from "@/components/sincronizar-pill";
 import { commitDelBuild, versionDelBuild } from "@/lib/version";
@@ -26,6 +27,21 @@ export default function MisLotesScreen() {
   // tener que entrar a mirar la pantalla cada vez.
   const [pendientes, setPendientes] = useState(0);
 
+  // Estado de la precarga (descarga para trabajar sin señal) — ArbolLotes/
+  // MisLotes lo siguen calculando ellos (son quienes de verdad piden los
+  // datos), pero la pastilla en sí se dibuja acá arriba, fija, junto a la
+  // de sincronizar — a pedido del usuario: quería las dos SIEMPRE visibles
+  // al scrollear la lista, no que una se fuera con el resto del contenido.
+  const [precargando, setPrecargando] = useState(false);
+  const [precargaLista, setPrecargaLista] = useState(false);
+  const arbolLotesRef = useRef<ArbolLotesHandle>(null);
+  const misLotesRef = useRef<MisLotesHandle>(null);
+
+  function onPrecargaCambio(precargandoNuevo: boolean, listaNuevo: boolean) {
+    setPrecargando(precargandoNuevo);
+    setPrecargaLista(listaNuevo);
+  }
+
   useEffect(() => {
     if (!usuario?.adminPlataforma) return;
     contarComunidadesPendientes()
@@ -41,10 +57,9 @@ export default function MisLotesScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
       {/* AppHeader ya no muestra la pastilla de sincronizar (ver ese
-       * componente) — solo vive acá abajo, junto a la de precarga (dentro
-       * de ArbolLotes/MisLotes), a pedido del usuario: las quería ver
-       * juntas, una debajo de la otra, en vez de una sola separada en el
-       * header oscuro. */}
+       * componente) — solo vive acá abajo, junto a la de precarga, a
+       * pedido del usuario: las quería ver juntas, una debajo de la otra,
+       * en vez de una sola separada en el header oscuro. */}
       <AppHeader />
       <View style={styles.cabecera}>
         <View>
@@ -74,11 +89,25 @@ export default function MisLotesScreen() {
         </View>
       </View>
 
-      <View style={styles.sincronizarFila}>
+      {/* Las dos pastillas quedan FIJAS acá, fuera del ScrollView que arma
+       * ArbolLotes/MisLotes — a pedido del usuario: al scrollear la lista
+       * de lotes, "Todo sincronizado" quedaba fija pero "Listo para ir al
+       * campo" se iba con el resto del contenido, y las quería a las dos
+       * siempre a la vista. */}
+      <View style={styles.pillsFila}>
         <SincronizarPill />
+        <PrecargaPill
+          precargando={precargando}
+          lista={precargaLista}
+          onPress={() => (esAdministrador ? arbolLotesRef.current : misLotesRef.current)?.refrescarManual()}
+        />
       </View>
 
-      {esAdministrador ? <ArbolLotes /> : <MisLotes />}
+      {esAdministrador ? (
+        <ArbolLotes ref={arbolLotesRef} onPrecargaCambio={onPrecargaCambio} />
+      ) : (
+        <MisLotes ref={misLotesRef} onPrecargaCambio={onPrecargaCambio} />
+      )}
 
       {/* A pedido del usuario: poder comparar de un vistazo, en el campo
        * con el resto del equipo, si todos tienen la misma versión
@@ -93,9 +122,20 @@ export default function MisLotesScreen() {
        * scroll interno) — este texto es lo último de la columna, pegado
        * al borde real de la pantalla. Sin el margen del sistema acá,
        * quedaba tapado por la barra de navegación de Android en algunos
-       * celulares — mismo bug que "Exportar PNG" en Resultados. */}
+       * celulares — mismo bug que "Exportar PNG" en Resultados. En
+       * iPhone, en cambio, el propio inset ya deja bastante aire de más
+       * para un simple renglón de texto (no hay nada tocable ahí abajo
+       * que necesite todo ese margen) — a pedido del usuario, en iOS se
+       * usa la mitad; en Android se deja el inset completo, que sigue
+       * siendo el que hace falta para no quedar tapado por la barra de
+       * navegación. */}
       {(version || commit) && (
-        <Text style={[styles.version, { paddingBottom: 6 + insets.bottom }]}>
+        <Text
+          style={[
+            styles.version,
+            { paddingBottom: 6 + (Platform.OS === "ios" ? Math.round(insets.bottom / 2) : insets.bottom) },
+          ]}
+        >
           {version ? `v${version}` : ""}
           {version && commit ? " · " : ""}
           {commit ?? ""}
@@ -118,7 +158,7 @@ const styles = StyleSheet.create({
   saludo: { fontSize: 17, fontWeight: "700", color: colors.text },
   rol: { fontSize: 12, color: colors.accentGold, fontWeight: "600" },
   accionesCabecera: { flexDirection: "row", gap: 4 },
-  sincronizarFila: { paddingHorizontal: 16, paddingBottom: 4 },
+  pillsFila: { paddingHorizontal: 16, paddingBottom: 8, gap: 6 },
   iconBtn: { padding: 8 },
   puntoAviso: {
     position: "absolute",

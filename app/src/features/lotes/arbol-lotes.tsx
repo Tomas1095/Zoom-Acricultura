@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,7 +13,6 @@ import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { formatearHectareas } from "@/lib/format";
 import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
-import { PrecargaPill } from "./precarga-pill";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
@@ -39,10 +38,27 @@ type ModalState =
   | { tipo: "acceso"; lote: Lote }
   | null;
 
+export interface ArbolLotesHandle {
+  /** Fuerza un reintento completo (todos los lotes) desde afuera — usado
+   * por la pastilla de precarga, que ahora vive en (app)/index.tsx en vez
+   * de acá adentro (ver el comentario de `onPrecargaCambio` más abajo). */
+  refrescarManual: () => void;
+}
+
+interface ArbolLotesProps {
+  /** La pastilla de precarga se movió al cuerpo fijo de (app)/index.tsx —
+   * a pedido del usuario, quería verla siempre visible al scrollear la
+   * lista, no perderla de vista adentro del ScrollView. Este componente
+   * sigue siendo dueño del estado real, pero en vez de renderizar la
+   * pastilla él mismo, avisa hacia arriba cada vez que cambia para que el
+   * padre la dibuje. */
+  onPrecargaCambio?: (precargando: boolean, lista: boolean) => void;
+}
+
 /** Árbol Cliente → Establecimiento → Lote, con CRUD para administradores.
  * Portado de ArbolLotesView del prototipo — acá cada acción pega contra
  * Supabase en vez de mutar estado en memoria. */
-export function ArbolLotes() {
+export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function ArbolLotes({ onPrecargaCambio }, ref) {
   const { usuario } = useAuth();
   const insets = useSafeAreaInsets();
   const puedeEliminar = usuario?.rol === "socio_fundador" || usuario?.rol === "socio_gerente";
@@ -64,9 +80,37 @@ export function ArbolLotes() {
   // Acá SIEMPRE es el total del lote (sin usuarioId), a diferencia de
   // MisLotes que lo filtra por el Monitoreador — ver lib/offline/resumen.ts.
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
-  const [usandoCache, setUsandoCache] = useState(false);
+  const [usandoCache, setUsandoCacheInterno] = useState(false);
   const [precargando, setPrecargando] = useState(false);
   const [precargaLista, setPrecargaLista] = useState(false);
+  // Debounce del cartel de "sin señal" — mismo bug y mismo arreglo que en
+  // usar-datos-campo.ts/mis-lotes.tsx: mostrar la foto guardada y
+  // ENSEGUIDA después el pedido en vivo llega bien prendía el cartel
+  // amarillo por una fracción de segundo en cada entrada al árbol, aunque
+  // la señal fuera excelente (reportado por el usuario, "cuando volvés al
+  // árbol aparece un milisegundo sin señal"). Se muestra recién si sigue
+  // en cache pasados 400ms; ocultarlo (señal recuperada) sigue siendo
+  // instantáneo.
+  const avisoCacheTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function setUsandoCache(valor: boolean) {
+    if (avisoCacheTimeoutRef.current) {
+      clearTimeout(avisoCacheTimeoutRef.current);
+      avisoCacheTimeoutRef.current = null;
+    }
+    if (valor) {
+      avisoCacheTimeoutRef.current = setTimeout(() => {
+        avisoCacheTimeoutRef.current = null;
+        setUsandoCacheInterno(true);
+      }, 400);
+    } else {
+      setUsandoCacheInterno(false);
+    }
+  }
+  useEffect(() => {
+    return () => {
+      if (avisoCacheTimeoutRef.current) clearTimeout(avisoCacheTimeoutRef.current);
+    };
+  }, []);
   // Ver el comentario igual a este en mis-lotes.tsx — evita que la
   // pastilla vuelva a mostrar "Descargando…" cada vez que se vuelve de un
   // lote (el useFocusEffect de abajo dispara `refrescar` de nuevo para
@@ -77,6 +121,12 @@ export function ArbolLotes() {
   // para entrar, así al volver la precarga automática solo repasa ESE
   // lote puntual en vez de los N lotes del árbol entero.
   const ultimoLoteAbiertoIdRef = useRef<string | null>(null);
+
+  const onPrecargaCambioRef = useRef(onPrecargaCambio);
+  onPrecargaCambioRef.current = onPrecargaCambio;
+  useEffect(() => {
+    onPrecargaCambioRef.current?.(precargando, precargaLista);
+  }, [precargando, precargaLista]);
 
   // `liviano`: true cuando se llama después de crear/editar/borrar algo en
   // el árbol (ver conManejoDeError) — ahí solo hace falta refrescar la
@@ -183,6 +233,8 @@ export function ArbolLotes() {
     },
     [usuario]
   );
+
+  useImperativeHandle(ref, () => ({ refrescarManual: () => refrescar(false, true) }), [refrescar]);
 
   // useFocusEffect (no useEffect a secas) para que, al volver de entrar a
   // un lote (donde se cargan/sincronizan puntos), el resumen de esa fila
@@ -292,7 +344,6 @@ export function ArbolLotes() {
             📡 Sin señal — mostrando el último árbol guardado en este celular, puede no estar al día.
           </Text>
         )}
-        <PrecargaPill precargando={precargando} lista={precargaLista} onPress={() => refrescar(false, true)} />
         {clientes.length === 0 && (
           <Text style={styles.vacio}>Todavía no hay clientes cargados. Empezá agregando uno.</Text>
         )}
@@ -611,7 +662,7 @@ export function ArbolLotes() {
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   centrado: { flex: 1, alignItems: "center", justifyContent: "center" },
