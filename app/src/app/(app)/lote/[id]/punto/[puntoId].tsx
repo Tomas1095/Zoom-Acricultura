@@ -287,7 +287,9 @@ export default function PuntoScreen() {
       const c = cacheInicial.cargas.get(puntoEnCache.id) ?? null;
       setLote(cacheInicial.lote);
       aplicarPuntoYCarga(puntoEnCache, fusionarPendienteDeEstePunto(c, puntoEnCache, cacheInicial.lote.campanaActual), null);
-      setUsandoCache(true);
+      // Mostrar la foto guardada todavía no dice nada sobre la señal —
+      // recién se sabe más abajo, cuando se intenta el pedido en vivo (ver
+      // `esGenuinamenteSinSenal` en el catch).
       setCargando(false);
       teniaAlgoLocal = true;
     }
@@ -343,7 +345,11 @@ export default function PuntoScreen() {
       // que llega al punto ya sin cobertura Y sin ninguna foto guardada de
       // este lote, ver lib/offline/cache-lote.ts).
       if (teniaAlgoLocal) {
-        setUsandoCache(true);
+        // El cartel de "sin señal" solo se prende si el motivo es DE
+        // VERDAD falta de señal (el chequeo de arriba) — un timeout del
+        // servidor u otro error con señal real no dice "sin señal" porque
+        // no es cierto.
+        setUsandoCache(e.message === "Sin conexión");
       } else {
         Alert.alert("No se pudo cargar el punto", e.message ?? String(e));
       }

@@ -41,7 +41,13 @@ export const MisLotes = forwardRef<MisLotesHandle, MisLotesProps>(function MisLo
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
-  const [usandoCache, setUsandoCacheInterno] = useState(false);
+  // true únicamente cuando de verdad no hay señal — a pedido explícito del
+  // usuario: antes se prendía cada vez que se mostraba la lista guardada
+  // (algo que pasa siempre, apenas se entra, tenga o no tenga señal), lo
+  // que además causaba el parpadeo reportado con señal buena. Un timeout
+  // del servidor u otro error CON señal real tampoco prende esto — ver
+  // `esGenuinamenteSinSenal` más abajo.
+  const [usandoCache, setUsandoCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [precargando, setPrecargando] = useState(false);
   const [precargaLista, setPrecargaLista] = useState(false);
@@ -67,34 +73,6 @@ export const MisLotes = forwardRef<MisLotesHandle, MisLotesProps>(function MisLo
   // terminar actualizando como mucho un solo número.
   const ultimoLoteAbiertoIdRef = useRef<string | null>(null);
 
-  // Debounce del cartel de "sin señal" — mismo bug y mismo arreglo que en
-  // usar-datos-campo.ts: mostrar la lista guardada y ENSEGUIDA después
-  // (medio segundo, típico) el pedido en vivo llega bien, prendía el
-  // cartel amarillo por una fracción de segundo en cada entrada a la
-  // pantalla aunque la señal fuera excelente. Se muestra recién si sigue
-  // en cache pasados 400ms; ocultarlo (señal recuperada) sigue siendo
-  // instantáneo.
-  const avisoCacheTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function setUsandoCache(valor: boolean) {
-    if (avisoCacheTimeoutRef.current) {
-      clearTimeout(avisoCacheTimeoutRef.current);
-      avisoCacheTimeoutRef.current = null;
-    }
-    if (valor) {
-      avisoCacheTimeoutRef.current = setTimeout(() => {
-        avisoCacheTimeoutRef.current = null;
-        setUsandoCacheInterno(true);
-      }, 400);
-    } else {
-      setUsandoCacheInterno(false);
-    }
-  }
-  useEffect(() => {
-    return () => {
-      if (avisoCacheTimeoutRef.current) clearTimeout(avisoCacheTimeoutRef.current);
-    };
-  }, []);
-
   const onPrecargaCambioRef = useRef(onPrecargaCambio);
   onPrecargaCambioRef.current = onPrecargaCambio;
   useEffect(() => {
@@ -113,7 +91,6 @@ export const MisLotes = forwardRef<MisLotesHandle, MisLotesProps>(function MisLo
     if (arbol) {
       setLotes(arbol.lotes);
       setEstablecimientos(arbol.establecimientos);
-      setUsandoCache(true);
       setError(null);
       setCargando(false);
     }
@@ -137,8 +114,13 @@ export const MisLotes = forwardRef<MisLotesHandle, MisLotesProps>(function MisLo
     } catch (e: any) {
       // El pedido en vivo falló. Si ya se estaba mostrando la lista (de
       // la foto guardada, arriba), se deja como está — sin nada guardado
-      // todavía es cuando corresponde el cartel de error.
-      if (!arbol) {
+      // todavía es cuando corresponde el cartel de error. El cartel de
+      // "sin señal" en sí solo se prende si el motivo es DE VERDAD falta
+      // de señal (el chequeo de arriba) — un timeout del servidor u otro
+      // error con señal real no dice "sin señal" porque no es cierto.
+      if (arbol) {
+        setUsandoCache(e.message === "Sin conexión");
+      } else {
         setError(e.message ?? String(e));
         setCargando(false);
         return;

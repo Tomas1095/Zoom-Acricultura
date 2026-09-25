@@ -17,12 +17,15 @@ module.exports = {
     // "Mis lotes" (antes solo la de sincronizar); el espacio para la
     // versión al pie achicado en iPhone (el inset del home indicator
     // dejaba demasiado aire para un simple renglón de texto); el cartel de
-    // "sin señal" ya no destella al volver al árbol de lotes (mismo tipo
-    // de arreglo que ya tenía el resto de la app); "Mi equipo" reordenada
-    // (accesos primero, un solo botón de "cambiar rol" con confirmación en
-    // vez del botón de texto largo "→ Encargado"); y un subgrupo personal
-    // dentro de "Mi equipo" (estrellita por persona + filtro "Todos"/"Los
-    // míos", para no tener que scrollear entre el personal del socio).
+    // "sin señal" ahora solo se prende cuando de verdad no hay señal (antes
+    // se prendía cada vez que se mostraba la foto guardada, sin importar el
+    // motivo real, en TODA la app — no solo destellaba con señal buena,
+    // también decía "sin señal" de pedo con señal real pero un pedido lento
+    // o fallido por otra causa); "Mi equipo" reordenada (accesos primero,
+    // un solo botón de "cambiar rol" con confirmación en vez del botón de
+    // texto largo "→ Encargado"); y un subgrupo personal dentro de "Mi
+    // equipo" (estrellita por persona + filtro "Todos"/"Los míos", para no
+    // tener que scrollear entre el personal del socio).
     version: "1.0.9",
     orientation: "portrait",
     icon: "./assets/images/icon.png",

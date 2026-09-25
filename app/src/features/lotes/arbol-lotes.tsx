@@ -80,37 +80,16 @@ export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function
   // Acá SIEMPRE es el total del lote (sin usuarioId), a diferencia de
   // MisLotes que lo filtra por el Monitoreador — ver lib/offline/resumen.ts.
   const [resumenes, setResumenes] = useState<Record<string, ResumenAvanceLote>>({});
-  const [usandoCache, setUsandoCacheInterno] = useState(false);
+  // true únicamente cuando de verdad no hay señal — a pedido explícito del
+  // usuario: antes se prendía cada vez que se mostraba la foto guardada
+  // (algo que pasa siempre, apenas se entra, tenga o no tenga señal), lo
+  // que además causaba el parpadeo reportado ("cuando volvés al árbol
+  // aparece un milisegundo sin señal") con señal buena. Un timeout del
+  // servidor u otro error CON señal real tampoco prende esto — ver
+  // `esGenuinamenteSinSenal` más abajo.
+  const [usandoCache, setUsandoCache] = useState(false);
   const [precargando, setPrecargando] = useState(false);
   const [precargaLista, setPrecargaLista] = useState(false);
-  // Debounce del cartel de "sin señal" — mismo bug y mismo arreglo que en
-  // usar-datos-campo.ts/mis-lotes.tsx: mostrar la foto guardada y
-  // ENSEGUIDA después el pedido en vivo llega bien prendía el cartel
-  // amarillo por una fracción de segundo en cada entrada al árbol, aunque
-  // la señal fuera excelente (reportado por el usuario, "cuando volvés al
-  // árbol aparece un milisegundo sin señal"). Se muestra recién si sigue
-  // en cache pasados 400ms; ocultarlo (señal recuperada) sigue siendo
-  // instantáneo.
-  const avisoCacheTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function setUsandoCache(valor: boolean) {
-    if (avisoCacheTimeoutRef.current) {
-      clearTimeout(avisoCacheTimeoutRef.current);
-      avisoCacheTimeoutRef.current = null;
-    }
-    if (valor) {
-      avisoCacheTimeoutRef.current = setTimeout(() => {
-        avisoCacheTimeoutRef.current = null;
-        setUsandoCacheInterno(true);
-      }, 400);
-    } else {
-      setUsandoCacheInterno(false);
-    }
-  }
-  useEffect(() => {
-    return () => {
-      if (avisoCacheTimeoutRef.current) clearTimeout(avisoCacheTimeoutRef.current);
-    };
-  }, []);
   // Ver el comentario igual a este en mis-lotes.tsx — evita que la
   // pastilla vuelva a mostrar "Descargando…" cada vez que se vuelve de un
   // lote (el useFocusEffect de abajo dispara `refrescar` de nuevo para
@@ -155,7 +134,6 @@ export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function
           setClientes(arbol.clientes);
           setEstablecimientos(arbol.establecimientos);
           setLotes(arbol.lotes);
-          setUsandoCache(true);
           setCargando(false);
         }
       }
@@ -181,12 +159,17 @@ export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function
         // darse por vencido, como último respaldo. "Quién hizo qué" y los
         // avatares de usuarios sí se pierden sin señal (no son necesarios
         // para navegar ni cargar puntos) — ver lib/offline/cache-arbol.ts.
+        // El cartel de "sin señal" solo se prende si el motivo es DE
+        // VERDAD falta de señal (el chequeo de arriba) — un timeout del
+        // servidor u otro error con señal real no dice "sin señal" porque
+        // no es cierto.
+        const esGenuinamenteSinSenal = e.message === "Sin conexión";
         if (!arbol) arbol = await leerCacheArbol(usuario.id);
         if (arbol) {
           setClientes(arbol.clientes);
           setEstablecimientos(arbol.establecimientos);
           setLotes(arbol.lotes);
-          setUsandoCache(true);
+          setUsandoCache(esGenuinamenteSinSenal);
         } else {
           Alert.alert("No se pudo cargar", e.message ?? String(e));
           setCargando(false);

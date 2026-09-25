@@ -114,37 +114,17 @@ export function useDatosCampo(
   // (volver de cargar un punto, reintentar, etc.), que sí tienen que traer
   // el dato real para no quedarse con algo viejo.
   const primerRefrescoRef = useRef(true);
-  // true cuando lo que se está mostrando es la última foto guardada en el
-  // celular (ver lib/offline/cache-lote.ts), no lo que hay de verdad en el
-  // server ahora mismo — porque el fetch en vivo falló, típicamente por
-  // estar sin señal en el campo.
-  const [usandoCache, setUsandoCacheInterno] = useState(false);
-  const avisoCacheTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Encender el cartel de "sin señal, mostrando lo guardado" con un
-  // pequeño retraso (no al toque) — a pedido del usuario, que con señal
-  // buena notaba el cartel prender "por una milésima de segundo" cada vez
-  // que entraba a un lote. La causa: con caché primero (ver más abajo,
-  // "CACHÉ PRIMERO"), el cartel se prende apenas se muestra la foto
-  // guardada, y con señal buena el pedido en vivo llega tan rápido después
-  // que apaga el cartel casi al instante — se ve como un parpadeo, no como
-  // información útil. Con este retraso, si el pedido en vivo llega antes
-  // de que se cumpla (el caso normal con señal buena), el cartel ni
-  // llega a mostrarse. Apagarlo, en cambio, sigue siendo instantáneo —
-  // ahí sí importa que desaparezca apenas hay datos frescos.
-  function setUsandoCache(valor: boolean) {
-    if (avisoCacheTimeoutRef.current) {
-      clearTimeout(avisoCacheTimeoutRef.current);
-      avisoCacheTimeoutRef.current = null;
-    }
-    if (valor) {
-      avisoCacheTimeoutRef.current = setTimeout(() => {
-        avisoCacheTimeoutRef.current = null;
-        setUsandoCacheInterno(true);
-      }, 400);
-    } else {
-      setUsandoCacheInterno(false);
-    }
-  }
+  // true únicamente cuando de verdad no hay señal (ver `hayConexion` más
+  // abajo) — a pedido explícito del usuario: antes se prendía cada vez que
+  // se mostraba la foto guardada, sin importar el motivo real (mostrar la
+  // foto guardada apenas se abre la pantalla, antes incluso de intentar
+  // el pedido en vivo, es autom<E1>tico — no significa que no haya señal), lo
+  // que además causaba el parpadeo reportado (con señal buena, el pedido
+  // en vivo llegaba fracciones de segundo después y lo apagaba de nuevo).
+  // Un timeout del servidor u otro error CON señal real tampoco prende
+  // esto — no tiene sentido decirle a alguien "sin señal" cuando sí la
+  // tiene, el motivo real queda igual en `errorCache` para diagnóstico.
+  const [usandoCache, setUsandoCache] = useState(false);
 
   const refrescar = useCallback(async () => {
     // Se toma ACÁ, antes de arrancar el fetch remoto (que con señal
@@ -184,7 +164,6 @@ export function useDatosCampo(
         setLote(foto.lote);
         setPuntos(foto.puntos);
         setCargas(fusionarPendientesEnCargas(foto.cargas, foto.puntos, campana ?? foto.lote.campanaActual, pendientesAlEmpezar));
-        setUsandoCache(false);
         setError(null);
         setErrorCache(null);
         setCargando(false);
@@ -195,7 +174,8 @@ export function useDatosCampo(
           setLote(cache.lote);
           setPuntos(cache.puntos);
           setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual, pendientesAlEmpezar));
-          setUsandoCache(true);
+          // Mostrar la foto guardada todavía no dice nada sobre la señal —
+          // recién se sabe más abajo, cuando se intenta el pedido en vivo.
           setError(null);
           setErrorCache(null);
           setCargando(false);
@@ -279,15 +259,19 @@ export function useDatosCampo(
         setErrorCache(null);
       }
     } catch (e: any) {
-      // El pedido en vivo falló (sin señal, o el server no respondió a
-      // tiempo). Si ya se estaba mostrando algo local (de arriba, o de un
-      // refresco anterior que sí salió bien), lo dejamos como está — no
-      // tiene sentido tapar un lote que la persona YA está viendo con un
-      // cartel de error solo porque el intento de refrescarlo de fondo no
-      // llegó a nada; sigue siendo el mismo dato de antes, con el motivo
-      // real guardado aparte para diagnóstico (errorCache).
+      // El pedido en vivo falló. Si ya se estaba mostrando algo local (de
+      // arriba, o de un refresco anterior que sí salió bien), lo dejamos
+      // como está — no tiene sentido tapar un lote que la persona YA está
+      // viendo con un cartel de error solo porque el intento de
+      // refrescarlo de fondo no llegó a nada; sigue siendo el mismo dato
+      // de antes, con el motivo real guardado aparte para diagnóstico
+      // (errorCache). El cartel de "sin señal" en sí solo se prende
+      // cuando el motivo es DE VERDAD falta de señal (el chequeo de
+      // `hayConexion()` de arriba) — un timeout del servidor u otro error
+      // con señal real no dice "sin señal" porque no es cierto.
+      const esGenuinamenteSinSenal = e.message === "Sin conexión";
       if (teniaAlgoLocal) {
-        setUsandoCache(true);
+        setUsandoCache(esGenuinamenteSinSenal);
         setErrorCache(e.message ?? String(e));
       } else {
         // Nunca hubo nada guardado de este lote — recién acá, sin nada
@@ -297,7 +281,7 @@ export function useDatosCampo(
           setLote(cache.lote);
           setPuntos(cache.puntos);
           setCargas(fusionarPendientesEnCargas(cache.cargas, cache.puntos, campana ?? cache.lote.campanaActual, pendientesAlEmpezar));
-          setUsandoCache(true);
+          setUsandoCache(esGenuinamenteSinSenal);
           setError(null);
           setErrorCache(e.message ?? String(e));
         } else {
@@ -329,15 +313,6 @@ export function useDatosCampo(
     if (activo && !activoAntesRef.current) refrescar();
     activoAntesRef.current = activo;
   }, [activo, refrescar]);
-
-  // Limpia el timer del cartel de caché (ver setUsandoCache más arriba) si
-  // la pantalla se desmonta antes de que se cumpla — sin esto, podía
-  // intentar actualizar el estado de un componente que ya no existe.
-  useEffect(() => {
-    return () => {
-      if (avisoCacheTimeoutRef.current) clearTimeout(avisoCacheTimeoutRef.current);
-    };
-  }, []);
 
   const origen = useMemo(() => (puntos.length > 0 ? inferirOrigenDesdePuntos(puntos) : null), [puntos]);
   const gps = useGps(origen);
