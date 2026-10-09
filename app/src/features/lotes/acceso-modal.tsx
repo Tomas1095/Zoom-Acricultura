@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Check } from "lucide-react-native";
+import { Check, Star } from "lucide-react-native";
 
 import * as db from "@/lib/db/lotes";
-import { fetchUsuarios } from "@/lib/db/equipo";
+import { fetchFavoritosEquipo, fetchUsuarios } from "@/lib/db/equipo";
 import { etiquetaRol } from "@/lib/roles";
 import { useAuth } from "@/lib/auth-context";
 import type { Lote, Usuario } from "@/types/domain";
@@ -21,14 +21,26 @@ export function AccesoModal({ lote, onCerrar }: AccesoModalProps) {
   const [cargando, setCargando] = useState(true);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  // Subgrupo personal (ver migración 0013 / "Mi equipo") — a pedido del
+  // usuario: la estrellita que arma en "Mi equipo" no servía de nada por
+  // sí sola, lo que de verdad necesitaba era poder filtrar ACÁ, al dar
+  // acceso a un lote, para no tener que buscar entre el personal de su
+  // socio cada vez.
+  const [favoritos, setFavoritos] = useState<Set<string>>(new Set());
+  const [filtro, setFiltro] = useState<"todos" | "mios">("todos");
 
   useEffect(() => {
     if (!yo) return;
     (async () => {
       try {
-        const [todosLosUsuarios, accesos] = await Promise.all([fetchUsuarios(yo.comunidadId), db.fetchAccesos(lote.id)]);
+        const [todosLosUsuarios, accesos, favoritosDeYo] = await Promise.all([
+          fetchUsuarios(yo.comunidadId),
+          db.fetchAccesos(lote.id),
+          fetchFavoritosEquipo(),
+        ]);
         setUsuarios(todosLosUsuarios.filter((u) => u.rol === "monitoreador" && u.activo));
         setSeleccionados(new Set(accesos));
+        setFavoritos(favoritosDeYo);
       } catch (e: any) {
         Alert.alert("No se pudo cargar el acceso", e.message ?? String(e));
       } finally {
@@ -65,13 +77,40 @@ export function AccesoModal({ lote, onCerrar }: AccesoModalProps) {
           <Text style={styles.titulo}>Acceso a "{lote.nombre}"</Text>
           <Text style={styles.subtitulo}>Quién puede ver y cargar datos de este lote</Text>
 
+          {!cargando && usuarios.length > 0 && (
+            <View style={styles.filtroFila}>
+              <Pressable
+                style={[styles.filtroBoton, filtro === "todos" && styles.filtroBotonActivo]}
+                onPress={() => setFiltro("todos")}
+              >
+                <Text style={[styles.filtroTexto, filtro === "todos" && styles.filtroTextoActivo]}>
+                  Todos · {usuarios.length}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filtroBoton, filtro === "mios" && styles.filtroBotonActivo]}
+                onPress={() => setFiltro("mios")}
+              >
+                <Star size={11} color={filtro === "mios" ? colors.surface : colors.accentGold} />
+                <Text style={[styles.filtroTexto, filtro === "mios" && styles.filtroTextoActivo]}>
+                  Los míos · {usuarios.filter((u) => favoritos.has(u.id)).length}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
           {cargando ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
           ) : usuarios.length === 0 ? (
             <Text style={styles.vacio}>No hay Monitoreadores en el equipo todavía.</Text>
           ) : (
             <ScrollView style={{ maxHeight: 320 }}>
-              {usuarios.map((u) => {
+              {(filtro === "mios" ? usuarios.filter((u) => favoritos.has(u.id)) : usuarios).length === 0 && (
+                <Text style={styles.vacio}>
+                  Todavía no marcaste a nadie como tuyo — hacelo desde "Mi equipo".
+                </Text>
+              )}
+              {(filtro === "mios" ? usuarios.filter((u) => favoritos.has(u.id)) : usuarios).map((u) => {
                 const activo = seleccionados.has(u.id);
                 return (
                   <Pressable key={u.id} style={styles.fila} onPress={() => toggle(u.id)}>
@@ -104,6 +143,22 @@ const styles = StyleSheet.create({
   titulo: { fontSize: 16, fontWeight: "700", color: colors.text },
   subtitulo: { fontSize: 12, color: colors.textMuted, marginBottom: 12 },
   vacio: { color: colors.textMuted, textAlign: "center", paddingVertical: 20 },
+  filtroFila: { flexDirection: "row", gap: 6, marginBottom: 10 },
+  filtroBoton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  filtroBotonActivo: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filtroTexto: { fontSize: 12, fontWeight: "700", color: colors.text },
+  filtroTextoActivo: { color: colors.surface },
   fila: {
     flexDirection: "row",
     alignItems: "center",
