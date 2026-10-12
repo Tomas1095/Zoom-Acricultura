@@ -253,7 +253,29 @@ export function useGps(origen: LatLon | null) {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (estadoApp) => {
-      if (estadoApp === "active" && enFocoRef.current) {
+      // El `subPosicionRef.current` extra (no solo `enFocoRef`) es lo que
+      // evita un lío serio, visto de verdad en Android: mostrar el cartel
+      // del sistema pidiendo el permiso de ubicación puede, en algunos
+      // equipos, disparar ÉL MISMO un pase por "inactive"/"background" y
+      // vuelta a "active" — exactamente lo que este listener escucha. Sin
+      // este chequeo, esa vuelta a "active" llegaba JUSTO en medio del
+      // primer intento de `suscribir()` (el de useFocusEffect, todavía
+      // esperando el resultado del cartel de permiso) y lo cortaba para
+      // arrancar un segundo intento en paralelo — pedirle a Android el GPS
+      // dos veces casi al mismo tiempo es un escenario conocido por dejar
+      // el pedido colgado para siempre, sin ningún error (`generacionRef`
+      // sólo evita que JS se confunda sobre CUÁL resultado vale, no evita
+      // la doble llamada real al sistema). Reportado en el campo: pasaba
+      // en Android apenas se abría la pantalla, SIEMPRE, no en un equipo
+      // puntual — iOS no se ve afectado, ahí el cartel de permiso no
+      // dispara este mismo pase por AppState.
+      // `subPosicionRef.current` sólo es verdadero una vez que una
+      // suscripción anterior ya quedó funcionando — así este listener
+      // sigue sirviendo para su propósito original (reiniciar el GPS al
+      // volver de segundo plano DE VERDAD, con una suscripción vieja que
+      // dejó de recibir novedades) sin pisar el primer intento, todavía en
+      // curso, de la pantalla recién abierta.
+      if (estadoApp === "active" && enFocoRef.current && subPosicionRef.current) {
         desuscribir();
         suscribir();
       }
