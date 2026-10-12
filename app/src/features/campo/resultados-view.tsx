@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image as ImageIcon } from "lucide-react-native";
 
@@ -191,16 +191,75 @@ export function ResultadosView({
     );
   }
 
+  const esAndroid = Platform.OS === "android";
+
+  // Contenido de la sub-pestaña "Mapas", armado una sola vez — lo que
+  // cambia según la plataforma es solo el contenedor que lo envuelve (ver
+  // más abajo, junto al `esAndroid` del return): en iOS un <View> fijo
+  // como siempre, en Android un <ScrollView> (ver ese comentario).
+  const contenidoMapas = (
+    <>
+      <View style={styles.plagaToggle}>
+        <Text onPress={() => setPlaga("bicho")} style={[styles.plagaBoton, plaga === "bicho" && styles.plagaBotonActivo]}>
+          Bichos bolita
+        </Text>
+        <Text onPress={() => setPlaga("babosa")} style={[styles.plagaBoton, plaga === "babosa" && styles.plagaBotonActivo]}>
+          Babosas
+        </Text>
+      </View>
+
+      <View style={styles.marco} onLayout={onLayoutRecuadro}>
+        {mapaListo &&
+          (calculandoMapa ? (
+            // Mientras se calcula el Voronoi de esta plaga (puede tardar
+            // con un lote grande) — a pedido del usuario, que antes
+            // tocaba la pestaña/el selector de plaga y la pantalla
+            // quedaba inmóvil sin ningún indicio de que tenía que
+            // esperar, así que terminaba tocando de nuevo pensando que no
+            // había funcionado el primer toque.
+            <ActivityIndicator color={colors.primary} size="large" />
+          ) : (
+            <MapaDensidad
+              ref={mapaRef}
+              puntos={puntosDensidad}
+              celdasPrecalculadas={celdas}
+              perimetro={lote.perimetro}
+              rangos={rangos}
+              nivelColores={coloresDe(plaga)}
+              etiquetaLeyenda={etiqueta}
+              ancho={anchoMapa}
+              alto={altoMapa}
+              origen={origen}
+            />
+          ))}
+      </View>
+
+      <Text style={styles.pie} numberOfLines={2}>
+        {cargados}/{puntos.length} puntos cargados — valores llevados a m² (× 4 sobre el dato cargado a campo,
+        tomado en 1/4 m²)
+      </Text>
+
+      {/* Exportar solo el mapa (sin el resto del informe) — a pedido del
+          usuario, para alguna situación puntual donde solo haga falta
+          mandar eso. Aplica a la plaga que esté seleccionada arriba
+          (bicho o babosa), no a las dos a la vez. */}
+      <Pressable style={styles.botonPng} onPress={exportarPng} disabled={!mapaListo || calculandoMapa || exportandoPng}>
+        <ImageIcon size={14} color={colors.primaryDark} />
+        <Text style={styles.botonPngTexto}>{exportandoPng ? "Exportando…" : "Exportar PNG"}</Text>
+      </Pressable>
+    </>
+  );
+
   return (
     // paddingBottom con el inset del sistema (no solo el padding fijo del
-    // container) — a pedido del usuario (Socio Gerente en Android): esta
-    // pestaña es de layout fijo, sin scroll ("Mapas" no tiene sentido
-    // scrollearlo), así que sin este margen extra el botón "Exportar PNG"
-    // del final quedaba tapado por la barra de navegación del sistema en
-    // celulares donde esa barra ocupa espacio real de pantalla (no
-    // superpuesta/transparente) — el resto de la app no lo sufre porque o
-    // bien tiene scroll de sobra, o el contenido no llega tan justo al
-    // borde de abajo.
+    // container) — a pedido del usuario (Socio Gerente en Android): el
+    // botón "Exportar PNG" del final quedaba tapado por la barra de
+    // navegación del sistema en celulares donde esa barra ocupa espacio
+    // real de pantalla (no superpuesta/transparente). En iOS "Mapas"
+    // sigue siendo de layout fijo sin scroll a propósito; en Android,
+    // directamente scrollea si hace falta (ver `esAndroid` más abajo) —
+    // entre las dos cosas, el botón ya no queda inalcanzable en ningún
+    // lado.
     <View style={[styles.container, { paddingBottom: 16 + insets.bottom }]}>
       <View style={styles.subTabs}>
         <Text
@@ -221,63 +280,20 @@ export function ResultadosView({
         <ScrollView style={styles.datosScroll} contentContainerStyle={styles.datosContenido}>
           <TablaDatosPuntos puntos={puntos} cargas={cargas} />
         </ScrollView>
+      ) : esAndroid ? (
+        // Solo Android — a pedido del usuario: en iOS este layout fijo (el
+        // de siempre, sin scroll, ver el comentario grande junto a
+        // ResultadosView) entra bien en pantalla, pero en varios equipos
+        // Android (pantallas más bajas/otra proporción) el botón "Exportar
+        // PNG" quedaba cortado abajo sin ninguna forma de llegar a él.
+        // `mapasContenidoScroll` reusa el mismo layout de siempre (mismo
+        // gap/alineación, ver estilos) — la única diferencia real con iOS
+        // es que acá SÍ se puede scrollear si no entra todo.
+        <ScrollView contentContainerStyle={styles.mapasContenidoScroll} showsVerticalScrollIndicator={false}>
+          {contenidoMapas}
+        </ScrollView>
       ) : (
-        <View style={styles.mapasContenido}>
-          <View style={styles.plagaToggle}>
-            <Text
-              onPress={() => setPlaga("bicho")}
-              style={[styles.plagaBoton, plaga === "bicho" && styles.plagaBotonActivo]}
-            >
-              Bichos bolita
-            </Text>
-            <Text
-              onPress={() => setPlaga("babosa")}
-              style={[styles.plagaBoton, plaga === "babosa" && styles.plagaBotonActivo]}
-            >
-              Babosas
-            </Text>
-          </View>
-
-          <View style={styles.marco} onLayout={onLayoutRecuadro}>
-            {mapaListo &&
-              (calculandoMapa ? (
-                // Mientras se calcula el Voronoi de esta plaga (puede
-                // tardar con un lote grande) — a pedido del usuario, que
-                // antes tocaba la pestaña/el selector de plaga y la
-                // pantalla quedaba inmóvil sin ningún indicio de que
-                // tenía que esperar, así que terminaba tocando de nuevo
-                // pensando que no había funcionado el primer toque.
-                <ActivityIndicator color={colors.primary} size="large" />
-              ) : (
-                <MapaDensidad
-                  ref={mapaRef}
-                  puntos={puntosDensidad}
-                  celdasPrecalculadas={celdas}
-                  perimetro={lote.perimetro}
-                  rangos={rangos}
-                  nivelColores={coloresDe(plaga)}
-                  etiquetaLeyenda={etiqueta}
-                  ancho={anchoMapa}
-                  alto={altoMapa}
-                  origen={origen}
-                />
-              ))}
-          </View>
-
-          <Text style={styles.pie} numberOfLines={2}>
-            {cargados}/{puntos.length} puntos cargados — valores llevados a m² (× 4 sobre el dato cargado a campo,
-            tomado en 1/4 m²)
-          </Text>
-
-          {/* Exportar solo el mapa (sin el resto del informe) — a pedido
-              del usuario, para alguna situación puntual donde solo haga
-              falta mandar eso. Aplica a la plaga que esté seleccionada
-              arriba (bicho o babosa), no a las dos a la vez. */}
-          <Pressable style={styles.botonPng} onPress={exportarPng} disabled={!mapaListo || calculandoMapa || exportandoPng}>
-            <ImageIcon size={14} color={colors.primaryDark} />
-            <Text style={styles.botonPngTexto}>{exportandoPng ? "Exportando…" : "Exportar PNG"}</Text>
-          </Pressable>
-        </View>
+        <View style={styles.mapasContenido}>{contenidoMapas}</View>
       )}
     </View>
   );
@@ -299,6 +315,13 @@ const styles = StyleSheet.create({
   // flex-start (no "center") a pedido del usuario — que quede el espacio
   // vacío abajo, no repartido arriba y abajo por igual.
   mapasContenido: { flex: 1, width: "100%", gap: 10, alignItems: "center", justifyContent: "flex-start", paddingTop: 8 },
+  // Mismo layout que `mapasContenido` de arriba (gap/alineación), pero
+  // como contentContainerStyle de un ScrollView (solo Android, ver el
+  // comentario junto a `esAndroid`) — `flexGrow` en vez de `flex` es lo
+  // correcto acá: deja que el contenido ocupe todo el alto disponible
+  // cuando entra sin scrollear, pero sin impedir que crezca más allá de
+  // la pantalla (y así poder scrollear) cuando no entra.
+  mapasContenidoScroll: { flexGrow: 1, width: "100%", gap: 10, alignItems: "center", justifyContent: "flex-start", paddingTop: 8 },
   plagaToggle: { flexDirection: "row", gap: 8 },
   plagaBoton: {
     borderWidth: 1,

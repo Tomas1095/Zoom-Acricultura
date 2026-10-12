@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -12,15 +13,17 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronDown, Download, FileSpreadsheet, Maximize2, RotateCcw } from "lucide-react-native";
+import { ChevronDown, Download, FileSpreadsheet, Maximize2, Navigation, RotateCcw } from "lucide-react-native";
 
 import { useAuth } from "@/lib/auth-context";
 import { puedeAdministrarLotes } from "@/lib/roles";
 import { exportarPuntos } from "@/lib/exportar/puntos";
 import { exportarShapefileLotePoligono } from "@/lib/exportar/shapefile";
 import { nombreLoteYEstablecimiento } from "@/lib/exportar/nombres";
+import { urlComoLlegar } from "@/lib/geo/como-llegar";
 import { elegirArchivoExcel, exportarPlantillaExcel, parsearPlanillaExcel } from "@/lib/planilla/planilla-monitoreo";
 import { eliminarCargas, importarCargas } from "@/lib/db/cargas";
+import { fetchCentroDeLote } from "@/lib/db/puntos";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
@@ -66,8 +69,12 @@ interface VistaGeneralProps {
  * modo "mapa fijo" (no pantalla completa). El Monitoreador puede ubicarse
  * acá pero solo carga datos desde Modo trabajo (ver CONTEXTO.md).
  *
- * "Info" y "Cómo llegar" quedaron en la lista de "Mis lotes" (un nivel
- * arriba), no acá adentro — así el lote es solo mapa + acción de trabajar. */
+ * "Cómo llegar" sí vive acá adentro (a pedido del usuario: un Monitoreador,
+ * a diferencia de jefe/encargado — ver "Cómo llegar" en ArbolLotes, un
+ * nivel arriba, con la lista completa de lotes — nunca pasa por esa lista
+ * más grande, entra directo a ESTE lote puntual desde "Mis lotes" sin
+ * ningún botón de ruta en el camino). "Info" sí queda afuera, esa sigue
+ * siendo solo para quien administra lotes. */
 export function VistaGeneral({
   lote,
   establecimientoNombre,
@@ -101,6 +108,11 @@ export function VistaGeneral({
   const { width } = useWindowDimensions();
   const mapaRef = useRef<MapaCampoHandle>(null);
   const [vistaModificada, setVistaModificada] = useState(false);
+  // "Cómo llegar" — mismo patrón que en ArbolLotes (jefe/encargado): pide
+  // el centro real del lote recién al tocar el botón (no antes, no hace
+  // falta tenerlo precalculado) y abre Google Maps con la ruta ya armada
+  // desde donde esté parada la persona en ese momento.
+  const [buscandoComoLlegar, setBuscandoComoLlegar] = useState(false);
   const miRutaHook = useMiRuta(lote.id, usuario?.id);
   const [formatoAExportar, setFormatoAExportar] = useState<"gpx" | "kml" | "shp" | null>(null);
   const [exportandoGrilla, setExportandoGrilla] = useState(false);
@@ -139,6 +151,22 @@ export function VistaGeneral({
   const anchoMapa = Math.min(width - 32, 400);
 
   const nombreGrillaDefault = `Puntos ${nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)}`;
+
+  async function comoLlegar() {
+    setBuscandoComoLlegar(true);
+    try {
+      const centro = await fetchCentroDeLote(lote.id);
+      if (!centro) {
+        Alert.alert("Sin ubicación todavía", "Este lote no tiene puntos generados.");
+        return;
+      }
+      Linking.openURL(urlComoLlegar(centro));
+    } catch (e: any) {
+      Alert.alert("No se pudo calcular la ruta", e.message ?? String(e));
+    } finally {
+      setBuscandoComoLlegar(false);
+    }
+  }
 
   // Mide dónde está el botón en la pantalla (no en el contenido del
   // ScrollView, que se puede haber desplazado) para poner el desplegable
@@ -351,6 +379,14 @@ export function VistaGeneral({
           </Pressable>
         )}
         <View style={styles.accionesFilaDerecha}>
+          <Pressable style={styles.botonRestablecer} onPress={comoLlegar} disabled={buscandoComoLlegar}>
+            {buscandoComoLlegar ? (
+              <ActivityIndicator size="small" color={colors.primaryDark} />
+            ) : (
+              <Navigation size={13} color={colors.primaryDark} />
+            )}
+            <Text style={styles.botonRestablecerTexto}>Cómo llegar</Text>
+          </Pressable>
           {vistaModificada && (
             <Pressable
               style={styles.botonRestablecer}
