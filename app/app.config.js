@@ -30,14 +30,14 @@ module.exports = {
     ios: {
       icon: "./assets/images/icon-ios.png",
       bundleIdentifier: "com.zoomagricultura.app",
-      buildNumber: "2",
+      buildNumber: "1",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
       package: "com.zoomagricultura.app",
-      versionCode: 2,
+      versionCode: 1,
       adaptiveIcon: {
         backgroundColor: "#FFFFFF",
         foregroundImage: "./assets/images/android-icon-foreground.png",
