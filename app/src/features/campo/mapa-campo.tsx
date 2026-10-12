@@ -228,9 +228,25 @@ export const MapaCampo = forwardRef<MapaCampoHandle, MapaCampoProps>(function Ma
   function toPx(xm: number, ym: number): { left: number; top: number } {
     let left: number, top: number;
     if (pantallaCompleta) {
-      if (!miPos) return { left: anclaX, top: anclaY };
-      left = anclaX + (xm - miPos.x) * baseScale;
-      top = anclaY + (ym - miPos.y) * baseScale;
+      if (miPos) {
+        left = anclaX + (xm - miPos.x) * baseScale;
+        top = anclaY + (ym - miPos.y) * baseScale;
+      } else {
+        // Sin fix de GPS todavía ("Buscando GPS…" — puede tardar un rato
+        // bajo techo o entre árboles) — antes esto dejaba la pantalla
+        // directamente en blanco: TODO (el lote entero y cada punto) se
+        // dibujaba apilado en el mismo pixel (`anclaX, anclaY`), porque sin
+        // `miPos` no había ningún centro real para calcular. Reportado por
+        // el usuario: un tester en el campo veía el mapa vacío con "Sin
+        // señal" + "Buscando GPS…" y nada más. Mientras se consigue señal
+        // de GPS real, se centra en el propio lote (mismo criterio que
+        // Vista general, ver `bounds` más abajo) — así al menos se ve el
+        // recorrido y los puntos, en vez de nada.
+        const centroX = (bounds.minX + bounds.maxX) / 2;
+        const centroY = (bounds.minY + bounds.maxY) / 2;
+        left = anclaX + (xm - centroX) * baseScale;
+        top = anclaY + (ym - centroY) * baseScale;
+      }
     } else {
       left = MAP_PAD + (xm - bounds.minX) * baseScale;
       top = MAP_PAD + (ym - bounds.minY) * baseScale;
