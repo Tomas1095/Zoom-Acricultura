@@ -8,10 +8,12 @@ const TEXTOS: Record<EstadoGps, string> = {
   buscando: "Buscando GPS…",
   activo: "GPS activo",
   "no-disponible": "GPS no disponible",
+  "servicio-apagado": "Activá la ubicación del celular",
 };
 
 export function GpsEstadoPill({ estado }: { estado: EstadoGps }) {
-  const color = estado === "activo" ? colors.primary : estado === "no-disponible" ? colors.danger : colors.warning;
+  const color =
+    estado === "activo" ? colors.primary : estado === "no-disponible" || estado === "servicio-apagado" ? colors.danger : colors.warning;
   return (
     <View style={[styles.pill, { borderColor: color }]}>
       {estado === "buscando" ? (

@@ -12,25 +12,17 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.9 — ajustes finos sobre la 1.0.8 ya en producción: las
-    // pastillas de sincronizar/precarga ahora quedan FIJAS al scrollear
-    // "Mis lotes" (antes solo la de sincronizar); el espacio para la
-    // versión al pie achicado en iPhone (el inset del home indicator
-    // dejaba demasiado aire para un simple renglón de texto); el cartel de
-    // "sin señal" ahora solo se prende cuando de verdad no hay señal (antes
-    // se prendía cada vez que se mostraba la foto guardada, sin importar el
-    // motivo real, en TODA la app — no solo destellaba con señal buena,
-    // también decía "sin señal" de pedo con señal real pero un pedido lento
-    // o fallido por otra causa); "Mi equipo" reordenada (accesos primero,
-    // un solo botón de "cambiar rol" con confirmación en vez del botón de
-    // texto largo "→ Encargado"); un subgrupo personal dentro de "Mi
-    // equipo" (estrellita por persona + filtro "Todos"/"Los míos", para no
-    // tener que scrollear entre el personal del socio); y en iOS, el GPS ya
-    // no queda "trabado" después de caminar con el teléfono bloqueado entre
-    // un punto y otro (el sistema pausaba las actualizaciones de ubicación
-    // en segundo plano y no las retomaba solo — ahora se piden de cero al
-    // volver a primer plano).
-    version: "1.0.9",
+    // Subida a 1.0.10 — sobre la 1.0.9 ya en producción: en Android, si la
+    // ubicación del teléfono está apagada del todo (el interruptor de
+    // "Ubicación" del panel rápido/Ajustes, no el permiso de la app — algo
+    // común para ahorrar batería), la pantalla de Modo trabajo se quedaba
+    // trabada para siempre en "Buscando GPS…" sin ningún aviso de qué
+    // pasaba ni qué hacer (con el permiso ya concedido, pedir el GPS en
+    // ese estado no avisa ningún error, simplemente nunca llega ninguna
+    // posición). Ahora se detecta ese caso puntual y se muestra "Activá la
+    // ubicación del celular" en su lugar, reintentando solo apenas se
+    // prenda (sin necesidad de reabrir la pantalla ni la app).
+    version: "1.0.10",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",
@@ -38,14 +30,14 @@ module.exports = {
     ios: {
       icon: "./assets/images/icon-ios.png",
       bundleIdentifier: "com.zoomagricultura.app",
-      buildNumber: "1",
+      buildNumber: "2",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
       package: "com.zoomagricultura.app",
-      versionCode: 1,
+      versionCode: 2,
       adaptiveIcon: {
         backgroundColor: "#FFFFFF",
         foregroundImage: "./assets/images/android-icon-foreground.png",

@@ -6,7 +6,14 @@ import * as Location from "expo-location";
 import { latLonAXY } from "@/lib/geo/geometria";
 import type { LatLon, XY } from "@/lib/geo/geometria";
 
-export type EstadoGps = "buscando" | "activo" | "no-disponible";
+export type EstadoGps = "buscando" | "activo" | "no-disponible" | "servicio-apagado";
+
+// Cada cuánto se revisa si se prendió la ubicación del teléfono mientras
+// se está en estado "servicio-apagado" (ver más abajo) — cubre el caso de
+// alguien que la prende desde el panel rápido de notificaciones SIN salir
+// de la app (no dispara el listener de AppState de más abajo, que solo
+// avisa al volver de segundo plano de verdad).
+const REVISAR_SERVICIO_MS = 3000;
 
 // Por debajo de esta velocidad (m/s) no se confía en el rumbo que da el GPS
 // (`pos.coords.heading`, "curso sobre el terreno") — parado o caminando muy
@@ -102,30 +109,60 @@ export function useGps(origen: LatLon | null) {
       return;
     }
 
-    const subPos = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 1 },
-      (pos) => {
-        if (miGeneracion !== generacionRef.current) return;
-        setPosicion(latLonAXY(origen, { lat: pos.coords.latitude, lon: pos.coords.longitude }));
-        setEstado("activo");
-
-        // `coords.heading` es el CURSO sobre el terreno (-1 si no hay
-        // dato) — se prioriza por sobre la brújula mientras estés
-        // caminando a un paso real (ver el comentario grande arriba).
-        const curso = pos.coords.heading;
-        const velocidad = pos.coords.speed ?? 0;
-        if (curso != null && curso >= 0 && velocidad >= VELOCIDAD_MIN_RUMBO_GPS) {
-          setHeading(curso);
-          setHeadingDisponible(true);
-          ultimoRumboGpsRef.current = Date.now();
-        }
-      }
-    );
-    if (miGeneracion !== generacionRef.current) {
-      subPos.remove();
+    // En Android (a diferencia de iOS, donde la ubicación del sistema
+    // prácticamente siempre está prendida) es común tener la ubicación
+    // del teléfono apagada del todo (el interruptor de "Ubicación" del
+    // panel rápido/Ajustes, no el permiso de la app) para ahorrar
+    // batería — con el permiso YA concedido, `watchPositionAsync` no
+    // avisa de ningún error en ese caso, simplemente nunca llega a
+    // llamar al callback y la app se queda trabada en "Buscando GPS…"
+    // para siempre, sin ninguna pista de qué hacer. Si está apagada, se
+    // detecta ACÁ (antes de pedir el watch) y se corta directo a un
+    // estado propio con mensaje accionable (ver GpsEstadoPill) — el
+    // `setInterval` de más abajo reintenta solo apenas se prenda, sin
+    // que haga falta reabrir la pantalla.
+    const servicioPrendido = await Location.hasServicesEnabledAsync();
+    if (miGeneracion !== generacionRef.current) return;
+    if (!servicioPrendido) {
+      setEstado("servicio-apagado");
       return;
     }
-    subPosicionRef.current = subPos;
+    setEstado("buscando"); // por si venía de "servicio-apagado" tras un reintento
+
+    try {
+      const subPos = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 1 },
+        (pos) => {
+          if (miGeneracion !== generacionRef.current) return;
+          setPosicion(latLonAXY(origen, { lat: pos.coords.latitude, lon: pos.coords.longitude }));
+          setEstado("activo");
+
+          // `coords.heading` es el CURSO sobre el terreno (-1 si no hay
+          // dato) — se prioriza por sobre la brújula mientras estés
+          // caminando a un paso real (ver el comentario grande arriba).
+          const curso = pos.coords.heading;
+          const velocidad = pos.coords.speed ?? 0;
+          if (curso != null && curso >= 0 && velocidad >= VELOCIDAD_MIN_RUMBO_GPS) {
+            setHeading(curso);
+            setHeadingDisponible(true);
+            ultimoRumboGpsRef.current = Date.now();
+          }
+        }
+      );
+      if (miGeneracion !== generacionRef.current) {
+        subPos.remove();
+        return;
+      }
+      subPosicionRef.current = subPos;
+    } catch {
+      // No debería pasar casi nunca ya que el apagado se filtra arriba,
+      // pero si de todos modos falla (otro motivo cualquiera), que se
+      // vea como "no disponible" en vez de quedarse trabado en
+      // "Buscando GPS…" sin ningún aviso.
+      if (miGeneracion !== generacionRef.current) return;
+      setEstado("no-disponible");
+      return;
+    }
 
     try {
       const subHeading = await Location.watchHeadingAsync((h) => {
@@ -177,6 +214,20 @@ export function useGps(origen: LatLon | null) {
     });
     return () => sub.remove();
   }, [suscribir, desuscribir]);
+
+  // Reintento de respaldo mientras la ubicación del teléfono está
+  // apagada (ver el chequeo en `suscribir`) — prenderla desde el panel
+  // rápido de notificaciones no saca la app de "activa" (no es pasar a
+  // segundo plano), así que el listener de AppState de arriba no se
+  // entera solo. Sin este `setInterval`, a alguien que la prende desde
+  // ahí le queda la app trabada hasta que vuelve a abrir la pantalla.
+  useEffect(() => {
+    if (estado !== "servicio-apagado") return;
+    const id = setInterval(() => {
+      if (enFocoRef.current) suscribir();
+    }, REVISAR_SERVICIO_MS);
+    return () => clearInterval(id);
+  }, [estado, suscribir]);
 
   return { posicion, estado, heading, headingDisponible };
 }
