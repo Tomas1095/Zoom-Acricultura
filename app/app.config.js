@@ -12,16 +12,36 @@ module.exports = {
   expo: {
     name: "Zoom Monitoreos",
     slug: "zoom-agricultura",
-    // Subida a 1.0.10 — sobre la 1.0.9 ya en producción: en Android, si la
-    // ubicación del teléfono está apagada del todo (el interruptor de
-    // "Ubicación" del panel rápido/Ajustes, no el permiso de la app — algo
-    // común para ahorrar batería), la pantalla de Modo trabajo se quedaba
-    // trabada para siempre en "Buscando GPS…" sin ningún aviso de qué
-    // pasaba ni qué hacer (con el permiso ya concedido, pedir el GPS en
-    // ese estado no avisa ningún error, simplemente nunca llega ninguna
-    // posición). Ahora se detecta ese caso puntual y se muestra "Activá la
-    // ubicación del celular" en su lugar, reintentando solo apenas se
-    // prenda (sin necesidad de reabrir la pantalla ni la app).
+    // Subida a 1.0.10 — sobre la 1.0.9 ya en producción, casi todo
+    // apuntado a estabilizar el GPS en Android a campo:
+    // - El bug real: mostrar el cartel del sistema pidiendo el permiso de
+    //   ubicación podía, en Android, disparar un pase por
+    //   "inactive"/"background" y vuelta a "active" — lo que hacía que el
+    //   GPS se pidiera dos veces casi en simultáneo (un listener agregado
+    //   para un bug distinto de iOS) y quedara colgado para siempre en
+    //   "Buscando GPS…", sin ningún error, en CUALQUIER Android (no uno
+    //   puntual — confirmado en el campo con dos celulares distintos).
+    // - Si la ubicación del teléfono está apagada del todo (el
+    //   interruptor del panel rápido, no el permiso de la app), ahora se
+    //   detecta y se muestra "Activá la ubicación del celular", con
+    //   reintento solo apenas se prenda.
+    // - Si el GPS igual tarda sospechosamente (más de 12s con la
+    //   ubicación ya confirmada prendida), un aviso en pantalla con el
+    //   estado real de los proveedores de ubicación — para diagnosticar
+    //   más rápido la próxima vez, no se supone que haga falta en uso
+    //   normal.
+    // - Pellizcar para hacer zoom/mover el mapa en Vista general (donde
+    //   se marca "Mi recorrido") andaba trabado en Android — el mapa
+    //   vivía en un ScrollView común, que en Android le compite el toque
+    //   a los gestos de pellizco/pan; cambiado al ScrollView de la propia
+    //   librería de gestos.
+    // - "Cómo llegar" (antes solo para jefe/encargado) ahora también lo
+    //   tiene el Monitoreador, en la misma pantalla del lote.
+    // - La solapa "Resultados" ahora scrollea en Android si el contenido
+    //   no entra (en iOS entraba bien, sin cambios ahí).
+    // - El filtro "Todos/Los míos" al dar acceso a un lote (agregado
+    //   después de que se compilara la 1.0.9 real, nunca había llegado a
+    //   un build) ya viene incluido.
     version: "1.0.10",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
