@@ -1,17 +1,20 @@
 import { useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
-import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+// `ScrollView` de acá, no de "react-native" — a pedido del usuario (su
+// socio, en Android): pellizcar para hacer zoom y mover el mapa (ver
+// MapaCampo, el `GestureDetector` con pinch/pan/rotación) vivía adentro
+// de un ScrollView COMÚN. En Android (no en iOS, que resuelve esto mucho
+// mejor por su cuenta) un ScrollView común y los gestos de
+// react-native-gesture-handler compiten de verdad por el toque — el
+// ScrollView puede arrancar a interceptarlo ANTES de que el segundo dedo
+// del pellizco/pan llegue a tocar la pantalla, hecho conocido de la
+// librería. El ScrollView que exporta react-native-gesture-handler es
+// justamente el mismo componente nativo pero ya integrado a su propio
+// árbitro de gestos, para que ceda el paso de verdad al pellizco/pan del
+// mapa en vez de robárselo. Mismo aspecto/comportamiento para todo lo
+// demás de esta pantalla (es la misma API) — solo cambia esto puntual.
+import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronDown, Download, FileSpreadsheet, Maximize2, Navigation, RotateCcw } from "lucide-react-native";
 
