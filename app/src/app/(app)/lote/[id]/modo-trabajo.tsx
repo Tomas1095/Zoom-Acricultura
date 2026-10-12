@@ -142,7 +142,7 @@ export default function ModoTrabajoScreen() {
             <Text style={styles.pillSinSenalTexto}>📡 Sin señal — datos guardados</Text>
           </View>
         )}
-        <GpsEstadoPill estado={gps.estado} />
+        <GpsEstadoPill estado={gps.estado} diagnostico={gps.diagnostico} />
         {miRuta.length > 0 && (
           <View style={styles.pillMiRuta}>
             <Pencil size={11} color={colors.surface} />

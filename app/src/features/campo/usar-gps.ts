@@ -15,6 +15,22 @@ export type EstadoGps = "buscando" | "activo" | "no-disponible" | "servicio-apag
 // avisa al volver de segundo plano de verdad).
 const REVISAR_SERVICIO_MS = 3000;
 
+// Si pasó este tiempo sin recibir NINGUNA posición, con la ubicación del
+// sistema ya confirmada prendida (ver `servicioPrendido` más abajo), algo
+// más puntual está fallando — en Android, `expo-location` pide la
+// ubicación a través del FusedLocationProviderClient de Google Play
+// Services, no directo al chip de GPS. Si Play Services en ese celular
+// está desactualizado/restringido, el pedido puede quedarse sin
+// resolverse NUNCA, sin ningún error — exactamente lo mismo que un
+// sistema con la ubicación apagada visto desde JS, pero por un motivo
+// bien distinto (y con un chequeo bien distinto: ver GpsEstadoPill). Este
+// aviso es puramente informativo (no cambia de estrategia sola) — da una
+// pista real en pantalla en vez de quedarse en "Buscando GPS…" sin decir
+// nada, reportado un caso real donde otra app de GPS (ajena a esta)
+// conseguía posición sin drama en el mismo celular, mismo lugar, mismo
+// momento.
+const AVISO_TARDANZA_MS = 12000;
+
 // Por debajo de esta velocidad (m/s) no se confía en el rumbo que da el GPS
 // (`pos.coords.heading`, "curso sobre el terreno") — parado o caminando muy
 // despacio, esa cuenta se arma con desplazamientos mínimos entre lecturas y
@@ -80,8 +96,14 @@ export function useGps(origen: LatLon | null) {
   const [estado, setEstado] = useState<EstadoGps>("buscando");
   const [heading, setHeading] = useState(0); // grados, 0 = norte arriba
   const [headingDisponible, setHeadingDisponible] = useState(false);
+  // Pista de diagnóstico para cuando "buscando" se cuelga más de la cuenta
+  // (ver AVISO_TARDANZA_MS) — null casi siempre, solo tiene texto mientras
+  // de verdad está tardando sospechosamente. Puramente informativo, se
+  // muestra en GpsEstadoPill.
+  const [diagnostico, setDiagnostico] = useState<string | null>(null);
   const subPosicionRef = useRef<Location.LocationSubscription | null>(null);
   const subHeadingRef = useRef<Location.LocationSubscription | null>(null);
+  const timeoutDiagnosticoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Timestamp de la última vez que el RUMBO DEL GPS (no la brújula) fue
   // válido y se usó — mientras esté "fresco" (ver VENTANA_RUMBO_GPS_MS),
   // las lecturas de la brújula se ignoran a propósito (ver más abajo).
@@ -98,9 +120,18 @@ export function useGps(origen: LatLon | null) {
   // que reiniciar el GPS si además esta pantalla es la que está activa.
   const enFocoRef = useRef(false);
 
+  const limpiarAvisoTardanza = useCallback(() => {
+    if (timeoutDiagnosticoRef.current != null) {
+      clearTimeout(timeoutDiagnosticoRef.current);
+      timeoutDiagnosticoRef.current = null;
+    }
+    setDiagnostico(null);
+  }, []);
+
   const suscribir = useCallback(async () => {
     if (!origen || subPosicionRef.current) return;
     const miGeneracion = ++generacionRef.current;
+    limpiarAvisoTardanza();
 
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (miGeneracion !== generacionRef.current) return;
@@ -134,6 +165,7 @@ export function useGps(origen: LatLon | null) {
         { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 1 },
         (pos) => {
           if (miGeneracion !== generacionRef.current) return;
+          limpiarAvisoTardanza();
           setPosicion(latLonAXY(origen, { lat: pos.coords.latitude, lon: pos.coords.longitude }));
           setEstado("activo");
 
@@ -154,6 +186,19 @@ export function useGps(origen: LatLon | null) {
         return;
       }
       subPosicionRef.current = subPos;
+
+      timeoutDiagnosticoRef.current = setTimeout(async () => {
+        if (miGeneracion !== generacionRef.current) return;
+        try {
+          const st = await Location.getProviderStatusAsync();
+          if (miGeneracion !== generacionRef.current) return;
+          setDiagnostico(
+            `Tarda más de lo normal — GPS: ${st.gpsAvailable ? "sí" : "no"} · Red: ${st.networkAvailable ? "sí" : "no"}`
+          );
+        } catch {
+          // Si ni esto se puede consultar, mejor no mostrar nada raro.
+        }
+      }, AVISO_TARDANZA_MS);
     } catch {
       // No debería pasar casi nunca ya que el apagado se filtra arriba,
       // pero si de todos modos falla (otro motivo cualquiera), que se
@@ -184,7 +229,7 @@ export function useGps(origen: LatLon | null) {
       // el mapa queda orientado al norte fijo y se puede rotar a mano.
       setHeadingDisponible(false);
     }
-  }, [origen]);
+  }, [origen, limpiarAvisoTardanza]);
 
   const desuscribir = useCallback(() => {
     generacionRef.current++; // invalida cualquier suscripción en curso (ver `suscribir`)
@@ -192,7 +237,8 @@ export function useGps(origen: LatLon | null) {
     subPosicionRef.current = null;
     subHeadingRef.current?.remove();
     subHeadingRef.current = null;
-  }, []);
+    limpiarAvisoTardanza();
+  }, [limpiarAvisoTardanza]);
 
   useFocusEffect(
     useCallback(() => {
@@ -229,5 +275,5 @@ export function useGps(origen: LatLon | null) {
     return () => clearInterval(id);
   }, [estado, suscribir]);
 
-  return { posicion, estado, heading, headingDisponible };
+  return { posicion, estado, heading, headingDisponible, diagnostico };
 }
