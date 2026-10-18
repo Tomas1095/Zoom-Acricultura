@@ -119,19 +119,38 @@ function empiezaComoZip(primerosBytes: Uint8Array): boolean {
  * usuario). Por eso el chequeo del contenido se hace con una lectura
  * MÍNIMA (los primeros 4 bytes, vía `archivo.open()`), y recién después
  * se hace la ÚNICA lectura completa que hace falta — bytes crudos (no
- * base64, que pesa un 33% más en memoria) si es zip, texto si no. */
+ * base64, que pesa un 33% más en memoria) si es zip, texto si no.
+ *
+ * `archivo.open()` en sí no siempre se puede usar — bug real reportado
+ * por un usuario: eligiendo el KMZ desde Google Drive (no desde
+ * almacenamiento local), Android entrega un `content://` que apunta a un
+ * documento de Drive, y ese tipo puntual de URI no se puede abrir como
+ * file handle directo ("This method cannot be used with content URIs").
+ * Pasa lo mismo eligiendo desde otras apps que exponen sus archivos como
+ * documentos virtuales en vez de algo respaldado por un archivo real en
+ * disco. Si `.open()` falla, se cae a leer el archivo COMPLETO de una
+ * sola vez (`archivo.bytes()`, que sí sabe lidiar con esto) — más pesado
+ * en memoria que la lectura mínima de siempre, pero sigue siendo UNA
+ * sola lectura completa (se reusa el mismo buffer para el chequeo de
+ * ZIP y para el contenido real), no dos. */
 export async function extraerPerimetroDeArchivo(archivo: File): Promise<LatLon[][]> {
-  const handle = archivo.open();
   let primerosBytes: Uint8Array;
+  let bytesCompletos: Uint8Array | null = null;
   try {
-    primerosBytes = handle.readBytes(FIRMA_ZIP.length);
-  } finally {
-    handle.close();
+    const handle = archivo.open();
+    try {
+      primerosBytes = handle.readBytes(FIRMA_ZIP.length);
+    } finally {
+      handle.close();
+    }
+  } catch {
+    bytesCompletos = await archivo.bytes();
+    primerosBytes = bytesCompletos.subarray(0, FIRMA_ZIP.length);
   }
 
   let xml: string;
   if (empiezaComoZip(primerosBytes)) {
-    const bytes = await archivo.bytes();
+    const bytes = bytesCompletos ?? (await archivo.bytes());
     const zip = await JSZip.loadAsync(bytes);
     const nombreKml = Object.keys(zip.files).find((n) => n.toLowerCase().endsWith(".kml"));
     if (!nombreKml) {
@@ -139,7 +158,7 @@ export async function extraerPerimetroDeArchivo(archivo: File): Promise<LatLon[]
     }
     xml = await zip.files[nombreKml].async("string");
   } else {
-    xml = await archivo.text();
+    xml = bytesCompletos ? new TextDecoder().decode(bytesCompletos) : await archivo.text();
   }
 
   const arbol = new XMLParser({ ignoreAttributes: false }).parse(xml);
