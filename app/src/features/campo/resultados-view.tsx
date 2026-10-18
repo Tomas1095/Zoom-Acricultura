@@ -289,7 +289,11 @@ export function ResultadosView({
         // `mapasContenidoScroll` reusa el mismo layout de siempre (mismo
         // gap/alineación, ver estilos) — la única diferencia real con iOS
         // es que acá SÍ se puede scrollear si no entra todo.
-        <ScrollView contentContainerStyle={styles.mapasContenidoScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.mapasScrollAndroid}
+          contentContainerStyle={styles.mapasContenidoScroll}
+          showsVerticalScrollIndicator={false}
+        >
           {contenidoMapas}
         </ScrollView>
       ) : (
@@ -312,6 +316,13 @@ const styles = StyleSheet.create({
   subTabTextoActivo: { color: colors.primary, borderBottomWidth: 2, borderBottomColor: colors.primary },
   datosScroll: { flex: 1, width: "100%" },
   datosContenido: { paddingTop: 4 },
+  // El propio <ScrollView> (no el contentContainerStyle) necesita este
+  // flex:1 — sin él, no tenía una altura definida dentro de la cual medir
+  // su contenido, y el recuadro del mapa (`marco`, con onLayout) nunca
+  // llegaba a tener ancho/alto reales: el mapa no se dibujaba nunca en
+  // Android (mapaListo se quedaba en false para siempre). Mismo patrón
+  // que `datosScroll`, arriba.
+  mapasScrollAndroid: { flex: 1, width: "100%" },
   // flex-start (no "center") a pedido del usuario — que quede el espacio
   // vacío abajo, no repartido arriba y abajo por igual.
   mapasContenido: { flex: 1, width: "100%", gap: 10, alignItems: "center", justifyContent: "flex-start", paddingTop: 8 },
