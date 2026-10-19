@@ -61,6 +61,34 @@ export interface Establecimiento {
   nombre: string;
 }
 
+/** Un informe PDF guardado "a propósito" desde Salidas (ver el botón
+ * "Exportar PDF y guardar en historial") — distinto de compartir, que no
+ * deja rastro. Solo Socio Gerente/Fundador los ve (ver el ícono de
+ * información al lado de cada establecimiento en arbol-lotes.tsx). */
+export interface InformeEstablecimiento {
+  id: string;
+  establecimientoId: string;
+  campana: string;
+  /** El nombre que la persona confirmó al exportar — el mismo que ve acá. */
+  nombreArchivo: string;
+  /** Path real dentro del bucket de Storage — nunca el nombre de arriba. */
+  storagePath: string;
+  subidoPorId: string | null;
+  createdAt: string;
+}
+
+/** Archivo suelto subido a mano para un cliente (ej. el Excel resumen de
+ * aplicación de cebo) — igual que InformeEstablecimiento, solo lo ve/toca
+ * Socio Gerente/Fundador. */
+export interface ArchivoCliente {
+  id: string;
+  clienteId: string;
+  nombreArchivo: string;
+  storagePath: string;
+  subidoPorId: string | null;
+  createdAt: string;
+}
+
 export interface PuntoGeo {
   x: number; // metros relativos al centro del polígono del lote
   y: number;

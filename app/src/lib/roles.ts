@@ -44,3 +44,11 @@ export function puedeCerrarCampana(rol: Rol): boolean {
 export function puedeResolverConflictos(rol: Rol): boolean {
   return rol === "socio_fundador" || rol === "socio_gerente";
 }
+
+/** Ver/subir/borrar el historial de informes de un establecimiento y los
+ * archivos de un cliente (Excel de resumen de cebo, etc.) — a pedido
+ * explícito del usuario, más restringido que administrar lotes: ni
+ * Encargado los ve. */
+export function puedeVerArchivosYInformes(rol: Rol): boolean {
+  return rol === "socio_fundador" || rol === "socio_gerente";
+}

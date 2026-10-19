@@ -10,7 +10,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Check, ChevronDown, Download, Pencil, Plus, RotateCcw, Undo2, Upload, X } from "lucide-react-native";
+import { Archive, Check, ChevronDown, Download, Pencil, Plus, RotateCcw, Undo2, Upload, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -25,9 +25,11 @@ import { inferirOrigenDesdePuntos, type XY } from "@/lib/geo/geometria";
 import { calcularCeldasDensidad, coloresDe, rangosDe, type CeldaDensidad } from "@/lib/geo/densidad";
 import { resumenPlaga, resumenPresencias, textoSituacion } from "@/lib/informe/situacion";
 import {
+  compartirInformePdfLocal,
   construirInformeHtml,
   construirInformeHtmlNuevo,
   exportarInformePdf,
+  generarInformePdfLocal,
   kgDeProducto,
   resumenPorProducto,
   resumenSuperficiePorProducto,
@@ -40,6 +42,9 @@ import { exportarKMZManchonYMapa } from "@/lib/exportar/manchon-mapa-kmz";
 import { construirDatosHtml, exportarDatosPdf } from "@/lib/exportar/datos";
 import { nombreLoteYEstablecimiento } from "@/lib/exportar/nombres";
 import { formatearHectareas } from "@/lib/format";
+import { guardarInformeEstablecimiento } from "@/lib/db/informes-establecimiento";
+import { useAuth } from "@/lib/auth-context";
+import { puedeVerArchivosYInformes } from "@/lib/roles";
 import type { Lote } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
@@ -71,7 +76,12 @@ type SubTab = "informe" | "manchoneo" | "datos";
 // "pdfDatos" además de "pdf" — son dos PDF distintos (informe técnico vs.
 // la tabla de datos cruda), cada uno con su propio nombre por defecto y su
 // propio armador de HTML (ver nombreDefaultExport/confirmarExport).
-type PedidoExport = "pdf" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null;
+// "pdfGuardar" es el mismo informe técnico que "pdf" (mismo HTML, mismo
+// nombre por defecto) pero además sube una copia al historial del
+// establecimiento — botón separado a pedido explícito del usuario ("yo
+// sumaría otro botón al lado que diga exportar PDF y guardar en
+// historial"), nunca automático en el export de siempre.
+type PedidoExport = "pdf" | "pdfGuardar" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null;
 
 // Estado inicial de zonaAplicacionActiva, antes de que el primer cálculo
 // termine (ver el useEffect de calculandoZona) — mismo valor "vacío" que
@@ -143,6 +153,11 @@ function zonaInicial(lote: Lote): ZonaCebo {
  * lib/exportar/datos.ts). */
 export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo }: SalidasViewProps) {
   const insets = useSafeAreaInsets();
+  const { usuario } = useAuth();
+  // "Guardar en historial" es solo de Socio Gerente/Fundador — pedido
+  // explícito del usuario, más restringido que exportar/compartir el PDF
+  // de siempre (eso sigue disponible para todos).
+  const puedeGuardarEnHistorial = !!usuario && puedeVerArchivosYInformes(usuario.rol);
   // Las 3 pestañas de acá abajo (Informe/Manchoneo/Datos) reusan el mismo
   // estilo de scroll — armado una sola vez para no repetir el cálculo del
   // inset en cada una. Sin esto (y sin el botón "Exportar PDF" fuera del
@@ -298,7 +313,9 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
     );
   }
 
-  const [exportando, setExportando] = useState<"pdf" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null>(null);
+  const [exportando, setExportando] = useState<"pdf" | "pdfGuardar" | "pdfDatos" | "gpx" | "kmz" | "kmzMapa" | null>(
+    null
+  );
   // Desplegable de "Exportar Manchón" (GPX / KMZ) — ver el botón más abajo.
   const [menuManchonAbierto, setMenuManchonAbierto] = useState(false);
   // Qué exportación se está por hacer — mientras no sea null, el modal de
@@ -564,7 +581,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
   // Nombre por defecto de cada exportación — siempre editable desde el
   // modal (ver onConfirmar), esto solo prellena el campo.
   function nombreDefaultExport(pedido: PedidoExport): string {
-    if (pedido === "pdf") {
+    if (pedido === "pdf" || pedido === "pdfGuardar") {
       return `Informe monitoreo de plagas ${nombreLoteYEstablecimiento(lote.nombre, establecimientoNombre)}`;
     }
     if (pedido === "pdfDatos") {
@@ -587,7 +604,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
     }
     setExportando(pedido);
     try {
-      if (pedido === "pdf") {
+      if (pedido === "pdf" || pedido === "pdfGuardar") {
         const datosInforme = {
           loteNombre: lote.nombre,
           establecimientoNombre,
@@ -627,7 +644,16 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
         // HTML se usa, según lo que la persona haya elegido arriba.
         const html =
           disenoInforme === "nuevo" ? construirInformeHtmlNuevo(datosInforme) : construirInformeHtml(datosInforme);
-        await exportarInformePdf(html, valores.nombre);
+        if (pedido === "pdf") {
+          await exportarInformePdf(html, valores.nombre);
+        } else {
+          // Mismo PDF para las dos cosas — se genera una sola vez y se
+          // comparte Y se sube al historial del establecimiento (pedido
+          // explícito del usuario, ver el comentario de PedidoExport).
+          const archivo = await generarInformePdfLocal(html, valores.nombre);
+          await compartirInformePdfLocal(archivo, valores.nombre);
+          await guardarInformeEstablecimiento(lote.establecimientoId, campanaViendo, `${valores.nombre}.pdf`, archivo);
+        }
       } else if (pedido === "pdfDatos") {
         const html = construirDatosHtml(puntos, cargas, lote.nombre, establecimientoNombre);
         await exportarDatosPdf(html, valores.nombre);
@@ -652,7 +678,8 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
           );
       }
     } catch (e: any) {
-      const etiquetaError = pedido === "pdfDatos" ? "PDF" : pedido === "kmzMapa" ? "KMZ" : pedido.toUpperCase();
+      const etiquetaError =
+        pedido === "pdfDatos" || pedido === "pdfGuardar" ? "PDF" : pedido === "kmzMapa" ? "KMZ" : pedido.toUpperCase();
       Alert.alert(`No se pudo exportar el ${etiquetaError}`, e.message ?? String(e));
     } finally {
       setExportando(null);
@@ -842,14 +869,34 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
             )}
           </View>
 
-          <Pressable style={styles.botonPdf} onPress={() => setPedidoExport("pdf")} disabled={exportando !== null}>
-            {exportando === "pdf" ? (
-              <ActivityIndicator color={colors.surface} size="small" />
-            ) : (
-              <Download size={15} color={colors.surface} />
+          <View style={styles.filaBotonesExport}>
+            <Pressable
+              style={[styles.botonPdf, puedeGuardarEnHistorial && styles.botonPdfFlex]}
+              onPress={() => setPedidoExport("pdf")}
+              disabled={exportando !== null}
+            >
+              {exportando === "pdf" ? (
+                <ActivityIndicator color={colors.surface} size="small" />
+              ) : (
+                <Download size={15} color={colors.surface} />
+              )}
+              <Text style={styles.botonPdfTexto}>Exportar PDF</Text>
+            </Pressable>
+            {puedeGuardarEnHistorial && (
+              <Pressable
+                style={[styles.botonPdf, styles.botonPdfFlex, styles.botonPdfSecundario]}
+                onPress={() => setPedidoExport("pdfGuardar")}
+                disabled={exportando !== null}
+              >
+                {exportando === "pdfGuardar" ? (
+                  <ActivityIndicator color={colors.surface} size="small" />
+                ) : (
+                  <Archive size={15} color={colors.surface} />
+                )}
+                <Text style={styles.botonPdfTexto}>Exportar PDF y guardar en historial</Text>
+              </Pressable>
             )}
-            <Text style={styles.botonPdfTexto}>Exportar PDF</Text>
-          </Pressable>
+          </View>
         </ScrollView>
       ) : subTab === "manchoneo" ? (
         <ScrollView contentContainerStyle={scrollContenidoConInset}>
@@ -1061,7 +1108,7 @@ export function SalidasView({ lote, establecimientoNombre, campanaViendo, activo
       <PromptModal
         visible={pedidoExport !== null}
         titulo={
-          pedidoExport === "pdf" || pedidoExport === "pdfDatos"
+          pedidoExport === "pdf" || pedidoExport === "pdfDatos" || pedidoExport === "pdfGuardar"
             ? "Exportar PDF"
             : pedidoExport === "kmzMapa"
               ? "Exportar Manchón + Mapa (KMZ)"
@@ -1293,6 +1340,7 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     backgroundColor: colors.successBg,
   },
+  filaBotonesExport: { flexDirection: "row", gap: 10 },
   botonPdf: {
     flexDirection: "row",
     alignItems: "center",
@@ -1302,7 +1350,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 12,
   },
-  botonPdfTexto: { color: colors.surface, fontWeight: "700", fontSize: 13 },
+  // Cuando aparecen los dos botones (Exportar PDF / + guardar en
+  // historial) se reparten el ancho a la mitad cada uno en vez de ocupar
+  // todo el ancho como cuando es el único botón de la pestaña.
+  botonPdfFlex: { flex: 1 },
+  botonPdfSecundario: { backgroundColor: colors.primaryDark },
+  botonPdfTexto: { color: colors.surface, fontWeight: "700", fontSize: 13, textAlign: "center" },
   mapaMarco: {
     alignItems: "center",
     backgroundColor: colors.background,

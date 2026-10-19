@@ -15,9 +15,12 @@ import { guardarCacheArbol, leerCacheArbol } from "@/lib/offline/cache-arbol";
 import { precargarLotes } from "@/lib/offline/cache-lote";
 import { conTimeout, hayConexion } from "@/lib/offline/net";
 import { calcularResumenAvance, fusionarPendientesEnCargas, type ResumenAvanceLote } from "@/lib/offline/resumen";
+import { puedeVerArchivosYInformes } from "@/lib/roles";
 import type { Cliente, Establecimiento, Lote, Usuario } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { AccesoModal } from "./acceso-modal";
+import { ArchivosClienteModal } from "./archivos-cliente-modal";
+import { InformesEstablecimientoModal } from "./informes-establecimiento-modal";
 
 interface InfoLote {
   puntosTotal: number;
@@ -36,6 +39,8 @@ type ModalState =
   | { tipo: "nuevoLote"; establecimientoId: string }
   | { tipo: "editarLote"; lote: Lote }
   | { tipo: "acceso"; lote: Lote }
+  | { tipo: "informesEstablecimiento"; establecimiento: Establecimiento }
+  | { tipo: "archivosCliente"; cliente: Cliente }
   | null;
 
 export interface ArbolLotesHandle {
@@ -62,6 +67,9 @@ export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function
   const { usuario } = useAuth();
   const insets = useSafeAreaInsets();
   const puedeEliminar = usuario?.rol === "socio_fundador" || usuario?.rol === "socio_gerente";
+  // Historial de informes de un establecimiento y archivos de un cliente —
+  // solo Socio Gerente/Fundador (pedido explícito del usuario).
+  const puedeVerArchivos = !!usuario && puedeVerArchivosYInformes(usuario.rol);
 
   const [cargando, setCargando] = useState(true);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -358,6 +366,11 @@ export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function
                   <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "editarCliente", cliente: c })}>
                     <Pencil size={13} color={colors.accentGold} />
                   </Pressable>
+                  {puedeVerArchivos && (
+                    <Pressable style={styles.iconBtn} onPress={() => setModal({ tipo: "archivosCliente", cliente: c })}>
+                      <Info size={13} color={colors.info} />
+                    </Pressable>
+                  )}
                   {puedeEliminar && (
                     <Pressable
                       style={styles.iconBtn}
@@ -402,6 +415,14 @@ export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function
                             >
                               <Plus size={13} color={colors.primaryDark} />
                             </Pressable>
+                            {puedeVerArchivos && (
+                              <Pressable
+                                style={styles.iconBtn}
+                                onPress={() => setModal({ tipo: "informesEstablecimiento", establecimiento: e })}
+                              >
+                                <Info size={12} color={colors.info} />
+                              </Pressable>
+                            )}
                             {puedeEliminar && (
                               <Pressable
                                 style={styles.iconBtn}
@@ -642,6 +663,22 @@ export const ArbolLotes = forwardRef<ArbolLotesHandle, ArbolLotesProps>(function
 
       {modal?.tipo === "acceso" && (
         <AccesoModal lote={modal.lote} onCerrar={() => setModal(null)} />
+      )}
+
+      {modal?.tipo === "informesEstablecimiento" && (
+        <InformesEstablecimientoModal
+          establecimientoId={modal.establecimiento.id}
+          establecimientoNombre={modal.establecimiento.nombre}
+          onCerrar={() => setModal(null)}
+        />
+      )}
+
+      {modal?.tipo === "archivosCliente" && (
+        <ArchivosClienteModal
+          clienteId={modal.cliente.id}
+          clienteNombre={modal.cliente.nombre}
+          onCerrar={() => setModal(null)}
+        />
       )}
     </View>
   );

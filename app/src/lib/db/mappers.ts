@@ -1,6 +1,16 @@
 // Conversión fila de Postgres (snake_case) -> tipo de dominio (camelCase).
 // Centralizado acá para no repetirlo en cada archivo de queries.
-import type { Cliente, Comunidad, Establecimiento, Invitacion, Lote, PuntoGeo, Usuario } from "@/types/domain";
+import type {
+  ArchivoCliente,
+  Cliente,
+  Comunidad,
+  Establecimiento,
+  InformeEstablecimiento,
+  Invitacion,
+  Lote,
+  PuntoGeo,
+  Usuario,
+} from "@/types/domain";
 
 export function filaACliente(f: any): Cliente {
   return { id: f.id, nombre: f.nombre };
@@ -69,6 +79,29 @@ export function filaAInvitacion(f: any): Invitacion {
     usado: f.usado,
     usadoPorId: f.usado_por_id,
     creadoPorId: f.creado_por_id,
+    createdAt: f.created_at,
+  };
+}
+
+export function filaAInformeEstablecimiento(f: any): InformeEstablecimiento {
+  return {
+    id: f.id,
+    establecimientoId: f.establecimiento_id,
+    campana: f.campana,
+    nombreArchivo: f.nombre_archivo,
+    storagePath: f.storage_path,
+    subidoPorId: f.subido_por_id,
+    createdAt: f.created_at,
+  };
+}
+
+export function filaAArchivoCliente(f: any): ArchivoCliente {
+  return {
+    id: f.id,
+    clienteId: f.cliente_id,
+    nombreArchivo: f.nombre_archivo,
+    storagePath: f.storage_path,
+    subidoPorId: f.subido_por_id,
     createdAt: f.created_at,
   };
 }

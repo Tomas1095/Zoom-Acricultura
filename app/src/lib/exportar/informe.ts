@@ -611,6 +611,38 @@ export function construirInformeHtmlNuevo({
 </html>`;
 }
 
+/** Genera el PDF con expo-print y lo deja como un `File` local con el
+ * nombre REAL elegido por la persona (no el interno de expo-print, ver el
+ * comentario grande de `exportarInformePdf` más abajo) — no lo comparte ni
+ * lo sube a ningún lado, eso queda en manos de quien llame a esto. Separado
+ * de `exportarInformePdf` para que "Exportar PDF y guardar en historial"
+ * (ver salidas-view.tsx/lib/db/informes-establecimiento.ts) pueda generar
+ * el PDF UNA sola vez y después compartirlo Y subirlo, en vez de generarlo
+ * dos veces. */
+export async function generarInformePdfLocal(
+  html: string,
+  nombreArchivoBase: string,
+  opciones?: { width?: number; height?: number }
+): Promise<File> {
+  const { uri } = await Print.printToFileAsync({ html, width: opciones?.width, height: opciones?.height });
+  const generado = new File(uri);
+  const destino = new File(Paths.cache, `${sanitizarNombreArchivo(nombreArchivoBase)}.pdf`);
+  if (destino.exists) destino.delete();
+  generado.copy(destino);
+  return destino;
+}
+
+/** Abre la hoja de compartir nativa para un PDF ya generado localmente (ver
+ * `generarInformePdfLocal`) — separado para poder reusarlo tanto desde
+ * `exportarInformePdf` (compartir nomás, el caso de siempre) como desde el
+ * flujo de "guardar en historial" (compartir Y subir, con el mismo
+ * archivo). */
+export async function compartirInformePdfLocal(archivo: File, nombreArchivoBase: string): Promise<void> {
+  const disponible = await Sharing.isAvailableAsync();
+  if (!disponible) throw new Error("Compartir no está disponible en este dispositivo.");
+  await Sharing.shareAsync(archivo.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: nombreArchivoBase });
+}
+
 /** Genera el PDF con expo-print y abre la hoja de compartir nativa — el
  * equivalente real de "Guardar como PDF" del diálogo de impresión del
  * navegador que usaba el prototipo (`window.print()`, que no existe acá).
@@ -632,13 +664,6 @@ export async function exportarInformePdf(
   // acá.
   opciones?: { width?: number; height?: number }
 ): Promise<void> {
-  const { uri } = await Print.printToFileAsync({ html, width: opciones?.width, height: opciones?.height });
-  const generado = new File(uri);
-  const destino = new File(Paths.cache, `${sanitizarNombreArchivo(nombreArchivoBase)}.pdf`);
-  if (destino.exists) destino.delete();
-  generado.copy(destino);
-
-  const disponible = await Sharing.isAvailableAsync();
-  if (!disponible) throw new Error("Compartir no está disponible en este dispositivo.");
-  await Sharing.shareAsync(destino.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: nombreArchivoBase });
+  const destino = await generarInformePdfLocal(html, nombreArchivoBase, opciones);
+  await compartirInformePdfLocal(destino, nombreArchivoBase);
 }
