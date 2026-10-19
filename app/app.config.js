@@ -42,7 +42,29 @@ module.exports = {
     // - El filtro "Todos/Los míos" al dar acceso a un lote (agregado
     //   después de que se compilara la 1.0.9 real, nunca había llegado a
     //   un build) ya viene incluido.
-    version: "1.0.10",
+    //
+    // Subida a 1.0.11 — sobre la 1.0.10 ya en producción:
+    // - Arreglado: en Android, la solapa Resultados no mostraba los mapas
+    //   (regresión de la 1.0.10 — el ScrollView nuevo de esa solapa no
+    //   tenía alto definido, así que el mapa nunca terminaba de medirse).
+    // - Arreglado: en Android, subir un KMZ elegido desde Google Drive (u
+    //   otro proveedor en la nube) fallaba — esos archivos no soportan
+    //   abrirse como los locales, ahora hay una vía alternativa para
+    //   leerlos igual.
+    // - Nuevo: ícono de información al lado de cada establecimiento, con
+    //   el historial de informes PDF guardados ahí (agrupados por
+    //   campaña) — se llenan con el botón nuevo "Exportar PDF y guardar
+    //   en historial" en Salidas, al lado del "Exportar PDF" de siempre.
+    // - Nuevo: ícono de información al lado de cada cliente, para subir y
+    //   borrar archivos sueltos (el Excel de resumen de aplicación de
+    //   cebo que se entrega a cada cliente). Ambos íconos nuevos son
+    //   solo para Socio Gerente/Fundador.
+    //
+    // Nota: el reporte de "la app se cierra sola" sigue sin reproducirse
+    // ni diagnosticarse (no llegaron detalles de en qué pantalla/acción
+    // pasa) — no entra en este changelog, queda pendiente para cuando
+    // haya más información.
+    version: "1.0.11",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "zoomagricultura",
