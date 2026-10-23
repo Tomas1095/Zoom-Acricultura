@@ -196,18 +196,25 @@ create index on cargas_en_conflicto (punto_id, campana);
 -- Helpers para las políticas (evitan repetir subqueries en cada policy)
 -- ─────────────────────────────────────────────────────────────────────────
 
+-- Las tres funciones de acá exigen `activo` a propósito — "eliminar" a
+-- alguien del equipo (ver eliminar_miembro_equipo) solo marca
+-- activo = false, nunca borra la fila (se preserva el historial: sus
+-- cargas, informes, etc. siguen atribuidos a su usuario). Sin este
+-- filtro, alguien "eliminado" seguía teniendo acceso completo a todo
+-- como si nada — current_comunidad_id() es la base de casi todas las
+-- políticas de RLS, así que NULL acá corta el acceso de punta a punta.
 create or replace function current_usuario_id()
 returns uuid
 language sql stable
 as $$
-  select id from usuarios where auth_user_id = auth.uid()
+  select id from usuarios where auth_user_id = auth.uid() and activo
 $$;
 
 create or replace function current_rol()
 returns text
 language sql stable
 as $$
-  select rol from usuarios where auth_user_id = auth.uid()
+  select rol from usuarios where auth_user_id = auth.uid() and activo
 $$;
 
 -- SECURITY DEFINER acá (a diferencia de current_rol()/current_usuario_id()
@@ -226,7 +233,7 @@ language sql stable
 security definer
 set search_path = public
 as $$
-  select comunidad_id from usuarios where auth_user_id = auth.uid()
+  select comunidad_id from usuarios where auth_user_id = auth.uid() and activo
 $$;
 
 create or replace function es_admin_plataforma()
