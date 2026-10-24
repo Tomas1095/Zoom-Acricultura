@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FileText } from "lucide-react-native";
 
 import { fetchInformesEstablecimiento, getInformeEstablecimientoUrl } from "@/lib/db/informes-establecimiento";
+import { guardarYCompartirDesdeUrl } from "@/lib/exportar/archivo";
 import type { InformeEstablecimiento } from "@/types/domain";
 import { colors } from "@/theme/colors";
 
@@ -55,7 +56,7 @@ export function InformesEstablecimientoModal({
     setAbriendoId(informe.id);
     try {
       const url = await getInformeEstablecimientoUrl(informe.storagePath);
-      await Linking.openURL(url);
+      await guardarYCompartirDesdeUrl(informe.nombreArchivo, url, "application/pdf");
     } catch (e: any) {
       Alert.alert("No se pudo abrir el informe", e.message ?? String(e));
     } finally {

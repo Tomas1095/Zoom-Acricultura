@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { File } from "expo-file-system";
 import { FileSpreadsheet, Trash2, Upload } from "lucide-react-native";
 
 import {
+  datosDeAperturaArchivoCliente,
   eliminarArchivoCliente,
   fetchArchivosCliente,
   getArchivoClienteUrl,
   subirArchivoCliente,
 } from "@/lib/db/archivos-cliente";
+import { guardarYCompartirDesdeUrl } from "@/lib/exportar/archivo";
 import type { ArchivoCliente } from "@/types/domain";
 import { colors } from "@/theme/colors";
 import { PromptModal } from "@/components/prompt-modal";
@@ -100,7 +102,8 @@ export function ArchivosClienteModal({ clienteId, clienteNombre, onCerrar }: Arc
     setAbriendoId(archivo.id);
     try {
       const url = await getArchivoClienteUrl(archivo.storagePath);
-      await Linking.openURL(url);
+      const { nombreArchivo, mimeType } = datosDeAperturaArchivoCliente(archivo);
+      await guardarYCompartirDesdeUrl(nombreArchivo, url, mimeType);
     } catch (e: any) {
       Alert.alert("No se pudo abrir el archivo", e.message ?? String(e));
     } finally {

@@ -21,6 +21,23 @@ function contentTypeDeExtension(ext: string): string {
   return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 }
 
+/** Nombre de archivo + content-type para abrir/compartir un ArchivoCliente
+ * ya subido — la extensión sale de `storagePath` (siempre la real, ver
+ * subirArchivoCliente), nunca de `nombreArchivo` (el que ve la persona,
+ * editable a mano y puede no traerla). Si `nombreArchivo` ya termina en
+ * esa extensión (case-insensitive) no la duplica. */
+export function datosDeAperturaArchivoCliente(archivo: Pick<ArchivoCliente, "nombreArchivo" | "storagePath">): {
+  nombreArchivo: string;
+  mimeType: string;
+} {
+  const ext = extensionDeUri(archivo.storagePath);
+  const yaTraeExtension = archivo.nombreArchivo.toLowerCase().endsWith(`.${ext}`);
+  return {
+    nombreArchivo: yaTraeExtension ? archivo.nombreArchivo : `${archivo.nombreArchivo}.${ext}`,
+    mimeType: contentTypeDeExtension(ext),
+  };
+}
+
 /** Todos los archivos subidos a mano para un cliente — ordenados por
  * nombre. A pedido del usuario: el Excel "resumen de aplicación de cebo"
  * que arma en su computadora y le entrega a cada cliente. */

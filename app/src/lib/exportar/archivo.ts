@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
@@ -89,6 +89,39 @@ export async function guardarYCompartirDesdeArchivo(nombreArchivo: string, uriOr
   const destino = new File(Paths.cache, nombreArchivo);
   if (destino.exists) destino.delete();
   origen.copy(destino);
+
+  await Sharing.shareAsync(destino.uri, { mimeType, dialogTitle: nombreArchivo });
+}
+
+/** Abre un archivo guardado en Supabase Storage (una URL firmada, ver
+ * lib/db/informes-establecimiento.ts / lib/db/archivos-cliente.ts) con el
+ * nombre real elegido por la persona — reportado por el usuario:
+ * `Linking.openURL` directo sobre la URL firmada lo abre en el navegador
+ * in-app mostrando la URL de Supabase (un nombre interno sin sentido para
+ * la persona que lo mira) en vez del nombre con el que se guardó. Bajarlo
+ * primero a un archivo local con ESE nombre y compartirlo (mismo patrón
+ * que el resto de los export de acá) hace que cualquier app a la que se
+ * abra/guarde — Archivos, un visor de PDF, WhatsApp — lo muestre con el
+ * nombre correcto. */
+export async function guardarYCompartirDesdeUrl(nombreArchivo: string, url: string, mimeType: string): Promise<void> {
+  if (Platform.OS === "web") {
+    // En web no hay hoja de compartir nativa — la URL firmada ya es
+    // directamente abrible, el navegador se encarga de mostrarla/bajarla.
+    await Linking.openURL(url);
+    return;
+  }
+
+  const disponible = await Sharing.isAvailableAsync();
+  if (!disponible) throw new Error("Compartir no está disponible en este dispositivo.");
+
+  const respuesta = await fetch(url);
+  if (!respuesta.ok) throw new Error(`No se pudo descargar el archivo (código ${respuesta.status}).`);
+  const bytes = new Uint8Array(await respuesta.arrayBuffer());
+
+  const destino = new File(Paths.cache, nombreArchivo);
+  if (destino.exists) destino.delete();
+  destino.create();
+  destino.write(bytes);
 
   await Sharing.shareAsync(destino.uri, { mimeType, dialogTitle: nombreArchivo });
 }
