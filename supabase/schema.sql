@@ -407,10 +407,15 @@ create policy "usuarios: cada uno edita su propio perfil (no su rol, comunidad n
 -- queda acotado a la propia comunidad porque `es_administrador()` y
 -- `tiene_acceso_a_lote()` lo exigen — la inserción no necesita chequeo
 -- aparte (el trigger de arriba fija comunidad_id siempre a la propia).
+-- es_administrador() va envuelto en `comunidad_id = current_comunidad_id()
+-- and (...)` a propósito (mismo patrón que "lotes: lectura según acceso")
+-- — sin eso, cualquier administrador de CUALQUIER comunidad ve los
+-- clientes de todas las demás, no solo la propia (bug real encontrado
+-- armando una cuenta de prueba aislada, ver migración 0017).
 create policy "clientes: lectura para administradores o con acceso a algún lote propio"
   on clientes for select
   using (
-    es_administrador()
+    (comunidad_id = current_comunidad_id() and es_administrador())
     or exists (
       select 1 from establecimientos e
       join lotes l on l.establecimiento_id = e.id
@@ -425,10 +430,11 @@ create policy "clientes: actualización para administradores"
 create policy "clientes: borrado solo socio_fundador/socio_gerente"
   on clientes for delete using (comunidad_id = current_comunidad_id() and current_rol() in ('socio_fundador', 'socio_gerente'));
 
+-- Mismo motivo que en "clientes: lectura..." de arriba.
 create policy "establecimientos: lectura para administradores o con acceso a algún lote propio"
   on establecimientos for select
   using (
-    es_administrador()
+    (comunidad_id = current_comunidad_id() and es_administrador())
     or exists (select 1 from lotes l where l.establecimiento_id = establecimientos.id and tiene_acceso_a_lote(l.id))
   );
 create policy "establecimientos: escritura para administradores"
